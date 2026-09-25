@@ -36,8 +36,8 @@ dev = ["pytest>=8", "ruff>=0.6"]
 path = "src/veil/__init__.py"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+testpaths = ["tests", "src"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--doctest-modules"]
 filterwarnings = ["error"]
 
 [tool.ruff]
