@@ -111,6 +111,17 @@ class TestEmail:
     def test_address_right_after_another(self, detector, text, expected):
         assert values(detector, text, "EMAIL") == expected
 
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("note*jan@example.com", "jan@example.com"),
+            ("555-123-4567 ext. 89*a/b@example.com", "a/b@example.com"),
+            ("José Núñez*zoë@example.com", "zoë@example.com"),
+        ],
+    )
+    def test_markdown_star_is_not_part_of_an_address(self, detector, text, expected):
+        assert values(detector, text, "EMAIL") == [expected]
+
     def test_key_value_prefix_is_masked_with_the_address(self, detector):
         # "=" can be part of a local part (VERP bounce addresses), so a key
         # glued to the address is masked along with it. Over-masking is safe;
@@ -215,6 +226,14 @@ class TestPhone:
         assert values(detector, "(+1) 555-123-4567", "PHONE") == [
             "(+1) 555-123-4567",
             "555-123-4567",
+        ]
+
+    @pytest.mark.parametrize("sep", [" ", "\n", "\t"])
+    def test_ip_then_us_number_keeps_the_ip_whole(self, detector, sep):
+        # The optional "1" country code must not take the IP's last octet.
+        assert found(detector, f"192.0.2.1{sep}555.123.4567") == [
+            ("IPV4", "192.0.2.1"),
+            ("PHONE", "555.123.4567"),
         ]
 
     def test_greedy_number_stops_before_an_ip(self, detector):

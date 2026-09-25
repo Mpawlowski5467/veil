@@ -25,8 +25,9 @@ PatternLike: TypeAlias = str | re.Pattern[str]
 _LOCAL_CHAR = rf"[\w%+\-{MARK_CLASS}]"
 # Separators allowed *between* runs: dots, plus RFC 5322 characters that show
 # up in real addresses (o'brien@ with either apostrophe, VERP bounces with =,
-# jan&anna@). Delimiters people put around addresses (` { | } ?) are left out.
-_LOCAL_SEP = r"[.'\u2019=&/!#$*^~]"
+# jan&anna@). Characters people glue addresses to (` { | } ? and Markdown's *)
+# are left out: "note*jan@example.com" must not absorb "note".
+_LOCAL_SEP = r"[.'\u2019=&/!#$^~]"
 
 # Pragmatic address matching, not full RFC 5322. The local part has no
 # leading, trailing, or doubled separators, so sentence punctuation, quotes,
@@ -60,7 +61,8 @@ _EXTENSION = r"(?:[ ]?(?i:ext\.?|x)[ ]?\d{1,6})"
 US_PHONE_PATTERN = re.compile(
     rf"""
     (?<![A-Za-z\d+])
-    (?:\+?1[ .-]?)?                        # optional country code
+    (?:(?<![.\d])\+?1[ .-]?)?               # optional country code (but not
+                                            # the last octet of "192.0.2.1 555...")
     (?:\(\d{{3}}\)[ .-]?|\d{{3}}[ .-])         # area code: (555) or 555-
     \d{{3}}[ .-]\d{{4}}                        # exchange and line number
     {_EXTENSION}?
