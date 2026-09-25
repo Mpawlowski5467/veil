@@ -62,6 +62,11 @@ _ADDRESS_RUN = re.compile(rf"(?:{_LOCAL_CHAR}|{_LOCAL_SEP})*")
 _DOMAIN_REACH = 256
 
 
+def _run_end(text: str, pos: int) -> int:
+    run = _ADDRESS_RUN.match(text, pos)  # always matches, possibly empty
+    return run.end() if run else pos
+
+
 def _find_emails(text: str) -> Iterator[re.Match[str]]:
     pos = 0
     while (match := EMAIL_PATTERN.search(text, pos)) is not None:
@@ -71,7 +76,7 @@ def _find_emails(text: str) -> Iterator[re.Match[str]]:
         # that this one ends, where the start rule never allows a match. If
         # no normal match starts in that run (as the tighter "anna@..." after
         # a CJK word does), continue right here instead.
-        while (run_end := _ADDRESS_RUN.match(text, pos).end()) > pos:
+        while (run_end := _run_end(text, pos)) > pos:
             reach = min(len(text), run_end + _DOMAIN_REACH)
             tight = EMAIL_PATTERN.search(text, pos, reach)
             if tight is not None and tight.start() < run_end:
