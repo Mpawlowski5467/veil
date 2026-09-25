@@ -5,8 +5,8 @@ from __future__ import annotations
 import bisect
 from collections.abc import Iterable, Sequence
 
+from ._text import contains_token
 from .detectors.base import Detector
-from .detectors.manual import literal_pattern
 from .placeholders import PLACEHOLDER_RE
 from .types import MaskedEntity, MaskResult, Span
 from .vault.base import Vault
@@ -44,7 +44,8 @@ class Masker:
 
     Runs every detector, resolves overlaps with `resolve_overlaps`, asks the
     vault for each value's placeholder (so a value keeps its placeholder across
-    calls), and then checks that no known value survived in the output.
+    calls), and then checks the output: it warns when a detected value was only
+    partly replaced, and when any known value still appears in it.
     """
 
     def __init__(self, detectors: Sequence[Detector], vault: Vault) -> None:
@@ -89,8 +90,9 @@ class Masker:
                     )
                 candidates.append(span)
 
+        kept = resolve_overlaps(candidates)
         entities: list[MaskedEntity] = []
-        for span in resolve_overlaps(candidates):
+        for span in kept:
             placeholder = self._vault.get_or_create(span.value, span.entity_type)
             # A value keeps the type it was first stored with, which may differ
             # from what this detector called it; report the type actually used.
@@ -107,37 +109,79 @@ class Masker:
             )
 
         pieces: list[str] = []
+        unmasked: list[str] = []  # the original text left between placeholders
         cursor = len(text)
         for entity in reversed(entities):
-            pieces.append(text[entity.end : cursor])
+            unmasked.append(text[entity.end : cursor])
+            pieces.append(unmasked[-1])
             pieces.append(entity.placeholder)
             cursor = entity.start
-        pieces.append(text[:cursor])
+        unmasked.append(text[:cursor])
+        pieces.append(unmasked[-1])
         masked = "".join(reversed(pieces))
 
         warnings = _placeholder_like_input(text)
-        warnings.extend(self._leaks(masked, candidates))
+        warnings.extend(_partial_masks(text, candidates, kept))
+        # NUL stands in for each placeholder: like "[", it is not a word
+        # character, and it keeps the check from matching inside placeholders.
+        warnings.extend(self._leaks("\0".join(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
-    def _leaks(self, masked: str, candidates: Iterable[Span]) -> list[str]:
-        """Warn about every known value that still appears in ``masked``.
+    def _leaks(self, unmasked: str, candidates: Iterable[Span]) -> list[str]:
+        """Warn about every known value that still appears in ``unmasked``.
 
         Known values are everything in the vault (from this call and earlier
         ones) plus anything detected in this call, including spans that lost
-        an overlap. Matching follows `literal_pattern`, the same rule used for
-        manual entities.
+        an overlap. Matching follows `veil._text.find_token`, the same rule
+        used for manual entities.
         """
         known = dict.fromkeys(value for _, value in self._vault.items())
         known.update(dict.fromkeys(span.value for span in candidates))
         warnings = []
         for value in known:
-            if literal_pattern(value).search(masked):
+            if contains_token(unmasked, value):
                 placeholder = self._vault.get_placeholder(value)
                 label = f"{value!r} ({placeholder})" if placeholder else repr(value)
                 warnings.append(
                     f"Leak check: known value {label} still appears in the masked text."
                 )
         return warnings
+
+
+def _partial_masks(
+    text: str, candidates: Iterable[Span], kept: list[Span]
+) -> list[str]:
+    """Warn about dropped spans that only partly overlapped a kept span.
+
+    The longest span wins an overlap, but when the loser sticks out past the
+    winner, the part outside it stays in the masked text. That part may be
+    sensitive (the tail of a phone number, a first name), so it is reported.
+    """
+    kept_set = set(kept)
+    starts = [span.start for span in kept]
+    warnings: dict[str, None] = {}
+    for span in candidates:
+        if span in kept_set:
+            continue
+        leftovers = []
+        pos = span.start
+        i = max(bisect.bisect_right(starts, span.start) - 1, 0)
+        while i < len(kept) and kept[i].start < span.end:
+            if kept[i].end > pos:
+                if kept[i].start > pos:
+                    leftovers.append(text[pos : kept[i].start])
+                pos = kept[i].end
+            i += 1
+        if pos < span.end:
+            leftovers.append(text[pos : span.end])
+        if any(ch.isalnum() for piece in leftovers for ch in piece):
+            shown = ", ".join(repr(piece) for piece in leftovers)
+            message = (
+                f"Partial mask: detected {span.entity_type} value {span.value!r} "
+                f"overlapped a longer match, so {shown} is still in the masked text."
+            )
+            warnings[message] = None
+    return list(warnings)
 
 
 def _placeholder_like_input(text: str) -> list[str]:

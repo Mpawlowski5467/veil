@@ -2,40 +2,22 @@
 
 from __future__ import annotations
 
-import re
 from typing import ClassVar
 
+from .._text import find_token
 from ..placeholders import validate_entity_type
 from ..types import Span
-
-_WORD_CHAR = re.compile(r"\w")
-
-
-def literal_pattern(value: str) -> re.Pattern[str]:
-    """Compile a case-sensitive pattern that finds ``value`` as a whole token.
-
-    The value must not be glued to a word character on a side where the value
-    itself starts or ends with one. So ``"Jan"`` matches in ``"Jan's"`` and
-    ``"(Jan)"`` but not in ``"January"``, while ``"#123"`` still matches in
-    ``"order#123"`` because it starts with a non-word character.
-
-    Args:
-        value: A non-empty literal string.
-
-    Returns:
-        A compiled pattern matching the value.
-    """
-    prefix = r"(?<!\w)" if _WORD_CHAR.match(value[0]) else ""
-    suffix = r"(?!\w)" if _WORD_CHAR.match(value[-1]) else ""
-    return re.compile(prefix + re.escape(value) + suffix)
 
 
 class ManualDetector:
     """Finds manually registered values as exact, case-sensitive tokens.
 
-    Use it for values a pattern cannot find, such as people's names. Matching
-    follows `literal_pattern`: registering ``"Jan"`` will not mask the start of
-    ``"January"``.
+    Use it for values a pattern cannot find, such as people's names. A value
+    is not matched when it is glued to a letter, digit, combining mark, or
+    underscore on a side where the value itself starts or ends with one, so
+    registering ``"Jan"`` does not mask the start of ``"January"``. Scripts
+    written without spaces (Chinese, Japanese, Thai, ...) have no visible word
+    boundaries, so there a registered value matches wherever it appears.
 
     Example:
         >>> detector = ManualDetector()
@@ -49,7 +31,7 @@ class ManualDetector:
 
     def __init__(self) -> None:
         """Create a detector with no registered values."""
-        self._entities: dict[str, tuple[str, re.Pattern[str]]] = {}
+        self._entities: dict[str, str] = {}
 
     def add(self, value: str, entity_type: str) -> None:
         """Register ``value`` so it is detected as ``entity_type``.
@@ -63,12 +45,12 @@ class ManualDetector:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Manual entities must be non-empty, non-blank strings")
         validate_entity_type(entity_type)
-        self._entities[value] = (entity_type, literal_pattern(value))
+        self._entities[value] = entity_type
 
     @property
     def entities(self) -> dict[str, str]:
         """A copy of the registered ``{value: entity_type}`` mapping."""
-        return {value: etype for value, (etype, _) in self._entities.items()}
+        return dict(self._entities)
 
     def detect(self, text: str) -> list[Span]:
         """Return every occurrence of every registered value, sorted by position.
@@ -76,19 +58,18 @@ class ManualDetector:
         Occurrences of different values may overlap (``"Jan Nowak"`` and
         ``"Nowak"``); the masker keeps the longest.
         """
-        spans: list[Span] = []
-        for value, (entity_type, pattern) in self._entities.items():
-            spans.extend(
-                Span(
-                    start=match.start(),
-                    end=match.end(),
-                    value=value,
-                    entity_type=entity_type,
-                    source="manual",
-                    priority=self.PRIORITY,
-                )
-                for match in pattern.finditer(text)
+        spans = [
+            Span(
+                start=start,
+                end=start + len(value),
+                value=value,
+                entity_type=entity_type,
+                source="manual",
+                priority=self.PRIORITY,
             )
+            for value, entity_type in self._entities.items()
+            for start in find_token(text, value)
+        ]
         spans.sort(key=lambda s: (s.start, -len(s)))
         return spans
 

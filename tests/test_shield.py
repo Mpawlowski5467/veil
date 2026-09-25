@@ -1,4 +1,6 @@
+import inspect
 import re
+import typing
 import warnings
 
 import pytest
@@ -51,6 +53,12 @@ class NameDetector:
 @pytest.fixture
 def shield():
     return Shield()
+
+
+def test_type_hints_resolve_at_runtime():
+    # Tools like pydantic and typer evaluate annotations at runtime.
+    for obj in (Shield.__init__, Shield.mask, Shield.wrap, RegexDetector.__init__):
+        typing.get_type_hints(obj)
 
 
 def test_public_api_exports():
@@ -252,6 +260,15 @@ class TestWrap:
         assert safe_llm.__doc__ == "Ask the model."
         assert safe_llm.__wrapped__ is ask_model  # type: ignore[attr-defined]
 
+    def test_signature_is_the_wrappers_own(self, shield):
+        @shield.wrap
+        def ask(prompt: str) -> str:
+            return prompt
+
+        assert str(inspect.signature(ask)) == "(text: str, /) -> str"
+        with pytest.raises(TypeError):
+            ask(prompt="hi")  # type: ignore[call-arg]
+
     def test_unknown_placeholder_in_reply_warns(self, shield):
         safe_llm = shield.wrap(RecordingLLM(reply="Hello [PERSON_3]"))
         with pytest.warns(ShieldWarning, match=r"Unknown placeholder \[PERSON_3\]"):
@@ -315,6 +332,14 @@ class TestPluggableParts:
     def test_detectors_and_custom_patterns_conflict(self):
         with pytest.raises(ValueError, match="custom_patterns configures"):
             Shield(detectors=[RegexDetector()], custom_patterns={"ORDER": r"#\d+"})
+
+    def test_detectors_from_a_generator(self):
+        # Validating a one-shot iterator used to consume it, silently turning
+        # off every detector.
+        shield = Shield(detectors=(d for d in [RegexDetector()]))
+        assert shield.mask("Mail a@example.com").text == "Mail [EMAIL_1]"
+        shield = Shield(detectors=iter([RegexDetector()]))
+        assert shield.mask("Mail a@example.com").text == "Mail [EMAIL_1]"
 
     def test_single_detector_not_in_a_list(self):
         with pytest.raises(TypeError, match="sequence of detectors"):

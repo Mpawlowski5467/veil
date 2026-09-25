@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from veil.detectors import ManualDetector, RegexDetector
@@ -243,21 +245,68 @@ class TestWarnings:
             "in the masked text."
         ]
 
-    def test_leak_check_reports_losing_span_left_in_text(self, vault):
-        # A partial overlap: the longer span wins, and the part of the shorter
-        # one outside it stays in the text.
+    def test_partial_overlap_reports_the_part_left_in_text(self, vault):
+        # The longer span wins, and the part of the shorter one outside it
+        # stays in the text.
         text = "Jan Nowak Street"
         detector = FixedDetector(
             span(text, "Jan Nowak", "PERSON", source="manual", priority=100),
             span(text, "Nowak Street", "ADDRESS", source="manual", priority=100),
         )
-        vault.get_or_create("Jan", "PERSON")
         result = Masker([detector], vault).mask(text)
         assert result.text == "Jan [ADDRESS_1]"
         assert result.warnings == [
-            "Leak check: known value 'Jan' ([PERSON_1]) still appears "
-            "in the masked text."
+            "Partial mask: detected PERSON value 'Jan Nowak' overlapped a longer "
+            "match, so 'Jan ' is still in the masked text."
         ]
+
+    def test_partial_overlap_on_both_sides(self, vault):
+        text = "aa BBBB cc DDDD ee"
+        detector = FixedDetector(
+            span(text, "BBBB", "X", priority=0),
+            span(text, "DDDD", "X", priority=0),
+            span(text, "aa BBBB cc DDDD ee"[1:17], "Y", priority=0),
+        )
+        # The long Y span wins; nothing of the X spans sticks out of it.
+        result = Masker([detector], vault).mask(text)
+        assert result.text == "a[Y_1]e"
+        assert result.warnings == []
+
+    def test_partial_overlap_with_two_winners_reports_the_gap(self, vault):
+        # The loser is shorter than both winners but bridges the gap between
+        # them, so only the gap is left over.
+        text = "AAAAAAAAAA" + "mi" + "BBBBBBBBBB"
+        detector = FixedDetector(
+            Span(0, 10, "A" * 10, "X"),
+            Span(12, 22, "B" * 10, "X"),
+            Span(8, 14, "AAmiBB", "Z"),
+        )
+        result = Masker([detector], vault).mask(text)
+        assert result.text == "[X_1]mi[X_2]"
+        assert result.warnings == [
+            "Partial mask: detected Z value 'AAmiBB' overlapped a longer match, "
+            "so 'mi' is still in the masked text."
+        ]
+
+    def test_contained_loser_is_not_a_partial_mask(self, vault):
+        text = "id 555-123-4567"
+        detector = FixedDetector(
+            span(text, "555-123-4567", "PHONE"),
+            span(text, "123-4567", "LOCAL"),
+        )
+        assert Masker([detector], vault).mask(text).warnings == []
+
+    def test_punctuation_only_leftover_is_not_reported(self, vault):
+        text = "(abc) tail"
+        detector = FixedDetector(span(text, "(abc)", "X"), span(text, ") ", "Y"))
+        result = Masker([detector], vault).mask(text)
+        assert result.text == "[X_1] tail"
+        assert result.warnings == []
+
+    def test_builtin_phone_followed_by_phone_masks_both(self, masker):
+        result = masker.mask("Phones: +44 20 7946 0958 555-123-4567")
+        assert result.text == "Phones: [PHONE_1] [PHONE_2]"
+        assert result.warnings == []
 
     def test_leak_check_uses_word_boundaries(self, masker, manual):
         manual.add("Jan", "PERSON")
@@ -279,6 +328,35 @@ class TestWarnings:
             "Input already contains placeholder-like text [X_2]; "
             "restore() will treat it as a placeholder.",
         ]
+
+    def test_value_shaped_like_a_placeholder_body_is_not_a_leak(self, vault):
+        masker = Masker(
+            [RegexDetector(custom_patterns={"USER": r"\bUSER_\d+\b"})], vault
+        )
+        result = masker.mask("USER_7 logged in, then USER_1 logged out.")
+        assert result.text == "[USER_1] logged in, then [USER_2] logged out."
+        assert result.warnings == []
+
+    def test_registered_placeholder_lookalike_is_not_a_leak(self, vault, manual):
+        manual.add("[EMAIL_1]", "SECRET")
+        masker = Masker([manual, RegexDetector()], vault)
+        result = masker.mask("a@example.com and [EMAIL_1]")
+        assert result.text == "[EMAIL_1] and [SECRET_1]"
+        assert result.warnings == [
+            "Input already contains placeholder-like text [EMAIL_1]; "
+            "restore() will treat it as a placeholder."
+        ]
+
+    def test_leak_check_scales_to_many_values(self, masker):
+        rows = [
+            f"{i},user{i}@example.com,555-{i % 900 + 100:03d}-{i:04d}"
+            for i in range(4000)
+        ]
+        start = time.perf_counter()
+        result = masker.mask("\n".join(rows))
+        assert time.perf_counter() - start < 5  # was ~12 s before the fast path
+        assert len(result.entities) == 8000
+        assert result.warnings == []
 
     def test_placeholder_text_inside_output_is_not_a_leak(self, vault, manual):
         # A value that looks like part of a placeholder must not trip the check.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 
@@ -67,6 +68,9 @@ class Shield:
             detectors = [RegexDetector(custom_patterns)]
         elif isinstance(detectors, Detector):
             raise TypeError("detectors must be a sequence of detectors, not one")
+        # Copy once: validating a one-shot iterator (a generator) would
+        # otherwise use it up and silently leave the masker with no detectors.
+        detectors = tuple(detectors)
         for detector in detectors:
             if not isinstance(detector, Detector):
                 raise TypeError(
@@ -146,10 +150,11 @@ class Shield:
             llm: Any callable taking a prompt string and returning a string.
 
         Returns:
-            A callable with the same signature.
+            A callable taking one positional string. It keeps ``llm``'s name
+            and docstring.
         """
 
-        def safe_llm(text: str) -> str:
+        def safe_llm(text: str, /) -> str:
             masked = self.mask(text)
             _emit(masked.warnings)
             reply = llm(masked.text)
@@ -161,7 +166,14 @@ class Shield:
             _emit(restored.warnings)
             return restored.text
 
-        functools.update_wrapper(safe_llm, llm, updated=())
+        # Copy the name and docstring, but not the annotations: the wrapper
+        # takes one positional str whatever llm's parameters are called. And
+        # since update_wrapper sets __wrapped__, which inspect.signature()
+        # would follow, pin the wrapper's own signature explicitly.
+        functools.update_wrapper(safe_llm, llm, assigned=_COPIED_ATTRS, updated=())
+        safe_llm.__signature__ = inspect.signature(  # type: ignore[attr-defined]
+            safe_llm, follow_wrapped=False, eval_str=True
+        )
         return safe_llm
 
     def reset(self) -> None:
@@ -171,6 +183,9 @@ class Shield:
         patterns are configuration, not conversation state, so they are kept.
         """
         self._vault.clear()
+
+
+_COPIED_ATTRS = ("__module__", "__name__", "__qualname__", "__doc__")
 
 
 def _emit(messages: list[str]) -> None:

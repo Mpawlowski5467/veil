@@ -4,7 +4,6 @@ Mask personal information with placeholders before text reaches a model, then
 restore the real values in the model's reply.
 
 Example:
-    >>> from veil import Shield
     >>> shield = Shield()
     >>> shield.add_entity("Jan Nowak", "PERSON")
     >>> shield.mask("Email Jan Nowak at jan.n@example.com").text

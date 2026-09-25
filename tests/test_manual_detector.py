@@ -1,7 +1,8 @@
+import unicodedata
+
 import pytest
 
 from veil.detectors import Detector, ManualDetector
-from veil.detectors.manual import literal_pattern
 from veil.types import Span
 
 
@@ -134,16 +135,38 @@ def test_repr_hides_values(detector):
     assert "Jan" not in repr(detector)
 
 
-class TestLiteralPattern:
-    def test_word_edges_get_boundaries(self):
-        pattern = literal_pattern("Jan")
-        assert pattern.search("January") is None
-        assert pattern.search("Jan.") is not None
+def test_combining_marks_count_as_part_of_a_word(detector):
+    # Devanagari vowel signs and decomposed accents are combining marks, not
+    # letters, but they belong to the word they follow.
+    detector.add("राम", "PERSON")
+    assert [s.start for s in detector.detect("राम ने रामायण पढ़ी")] == [0]
+    detector.add("Jose", "PERSON")
+    decomposed = unicodedata.normalize("NFD", "José and Jose")
+    assert [s.value for s in detector.detect(decomposed)] == ["Jose"]
 
-    def test_only_word_edges_get_boundaries(self):
-        pattern = literal_pattern("Jan!")
-        assert pattern.search("xJan!") is None  # starts with a word char
-        assert pattern.search("Jan!!") is not None  # ends with a non-word char
 
-    def test_case_sensitive(self):
-        assert literal_pattern("Jan").search("jan") is None
+def test_value_ending_in_a_combining_mark_is_guarded(detector):
+    detector.add("सीता", "PERSON")  # ends with a vowel sign
+    assert detector.detect("सीताराम") == []
+    assert [s.value for s in detector.detect("सीता जी")] == ["सीता"]
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        ("山田", "山田さんに連絡"),  # Japanese: no spaces around words
+        ("王伟", "请联系王伟先生"),  # Chinese
+        ("김철수", "김철수는 내일 온다"),  # Korean particle attached to the name
+        ("สมชาย", "คุณสมชายมา"),  # Thai
+        ("Jan", "Janさん"),  # Latin name next to Japanese
+    ],
+)
+def test_matches_inside_scripts_without_spaces(detector, value, text):
+    detector.add(value, "PERSON")
+    assert [s.value for s in detector.detect(text)] == [value]
+
+
+def test_overlapping_occurrences_of_one_value(detector):
+    # A rejected occurrence must not hide a valid one that overlaps it.
+    detector.add("ab-ab", "CODE")
+    assert [s.start for s in detector.detect("xab-ab-ab")] == [4]

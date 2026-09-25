@@ -70,11 +70,11 @@ Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
 
 | Type | Matched | Not matched |
 | --- | --- | --- |
-| `EMAIL` | `jan.n@example.com`, `first.last+tag@sub.example.co.uk` | `user@localhost`, `name@example` |
-| `PHONE` | `555-123-4567`, `(555) 123-4567`, `+1 555 123 4567`, `555-123-4567 ext. 89`, `+44 20 7946 0958`, `+48 123 456 789` | `5551234567` (no separators), `601 234 567` (no `+` country code), `2024-01-15` |
+| `EMAIL` | `jan.n@example.com`, `first.last+tag@sub.example.co.uk`, `sean.o'brien@example.com`, `łucja@example.com` | `user@localhost`, `name@example` |
+| `PHONE` | `555-123-4567`, `(555) 123-4567`, `+1 555 123 4567`, `555-123-4567 ext. 89`, `+44 20 7946 0958`, `(+48) 123 456 789` | `5551234567` (no separators), `601 234 567` (no `+` country code), `2024-01-15` |
 | `IPV4` | `192.168.0.1`, `10.0.0.1` in `10.0.0.1:8080` | `256.1.1.1`, `192.168.01.1`, `1.2.3.4.5` |
 
-Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones.
+Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones. Numbers and addresses are also found inside Chinese, Japanese, and Korean text, where there are no spaces around them.
 
 ### Custom patterns
 
@@ -96,7 +96,7 @@ A custom pattern with a built-in name (`"EMAIL"`, `"PHONE"`, `"IPV4"`) replaces 
 '[PERSON_1] and [PERSON_2] meet in January.'
 ```
 
-Registered values match exactly and case-sensitively, but never inside a longer word: `"Jan"` does not mask the start of `"January"`. When matches overlap, the longest one wins. On a tie, a registered value beats a pattern match.
+Registered values match exactly and case-sensitively, but never inside a longer word: `"Jan"` does not mask the start of `"January"`. In scripts written without spaces (Chinese, Japanese, Thai, ...), where word boundaries aren't visible, a registered value matches wherever it appears. When matches overlap, the longest one wins. On a tie, a registered value beats a pattern match.
 
 ### Multi-turn conversations
 
@@ -119,7 +119,7 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 veil reports problems instead of raising:
 
-- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
+- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped a longer match, and when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
 - **`restore()`** leaves unknown placeholders (well-formed, but not in the vault) unchanged and lists them.
 
 ```python
@@ -138,7 +138,7 @@ from veil import ShieldWarning
 warnings.simplefilter("error", ShieldWarning)
 ```
 
-Leak warnings include the value that leaked, so treat warnings as sensitive if you log them.
+Leak and partial-mask warnings include the value that leaked, so treat warnings as sensitive if you log them.
 
 ### Plugging in your own parts
 
@@ -166,13 +166,14 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Limitations
 
-- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names, and values split across lines. Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names (punycode `xn--` works), addresses using rare characters such as `!`, `#`, or `{`, and values split across lines. Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Text glued to an email address with `=`, `&`, or `/` is masked with it.** Those characters can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the key visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
 - **The model must copy placeholders exactly.** `[person_1]`, `PERSON_1`, or `[PERSON 1]` in a reply are not restored.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
-- **A phone number followed by more digits can absorb them.** In `+44 20 7946 0958 24 hours`, the ` 24` becomes part of the phone value. Restoring still returns the exact original text.
+- **An international number followed by a short digit group can absorb it.** In `+44 20 7946 0958 24 hours`, the ` 24` becomes part of the phone value. The model doesn't see the `24`, but restoring still returns the exact original text.
 
 ## Roadmap
 
@@ -188,7 +189,7 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-To rename the package, change `name` in `pyproject.toml`, rename `src/veil/`, and update the `veil` imports in `tests/` and this README. Internal imports are relative.
+To rename the package: in `pyproject.toml`, change `name` and the `[tool.hatch.version]` path; rename `src/veil/`; then update the `veil` imports in `tests/` and this README. Internal imports are relative, and no class or function name contains "veil".
 
 ## License
 

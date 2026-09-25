@@ -1,4 +1,5 @@
 import re
+import time
 
 import pytest
 
@@ -47,10 +48,41 @@ class TestEmail:
             ("user_name%x@my-host.example.net", "user_name%x@my-host.example.net"),
             ("Is it jan@example.com?", "jan@example.com"),
             ("łucja.wiśniewska@example.com", "łucja.wiśniewska@example.com"),
+            ("Contact jan.o'neil@example.com", "jan.o'neil@example.com"),
+            ("cc jan&anna@example.com", "jan&anna@example.com"),
+            ("billing/ops@example.com", "billing/ops@example.com"),
+            (
+                "Return-Path: <list-bounces+jan.nowak=example.com@lists.example.org>",
+                "list-bounces+jan.nowak=example.com@lists.example.org",
+            ),
+            ("quoted 'jan@example.com'", "jan@example.com"),
+            ("code `jan@example.com`", "jan@example.com"),
+            ('{"email": "jan@example.com"}', "jan@example.com"),
+            ("email='jan@example.com'", "jan@example.com"),
+            ("[Jan](mailto:jan@example.com)", "jan@example.com"),
+            ("Write to user@example.xn--p1ai", "user@example.xn--p1ai"),
+            ("user@xn--mnchen-3ya.de", "user@xn--mnchen-3ya.de"),
+            ("連絡先はjan@example.comです", "jan@example.com"),
+            ("邮箱是jan@example.com", "jan@example.com"),
         ],
     )
     def test_matches(self, detector, text, expected):
         assert values(detector, text, "EMAIL") == [expected]
+
+    def test_key_value_prefix_is_masked_with_the_address(self, detector):
+        # "=" can be part of a local part (VERP bounce addresses), so a key
+        # glued to the address is masked along with it. Over-masking is safe;
+        # splitting the address would leak part of it.
+        assert values(detector, "ADMIN_EMAIL=jan@example.com", "EMAIL") == [
+            "ADMIN_EMAIL=jan@example.com"
+        ]
+        # Quoting or spacing keeps the key out of the match, as the README says.
+        assert values(detector, 'ADMIN_EMAIL="jan@example.com"', "EMAIL") == [
+            "jan@example.com"
+        ]
+        assert values(detector, "ADMIN_EMAIL= jan@example.com", "EMAIL") == [
+            "jan@example.com"
+        ]
 
     def test_multiple(self, detector):
         text = "cc a@example.com; b@example.org"
@@ -102,21 +134,68 @@ class TestPhone:
             ("+7 (495) 123-45-67", "+7 (495) 123-45-67"),
             ("+15551234567", "+15551234567"),
             ("Tel +48 123 456 789.", "+48 123 456 789"),
+            ("Tel. (+48) 123 456 789", "(+48) 123 456 789"),
+            ("(+44) 20 7946 0958", "(+44) 20 7946 0958"),
+            ("(+48 123 456 789)", "+48 123 456 789"),
+            ("+44 20 7946 0958x12", "+44 20 7946 0958x12"),
+            ("+49 30 1234 5678 ext. 9", "+49 30 1234 5678 ext. 9"),
+            # No spaces around numbers in CJK text.
+            ("電話は555-123-4567です", "555-123-4567"),
+            ("電話番号は+81 3-1234-5678です。", "+81 3-1234-5678"),
+            ("请拨打+86 10 5555 0100联系", "+86 10 5555 0100"),
+            ("전화번호는+82 2-123-4567입니다", "+82 2-123-4567"),
+            ("_555-123-4567_", "555-123-4567"),  # Markdown emphasis
+            ("５５５-１２３-４５６７", "５５５-１２３-４５６７"),  # noqa: RUF001 (fullwidth)
         ],
     )
     def test_matches(self, detector, text, expected):
         assert values(detector, text, "PHONE") == [expected]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (
+                "Phones: +44 20 7946 0958 555-123-4567",
+                ["+44 20 7946 0958", "555-123-4567"],
+            ),
+            ("Tel +1 555 123 4567 555-765-4321", ["+1 555 123 4567", "555-765-4321"]),
+            (
+                "Phones: +48 123 456 789 555-123-4567 ext. 89",
+                ["+48 123 456 789", "555-123-4567 ext. 89"],
+            ),
+        ],
+    )
+    def test_greedy_number_stops_before_the_next_one(self, detector, text, expected):
+        assert values(detector, text, "PHONE") == expected
+
+    def test_parenthesized_country_code_contains_the_us_match(self, detector):
+        # Both spans are reported; the masker keeps the longer one.
+        assert values(detector, "(+1) 555-123-4567", "PHONE") == [
+            "(+1) 555-123-4567",
+            "555-123-4567",
+        ]
+
+    def test_greedy_number_stops_before_an_ip(self, detector):
+        assert found(detector, "Caller +44 20 7946 0958 192.0.2.1") == [
+            ("PHONE", "+44 20 7946 0958"),
+            ("IPV4", "192.0.2.1"),
+        ]
+
+    @pytest.mark.parametrize(
+        "text", ["+44 20 7946 0958abc", "+49 30 1234 5678xyz", "+44 20 7946 0958x"]
+    )
+    def test_glued_international_number_is_not_split(self, detector, text):
+        # Backing off to a shorter prefix would leave the last group unmasked.
+        assert values(detector, text, "PHONE") == []
 
     def test_us_and_international_patterns_do_not_duplicate(self, detector):
         assert detector.detect("+1 555 123 4567") == [
             Span(0, 15, "+1 555 123 4567", "PHONE", "regex", 0)
         ]
 
-    def test_extension_variant_overlaps_plain_number(self, detector):
-        # Both spans are reported; the masker keeps the longest.
+    def test_extension_is_part_of_both_phone_patterns(self, detector):
         assert values(detector, "+1 555 123 4567 ext. 89", "PHONE") == [
-            "+1 555 123 4567 ext. 89",
-            "+1 555 123 4567",
+            "+1 555 123 4567 ext. 89"
         ]
 
     def test_trailing_digit_groups_are_trimmed_not_dropped(self, detector):
@@ -169,6 +248,9 @@ class TestIPv4:
             ("0.0.0.0", "0.0.0.0"),
             ("255.255.255.255", "255.255.255.255"),
             ("(10.1.2.3)", "10.1.2.3"),
+            ("服务器地址是192.0.2.1。", "192.0.2.1"),
+            ("サーバー192.0.2.1に接続", "192.0.2.1"),
+            ("__192.0.2.1__", "192.0.2.1"),
         ],
     )
     def test_matches(self, detector, text, expected):
@@ -291,3 +373,37 @@ class TestGeneral:
         assert (
             repr(detector) == "RegexDetector(entity_types=('EMAIL', 'PHONE', 'IPV4'))"
         )
+
+
+class TestPerformance:
+    """Inputs that used to trigger quadratic or catastrophic backtracking."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "a." * 25_000,
+            "a-" * 25_000,
+            "a'" * 25_000,
+            "a=" * 25_000,
+            "a" * 50_000,
+            "a@" * 25_000,
+            "1." * 25_000,
+            ("+" + "1" * 30 + "a ") * 640,
+            "+1 " + "1 " * 25_000,
+        ],
+        ids=[
+            "dots",
+            "dashes",
+            "quotes",
+            "equals",
+            "letters",
+            "ats",
+            "digits",
+            "plus",
+            "groups",
+        ],
+    )
+    def test_linear_time(self, detector, text):
+        start = time.perf_counter()
+        detector.detect(text)
+        assert time.perf_counter() - start < 1.0
