@@ -19,11 +19,12 @@ PatternLike: TypeAlias = "str | re.Pattern[str]"
 
 # Pragmatic address matching, not full RFC 5322. The local part is dot-atom
 # style (no leading, trailing, or doubled dots), so sentence punctuation and
-# ellipses stay outside the match.
+# ellipses stay outside the match. It accepts Unicode letters (RFC 6531, e.g.
+# "łucja@example.com"); the domain must be ASCII (use punycode for IDNs).
 EMAIL_PATTERN = re.compile(
     r"""
-    (?<![A-Za-z0-9_%+-])
-    [A-Za-z0-9_%+-]+(?:\.[A-Za-z0-9_%+-]+)*
+    (?<![\w%+-])
+    [\w%+-]+(?:\.[\w%+-]+)*
     @
     (?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+
     [A-Za-z]{2,63}

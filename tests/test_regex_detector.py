@@ -46,6 +46,7 @@ class TestEmail:
             ("wait...jan@example.com", "jan@example.com"),
             ("user_name%x@my-host.example.net", "user_name%x@my-host.example.net"),
             ("Is it jan@example.com?", "jan@example.com"),
+            ("łucja.wiśniewska@example.com", "łucja.wiśniewska@example.com"),
         ],
     )
     def test_matches(self, detector, text, expected):
