@@ -256,8 +256,8 @@ class TestWarnings:
         result = Masker([detector], vault).mask(text)
         assert result.text == "Jan [ADDRESS_1]"
         assert result.warnings == [
-            "Partial mask: detected PERSON value 'Jan Nowak' overlapped a longer "
-            "match, so 'Jan ' is still in the masked text."
+            "Partial mask: detected PERSON value 'Jan Nowak' overlapped a match "
+            "that was kept, so 'Jan ' is still in the masked text."
         ]
 
     def test_partial_overlap_on_both_sides(self, vault):
@@ -284,8 +284,8 @@ class TestWarnings:
         result = Masker([detector], vault).mask(text)
         assert result.text == "[X_1]mi[X_2]"
         assert result.warnings == [
-            "Partial mask: detected Z value 'AAmiBB' overlapped a longer match, "
-            "so 'mi' is still in the masked text."
+            "Partial mask: detected Z value 'AAmiBB' overlapped a match that was "
+            "kept, so 'mi' is still in the masked text."
         ]
 
     def test_contained_loser_is_not_a_partial_mask(self, vault):
@@ -306,6 +306,25 @@ class TestWarnings:
     def test_builtin_phone_followed_by_phone_masks_both(self, masker):
         result = masker.mask("Phones: +44 20 7946 0958 555-123-4567")
         assert result.text == "Phones: [PHONE_1] [PHONE_2]"
+        assert result.warnings == []
+
+    @pytest.mark.parametrize(
+        "text", ["tel555-123-4567", "host192.0.2.10", "id 555-123-45678"]
+    )
+    def test_leak_check_finds_known_values_glued_to_other_text(self, masker, text):
+        # The regexes refuse these forms, but the known value is still there.
+        masker.mask("Call 555-123-4567 or 192.0.2.10")
+        result = masker.mask(text)
+        assert result.text == text
+        assert len(result.warnings) == 1
+        assert result.warnings[0].startswith("Leak check: known value")
+
+    def test_leak_check_separator_never_matches_across_placeholders(self, vault):
+        # A value containing NUL must not be "found" where NUL once stood in
+        # for a placeholder.
+        vault.get_or_create("中\x00中", "X")
+        result = Masker([RegexDetector()], vault).mask("中192.0.2.1中")
+        assert result.text == "中[IPV4_1]中"
         assert result.warnings == []
 
     def test_leak_check_uses_word_boundaries(self, masker, manual):

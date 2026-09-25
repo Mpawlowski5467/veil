@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 
 from ._text import contains_token
 from .detectors.base import Detector
+from .detectors.manual import ManualDetector
 from .placeholders import PLACEHOLDER_RE
 from .types import MaskedEntity, MaskResult, Span
 from .vault.base import Vault
@@ -122,24 +123,39 @@ class Masker:
 
         warnings = _placeholder_like_input(text)
         warnings.extend(_partial_masks(text, candidates, kept))
-        # NUL stands in for each placeholder: like "[", it is not a word
-        # character, and it keeps the check from matching inside placeholders.
-        warnings.extend(self._leaks("\0".join(reversed(unmasked)), candidates))
+        warnings.extend(self._leaks(list(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
-    def _leaks(self, unmasked: str, candidates: Iterable[Span]) -> list[str]:
-        """Warn about every known value that still appears in ``unmasked``.
+    def _leaks(self, unmasked: list[str], candidates: Iterable[Span]) -> list[str]:
+        """Warn about every known value that still appears between placeholders.
 
         Known values are everything in the vault (from this call and earlier
         ones) plus anything detected in this call, including spans that lost
-        an overlap. Matching follows `veil._text.find_token`, the same rule
-        used for manual entities.
+        an overlap. Registered manual entities are matched with the same
+        whole-token rule used to detect them (so "Jan" isn't reported inside
+        "January"); every other value is matched as a plain substring, because
+        a phone number glued to letters is still a phone number.
         """
         known = dict.fromkeys(value for _, value in self._vault.items())
         known.update(dict.fromkeys(span.value for span in candidates))
+        manual: set[str] = set()
+        for detector in self._detectors:
+            if isinstance(detector, ManualDetector):
+                manual.update(detector.entities)
+
+        # The pieces are joined with a character that is in neither the text
+        # nor any value. It stands in for each placeholder: like "[", it is not
+        # a word character, and no value can match across it.
+        separator = _unused_char(unmasked, known)
+        haystacks = unmasked if separator is None else [separator.join(unmasked)]
+
         warnings = []
         for value in known:
-            if contains_token(unmasked, value):
+            if value in manual:
+                found = any(contains_token(piece, value) for piece in haystacks)
+            else:
+                found = any(value in piece for piece in haystacks)
+            if found:
                 placeholder = self._vault.get_placeholder(value)
                 label = f"{value!r} ({placeholder})" if placeholder else repr(value)
                 warnings.append(
@@ -178,10 +194,20 @@ def _partial_masks(
             shown = ", ".join(repr(piece) for piece in leftovers)
             message = (
                 f"Partial mask: detected {span.entity_type} value {span.value!r} "
-                f"overlapped a longer match, so {shown} is still in the masked text."
+                f"overlapped a match that was kept, so {shown} is still in the "
+                "masked text."
             )
             warnings[message] = None
     return list(warnings)
+
+
+def _unused_char(pieces: list[str], values: Iterable[str]) -> str | None:
+    """Return a control character that appears in no piece and no value."""
+    used = "".join(pieces) + "".join(values)
+    for code in (*range(0x00, 0x09), *range(0x0E, 0x20)):
+        if chr(code) not in used:
+            return chr(code)
+    return None
 
 
 def _placeholder_like_input(text: str) -> list[str]:

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 
 # Scripts normally written without spaces between words. Word boundaries can't
 # be seen in them, so a character from one of these ranges never counts as
@@ -26,8 +27,41 @@ UNSPACED_RANGES: tuple[tuple[int, int], ...] = (
     (0x20000, 0x3134F),  # CJK Unified Ideographs Extensions B-G
 )
 
-#: The ranges above as the body of a regex character class, e.g. ``[^\W...]``.
-UNSPACED_CLASS = "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi in UNSPACED_RANGES)
+
+def _ranges(codepoints: Iterable[int]) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for code in codepoints:
+        if ranges and ranges[-1][1] == code - 1:
+            ranges[-1] = (ranges[-1][0], code)
+        else:
+            ranges.append((code, code))
+    return ranges
+
+
+def _class_body(ranges: Iterable[tuple[int, int]]) -> str:
+    return "".join(
+        re.escape(chr(lo)) + (f"-{re.escape(chr(hi))}" if hi > lo else "")
+        for lo, hi in ranges
+    )
+
+
+#: The unspaced-script ranges as the body of a regex character class.
+UNSPACED_CLASS = _class_body(UNSPACED_RANGES)
+
+#: Combining marks (accents in decomposed text, Indic vowel signs, ...) as the
+#: body of a regex character class. Python's ``\w`` does not include them, but
+#: they belong to the letter they follow. Built from the running Python's
+#: Unicode database; takes a few milliseconds at import.
+MARK_CLASS = _class_body(
+    _ranges(c for c in range(0x0300, 0x20000) if unicodedata.category(chr(c))[0] == "M")
+)
+
+#: Regex for one character that continues a word in a space-separated script:
+#: a letter, digit, underscore, or combining mark, outside unspaced scripts.
+WORD_CHAR = rf"(?![{UNSPACED_CLASS}])[\w{MARK_CLASS}]"
+
+_WORD_CHAR_RE = re.compile(WORD_CHAR)
+_NON_WORD_CHAR_RE = re.compile(rf"(?!{WORD_CHAR})[\s\S]")
 
 
 def is_word_char(ch: str) -> bool:
@@ -37,36 +71,39 @@ def is_word_char(ch: str) -> bool:
     stays attached to its letter), and underscore count. Characters from
     scripts written without spaces (CJK, Thai, and others) do not.
     """
-    if ch == "_":
-        return True
-    if unicodedata.category(ch)[0] not in "LMN":
-        return False
-    code = ord(ch)
-    return not any(lo <= code <= hi for lo, hi in UNSPACED_RANGES)
+    return _WORD_CHAR_RE.fullmatch(ch) is not None
 
 
 def find_token(text: str, value: str) -> Iterator[int]:
-    """Yield the start of every occurrence of ``value`` as a whole token.
+    """Yield the start of each occurrence of ``value`` as a whole token.
 
-    Matching is exact and case-sensitive. An occurrence is skipped when it is
-    glued to a word character (see `is_word_char`) on a side where ``value``
-    itself starts or ends with one, so ``"Jan"`` is found in ``"Jan's"`` and
-    ``"(Jan)"`` but not in ``"January"``. Overlapping occurrences are all
-    reported.
+    Matching is exact and case-sensitive, and occurrences don't overlap. An
+    occurrence is skipped when it is glued to a word character (see
+    `is_word_char`) on a side where ``value`` itself starts or ends with one,
+    so ``"Jan"`` is found in ``"Jan's"`` and ``"(Jan)"`` but not in
+    ``"January"``.
     """
     if not value:
         return
     guard_start = is_word_char(value[0])
     guard_end = is_word_char(value[-1])
     size = len(value)
-    start = text.find(value)
-    while start != -1:
-        end = start + size
-        glued_before = guard_start and start > 0 and is_word_char(text[start - 1])
-        glued_after = guard_end and end < len(text) and is_word_char(text[end])
-        if not glued_before and not glued_after:
-            yield start
-        start = text.find(value, start + 1)
+    pos = text.find(value)
+    while pos != -1:
+        if guard_start and pos > 0 and _WORD_CHAR_RE.match(text, pos - 1):
+            # Every later start inside this word is glued as well: skip to the
+            # first position after the next non-word character.
+            gap = _NON_WORD_CHAR_RE.search(text, pos)
+            if gap is None:
+                return
+            pos = text.find(value, gap.end())
+            continue
+        end = pos + size
+        if guard_end and _WORD_CHAR_RE.match(text, end):
+            pos = text.find(value, pos + 1)
+            continue
+        yield pos
+        pos = text.find(value, end)
 
 
 def contains_token(text: str, value: str) -> bool:

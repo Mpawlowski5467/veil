@@ -119,7 +119,7 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 veil reports problems instead of raising:
 
-- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped a longer match, and when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
+- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
 - **`restore()`** leaves unknown placeholders (well-formed, but not in the vault) unchanged and lists them.
 
 ```python
@@ -166,14 +166,14 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Limitations
 
-- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names (punycode `xn--` works), addresses using rare characters such as `!`, `#`, or `{`, and values split across lines. Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
-- **Text glued to an email address with `=`, `&`, or `/` is masked with it.** Those characters can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the key visible.
+- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
 - **The model must copy placeholders exactly.** `[person_1]`, `PERSON_1`, or `[PERSON 1]` in a reply are not restored.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
-- **An international number followed by a short digit group can absorb it.** In `+44 20 7946 0958 24 hours`, the ` 24` becomes part of the phone value. The model doesn't see the `24`, but restoring still returns the exact original text.
+- **International numbers end at the last digit group that isn't glued to letters.** In `+44 20 7946 0958 24 hours`, the separate ` 24` is absorbed into the phone value (restoring still returns the exact text). In `+44 20 7946 0958 24h`, the number correctly stops before `24h`, but by the same rule a group glued straight to letters, as in `+44 20 7946 0958abc`, is left visible.
 
 ## Roadmap
 
