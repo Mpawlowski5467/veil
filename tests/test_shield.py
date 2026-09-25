@@ -5,7 +5,7 @@ import warnings
 
 import pytest
 
-import veil
+import veil as package
 from veil import (
     Detector,
     MaskedEntity,
@@ -62,9 +62,9 @@ def test_type_hints_resolve_at_runtime():
 
 
 def test_public_api_exports():
-    for name in veil.__all__:
-        assert hasattr(veil, name)
-    assert veil.__version__ == "0.1.0"
+    for name in package.__all__:
+        assert hasattr(package, name)
+    assert package.__version__ == "0.1.0"
 
 
 def test_readme_example(shield):

@@ -122,6 +122,73 @@ class TestEmail:
     def test_markdown_star_is_not_part_of_an_address(self, detector, text, expected):
         assert values(detector, text, "EMAIL") == [expected]
 
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (
+                "请发邮件到jan@example.com或anna@example.com",
+                ["请发邮件到jan@example.com", "anna@example.com"],
+            ),
+            (
+                "请发送至zhang.wei@example.com或li.na@example.cn",
+                ["请发送至zhang.wei@example.com", "li.na@example.cn"],
+            ),
+            (
+                "ติดต่อ jan@example.comหรือanna@example.com",
+                ["jan@example.com", "anna@example.com"],
+            ),
+            # Glued with ASCII: the second address absorbs the glue.
+            (
+                "GET /search?q=contact+jan@example.com+or+anna@example.com HTTP/1.1",
+                ["q=contact+jan@example.com", "+or+anna@example.com"],
+            ),
+            (
+                "q=jan@example.com%20anna@example.com",
+                ["q=jan@example.com", "%20anna@example.com"],
+            ),
+        ],
+    )
+    def test_address_glued_to_the_previous_one(self, detector, text, expected):
+        assert values(detector, text, "EMAIL") == expected
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (
+                "zoë@example.net会议定于下午三点举行山田太郎@a1.example.dev",
+                ["zoë@example.net", "会议定于下午三点举行山田太郎@a1.example.dev"],
+            ),
+            (
+                "ivanov@example.org連絡先は张伟@lists.example.org連絡先は",
+                ["ivanov@example.org", "連絡先は张伟@lists.example.org"],
+            ),
+        ],
+    )
+    def test_cjk_address_glued_to_the_previous_one(self, detector, text, expected):
+        # No start position inside the CJK run is allowed, so the address is
+        # continued from the end of the previous one (over-masking the prose).
+        assert values(detector, text, "EMAIL") == expected
+
+    def test_long_chain_of_glued_addresses_is_linear(self, detector):
+        text = "a@b.co" + "+a@b.co" * 5000
+        start = time.perf_counter()
+        assert len(detector.detect(text)) == 5001
+        assert time.perf_counter() - start < 1.0
+
+    @pytest.mark.parametrize("local", ["jan", "jan.nowak"])
+    def test_address_after_a_long_run_of_thai(self, detector, local):
+        # Too long for the "@ within reach" filter from the start of the run.
+        thai = "ผ่านทางอีเมล" * 15
+        assert values(detector, thai + local + "@example.com", "EMAIL") == [
+            local + "@example.com"
+        ]
+
+    @pytest.mark.parametrize(
+        "address", ["USER@EXAMPLE.XN--P1AI", "ivan@shop.XN--P1AI", "a@b.Xn--P1ai"]
+    )
+    def test_upper_case_punycode_tld(self, detector, address):
+        assert values(detector, f"Mail: {address} today", "EMAIL") == [address]
+
     def test_key_value_prefix_is_masked_with_the_address(self, detector):
         # "=" can be part of a local part (VERP bounce addresses), so a key
         # glued to the address is masked along with it. Over-masking is safe;
@@ -287,9 +354,93 @@ class TestPhone:
     def test_parenthesized_country_code_after_a_label(self, detector, text):
         assert values(detector, text, "PHONE") == [text[text.index("(") :]]
 
-    def test_digits_glued_to_letters_are_left_out(self, detector):
-        # Documented limitation: "0958abc" reads like "24h", a separate word.
-        assert values(detector, "+44 20 7946 0958abc", "PHONE") == ["+44 20 7946"]
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # A long group glued to letters is part of the number: mask it all.
+            ("+44 20 7946 0958abc", "+44 20 7946 0958"),
+            ("Phone: +44-20-7946-0958Fax", "+44-20-7946-0958"),
+            # Unsure whether "100" belongs to the number: over-mask it.
+            ("+44 20 7946 0958 100km away", "+44 20 7946 0958 100"),
+        ],
+    )
+    def test_number_glued_to_letters_is_still_masked(self, detector, text, expected):
+        assert values(detector, text, "PHONE") == [expected]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # Over 15 digits with the extension: mask the base number.
+            ("Tel.: +49 (0)711 1234567-890", "+49 (0)711 1234567"),
+            ("Tel.: +43 (0)662 123456-7890", "+43 (0)662 123456"),
+            ("Tel.: +49 89 12345678-1234", "+49 89 12345678"),
+            ("Tel. +44 20 7946 0958-0959", "+44 20 7946 0958"),
+            # A date right after a number: its first group is over-masked.
+            ("+48 123 456 789 2024-01-15", "+48 123 456 789 2024"),
+        ],
+    )
+    def test_too_many_digits_keeps_the_longest_plausible_number(
+        self, detector, text, expected
+    ):
+        assert values(detector, text, "PHONE") == [expected]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Call (555)\u00a0123-4567 today", "(555)\u00a0123-4567"),
+            ("Call 555\u00a0123\u00a04567 today", "555\u00a0123\u00a04567"),
+            (
+                "T\u00e9l. : +33\u00a01\u00a023\u00a045\u00a067\u00a089",
+                "+33\u00a01\u00a023\u00a045\u00a067\u00a089",
+            ),
+            (
+                "Phone +44\u202f20\u202f7946\u202f0958",
+                "+44\u202f20\u202f7946\u202f0958",
+            ),
+            ("555\u2013123\u20134567", "555\u2013123\u20134567"),
+        ],
+    )
+    def test_no_break_spaces_and_dashes(self, detector, text, expected):
+        assert values(detector, text, "PHONE") == [expected]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Call tel.1-800-555-0199 today", "1-800-555-0199"),
+            ("Mob.1 (305) 555-0123", "1 (305) 555-0123"),
+            ("Tel(212) 555-0142", "(212) 555-0142"),
+        ],
+    )
+    def test_us_number_after_an_abbreviation_or_label(self, detector, text, expected):
+        assert values(detector, text, "PHONE") == [expected]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "5551234567",  # bare 10-digit run: could be an order number
+            "Order 1234567890",
+            "555-1234567",
+            "555-123-45678",
+            "2024-01-15",
+            "15.01.2024",
+            "123-45-6789",
+            "ZIP 90210-1234",
+            "4111 1111 1111 1111",
+            "ISBN 978-0-306-40615-7",
+            "12:30",
+            "601 234 567",  # national format without a country code
+            "+10%",
+            "UTC+05:30",
+            "+1-800-FLOWERS",
+            "+12345678901234567890",  # too many digits
+            "+1234567",  # too few digits
+            "3+4=7",
+            "Version 10.5.2024.3",
+            "tel123-456-7890",
+        ],
+    )
+    def test_does_not_match(self, detector, text):
+        assert values(detector, text, "PHONE") == []
 
     def test_shrink_only_at_group_boundaries(self):
         # A custom span starting mid-group must not strand the digits before

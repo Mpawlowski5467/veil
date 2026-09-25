@@ -57,8 +57,9 @@ MARK_CLASS = _class_body(
 )
 
 #: Regex for one character that continues a word in a space-separated script:
-#: a letter, digit, underscore, or combining mark, outside unspaced scripts.
-WORD_CHAR = rf"(?![{UNSPACED_CLASS}])[\w{MARK_CLASS}]"
+#: a letter, digit, or combining mark, outside unspaced scripts. Underscore
+#: doesn't count, so a name in Markdown emphasis ("_Jan_") is still found.
+WORD_CHAR = rf"(?![{UNSPACED_CLASS}_])[\w{MARK_CLASS}]"
 
 _WORD_CHAR_RE = re.compile(WORD_CHAR)
 _NON_WORD_CHAR_RE = re.compile(rf"(?!{WORD_CHAR})[\s\S]")
@@ -67,8 +68,8 @@ _NON_WORD_CHAR_RE = re.compile(rf"(?!{WORD_CHAR})[\s\S]")
 def is_word_char(ch: str) -> bool:
     """Return whether ``ch`` can continue a word in a space-separated script.
 
-    Letters, digits, combining marks (so an accent or a Devanagari vowel sign
-    stays attached to its letter), and underscore count. Characters from
+    Letters, digits, and combining marks (so an accent or a Devanagari vowel
+    sign stays attached to its letter) count. Underscore and characters from
     scripts written without spaces (CJK, Thai, and others) do not.
     """
     return _WORD_CHAR_RE.fullmatch(ch) is not None

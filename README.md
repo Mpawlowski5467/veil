@@ -86,6 +86,8 @@ Phone numbers outside North America need a leading `+` and country code. That ke
 
 A custom pattern with a built-in name (`"EMAIL"`, `"PHONE"`, `"IPV4"`) replaces that built-in. Type names use upper-case letters, digits, and underscores, and start with a letter.
 
+Python's `\b` treats underscores and Chinese, Japanese, and Korean characters as word characters, so `r"\bEMP\d{6}\b"` won't match `_EMP123456_` or `ID是EMP123456`. To reject only glued ASCII letters and digits, use `r"(?<![A-Za-z0-9])EMP\d{6}(?![A-Za-z0-9])"`.
+
 ### Names and other values patterns can't find
 
 ```python
@@ -173,7 +175,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 - **The model must copy placeholders exactly.** `[person_1]`, `PERSON_1`, or `[PERSON 1]` in a reply are not restored.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
-- **International numbers end at the last digit group that isn't glued to letters.** In `+44 20 7946 0958 24 hours`, the separate ` 24` is absorbed into the phone value (restoring still returns the exact text). In `+44 20 7946 0958 24h`, the number correctly stops before `24h`, but by the same rule a group glued straight to letters, as in `+44 20 7946 0958abc`, is left visible.
+- **International numbers can take in digits that follow them.** When it's unclear where a number ends, veil masks too much rather than too little. In `+44 20 7946 0958 24 hours`, the separate ` 24` is masked with the number. In `+48 123 456 789 2024-01-15`, the `2024` of the date is masked with it. The model doesn't see those digits, but restoring still returns the exact original text. A short group glued to a word, such as `24h` or `9am`, is recognised and left out.
 
 ## Roadmap
 
@@ -189,7 +191,14 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-To rename the package: in `pyproject.toml`, change `name` and the `[tool.hatch.version]` path; rename `src/veil/`; then update the `veil` imports in `tests/` and this README. Internal imports are relative, and no class or function name contains "veil".
+To rename the package:
+
+1. In `pyproject.toml`, change `name` and the `[tool.hatch.version]` path.
+2. Rename `src/veil/`.
+3. Update the `veil` imports in `tests/` and in this README.
+4. Run `uv lock`.
+
+Internal imports are relative, and no class, function, or docstring contains "veil".
 
 ## License
 

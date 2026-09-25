@@ -55,8 +55,9 @@ class Shield:
         Raises:
             ValueError: If both ``custom_patterns`` and ``detectors`` are given,
                 or a custom pattern is invalid.
-            TypeError: If a detector or the vault does not implement its
-                protocol.
+            TypeError: If a custom pattern is not a ``str`` or a ``str``-based
+                ``re.Pattern``, or a detector or the vault does not implement
+                its protocol.
         """
         if detectors is not None and custom_patterns is not None:
             raise ValueError(

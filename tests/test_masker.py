@@ -327,6 +327,10 @@ class TestWarnings:
         assert result.text == "中[IPV4_1]中"
         assert result.warnings == []
 
+    def test_name_in_markdown_emphasis(self, masker, manual):
+        manual.add("Jan Nowak", "PERSON")
+        assert masker.mask("- _Jan Nowak_ (work)").text == "- _[PERSON_1]_ (work)"
+
     def test_leak_check_uses_word_boundaries(self, masker, manual):
         manual.add("Jan", "PERSON")
         masker.mask("Hi Jan")

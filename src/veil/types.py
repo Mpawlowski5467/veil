@@ -1,4 +1,4 @@
-"""Data types shared across veil's detectors, vaults, masker, and restorer."""
+"""Data types shared by the detectors, vaults, masker, and restorer."""
 
 from __future__ import annotations
 

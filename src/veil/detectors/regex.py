@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import bisect
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import ClassVar, TypeAlias
 
-from .._text import MARK_CLASS
+from .._text import MARK_CLASS, UNSPACED_CLASS
 from ..placeholders import validate_entity_type
 from ..types import Span
 
@@ -31,59 +31,101 @@ _LOCAL_SEP = r"[.'\u2019=&/!#$^~]"
 
 # Pragmatic address matching, not full RFC 5322. The local part has no
 # leading, trailing, or doubled separators, so sentence punctuation, quotes,
-# and ellipses stay outside the match. The lookbehind makes a match start at
-# the beginning of a run of local-part characters. The lookahead is a cheap
-# filter: a local part is at most 64 characters (RFC 5321; 128 here to allow
-# for a glued key=), so a start with no "@" within reach is skipped at once,
-# which keeps long dotted or dashed strings linear. The domain must be ASCII;
-# punycode (xn--) labels and TLDs are accepted.
-EMAIL_PATTERN = re.compile(
-    rf"""
-    (?<!{_LOCAL_CHAR})
+# and ellipses stay outside the match. The lookahead is a cheap filter: a
+# local part is at most 64 characters (RFC 5321; 128 here to allow for a glued
+# key=), so a start with no "@" within reach is skipped at once, which keeps
+# long dotted or dashed strings linear. The domain must be ASCII; punycode
+# (xn--) labels and TLDs are accepted.
+_EMAIL_BODY = rf"""
     (?=[^\s@]{{1,128}}@)
     {_LOCAL_CHAR}+(?:{_LOCAL_SEP}{_LOCAL_CHAR}+)*
     @
     (?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+
-    (?:xn--[A-Za-z0-9-]{{0,58}}[A-Za-z0-9]|[A-Za-z]{{2,63}})
+    (?:(?i:xn--)[A-Za-z0-9-]{{0,58}}[A-Za-z0-9]|[A-Za-z]{{2,63}})
     (?![A-Za-z0-9])
-    """,
+"""
+
+# A match starts at the beginning of a run of local-part characters (starting
+# halfway through would leave the front of the address visible), or where a
+# script written without spaces meets another one ("…ทางอีเมลjan@example.com":
+# the Thai run may be too long for the lookahead, and there is no space to
+# tell where the address begins).
+EMAIL_PATTERN = re.compile(
+    rf"(?:(?<!{_LOCAL_CHAR})|(?<=[{UNSPACED_CLASS}])(?![{UNSPACED_CLASS}])){_EMAIL_BODY}",
     re.VERBOSE,
 )
+# The same without the start rule, to continue right after an address that
+# another one is glued to ("…com+anna@…", "…com%20anna@…").
+_EMAIL_CONTINUATION = re.compile(_EMAIL_BODY, re.VERBOSE)
+_ADDRESS_RUN = re.compile(rf"(?:{_LOCAL_CHAR}|{_LOCAL_SEP})*")
+# An address ends at most this far past its "@" (253-character domain).
+_DOMAIN_REACH = 256
+
+
+def _find_emails(text: str) -> Iterator[re.Match[str]]:
+    pos = 0
+    while (match := EMAIL_PATTERN.search(text, pos)) is not None:
+        yield match
+        pos = match.end()
+        # The next address may start inside the run of address characters
+        # that this one ends, where the start rule never allows a match. If
+        # no normal match starts in that run (as the tighter "anna@..." after
+        # a CJK word does), continue right here instead.
+        while (run_end := _ADDRESS_RUN.match(text, pos).end()) > pos:
+            reach = min(len(text), run_end + _DOMAIN_REACH)
+            tight = EMAIL_PATTERN.search(text, pos, reach)
+            if tight is not None and tight.start() < run_end:
+                break
+            glued = _EMAIL_CONTINUATION.match(text, pos)
+            if glued is None:
+                break
+            yield glued
+            pos = glued.end()
+
 
 # Phone numbers and IPv4 addresses must not be glued to ASCII letters or to
 # digits ("tel555-123-4567", "v1.2.3.4"), but may touch any other script:
 # Chinese and Japanese put no spaces around numbers ("電話は555-123-4567です").
-_EXTENSION = r"(?:[ ]?(?i:ext\.?|x)[ ]?\d{1,6})"
+# Digit groups may be separated by a space (including the no-break spaces
+# common in HTML and French text), a dot, or a dash (including en dash and
+# the non-breaking hyphen).
+_SPACES = " \u00a0\u2009\u202f"
+_PHONE_SEPARATORS = _SPACES + ".-\u2011\u2013"
+_SEP = r"[ \u00a0\u2009\u202f.\-\u2011\u2013]"
+_DASH_DOT = r"[.\-\u2011\u2013]"
+_EXTENSION = r"(?:[ \u00a0]?(?i:ext\.?|x)[ \u00a0]?\d{1,6})"
 
 # North American numbers. Separators are required between the groups, so bare
 # ten-digit runs (order numbers, IDs) are not matched; use a leading "+" for
 # unseparated numbers.
 US_PHONE_PATTERN = re.compile(
     rf"""
-    (?<![A-Za-z\d+])
-    (?:(?<![.\d])\+?1[ .-]?)?               # optional country code (but not
-                                            # the last octet of "192.0.2.1 555...")
-    (?:\(\d{{3}}\)[ .-]?|\d{{3}}[ .-])         # area code: (555) or 555-
-    \d{{3}}[ .-]\d{{4}}                        # exchange and line number
+    (?:
+        (?<![A-Za-z\d+])
+        (?:(?<!\d\.)\+?1{_SEP}?)?           # country code, but not the last
+                                            # octet of "192.0.2.1 555..."
+        (?:\(\d{{3}}\){_SEP}?|\d{{3}}{_SEP})    # area code: (555) or 555-
+      | (?<![\d+])\(\d{{3}}\){_SEP}?          # "(555)" glued to a label: Tel(555)
+    )
+    \d{{3}}{_SEP}\d{{4}}                     # exchange and line number
     {_EXTENSION}?
-    (?![A-Za-z\d]|[.-]\d)
+    (?![A-Za-z\d]|{_DASH_DOT}\d)
     """,
     re.VERBOSE,
 )
 
 # International numbers start with a "+" country code, optionally in
-# parentheses: "+44 20 7946 0958", "(+48) 123 456 789". Digit groups may be
-# separated by spaces, dots, or dashes, and may be in parentheses, e.g.
-# "+49 (0)30 1234567". The groups are captured inside a lookahead and consumed
-# with a backreference, which makes the run atomic so a long digit run can't
-# backtrack catastrophically. The capture is deliberately greedy (it may run
-# into the next token); `_intl_phone_end` then backs off group by group to the
-# longest prefix with a plausible digit count that isn't glued to what follows.
+# parentheses: "+44 20 7946 0958", "(+48) 123 456 789". Digit groups may be in
+# parentheses too, e.g. "+49 (0)30 1234567". The groups are captured inside a
+# lookahead and consumed with a backreference, which makes the run atomic so a
+# long digit run can't backtrack catastrophically. The capture is greedy and
+# may run into the next token; `_intl_phone_end` decides where the number
+# really ends.
 INTL_PHONE_PATTERN = re.compile(
-    r"""
+    rf"""
     (?=(?P<number>
-        (?:(?<![\d+])\(\+[1-9]\d{0,2}\)|(?<![A-Za-z\d+])\+[1-9]\d{0,2})
-        (?:[ .-]?(?:\(\d{1,4}\)|\d{1,4})){1,15}
+        (?:(?<![\d+])\(\+[1-9]\d{{0,2}}\)|(?<![A-Za-z\d+])\+[1-9]\d{{0,2}})
+        (?:{_SEP}?(?:\(\d{{1,4}}\)|\d{{1,4}})){{1,15}}
     ))(?P=number)
     """,
     re.VERBOSE,
@@ -101,43 +143,55 @@ IPV4_PATTERN = re.compile(
 MIN_PHONE_DIGITS = 8
 MAX_PHONE_DIGITS = 15
 
-_PHONE_SEPARATORS = " .-"
-_PHONE_END_OK = re.compile(r"(?![A-Za-z\d]|[.-]\d)")
+_CLEAN_END = re.compile(rf"(?![A-Za-z\d]|{_DASH_DOT}\d)")
+_GLUED = re.compile(r"[A-Za-z\d]")
 _EXTENSION_RE = re.compile(_EXTENSION)
 
 
-def _digit_count(value: str) -> int:
-    return sum(ch.isdecimal() for ch in value)
+def _plausible(number: str) -> bool:
+    digits = sum(ch.isdecimal() for ch in number)
+    return MIN_PHONE_DIGITS <= digits <= MAX_PHONE_DIGITS
 
 
 def _intl_phone_end(match: re.Match[str]) -> int | None:
-    """Pick where an international number really ends, or reject it.
+    """Pick where an international number ends, or reject it.
 
-    Candidates are the whole captured run and every group boundary inside it,
-    longest first. The first one with at most 15 digits that isn't glued to a
-    letter or digit wins, so "+44 20 7946 0958 24h" ends before " 24h" and
-    "+33 1 23 45 67 89 192.0.2.1" ends before the address.
+    In order of preference:
+
+    1. The whole captured run, if it has 8-15 digits and ends cleanly (an
+       extension like "x12" may follow).
+    2. If the run ends in a short group glued to a word, as in "0958 24h" or
+       "0958 9am", the number stops before that word.
+    3. Otherwise the longest group-aligned prefix with 8-15 digits, whatever
+       follows it: "+49 (0)711 1234567-890" masks the base number. Masking a
+       little too much (the "2024" of a date right after a number) is safer
+       than leaving digits of the number visible.
     """
     text, start, number = match.string, match.start(), match["number"]
-    cuts = [len(number)]
-    cuts += [
-        i
-        for i in range(len(number) - 1, 0, -1)
-        if number[i] in " .-(" and number[i - 1] not in _PHONE_SEPARATORS
-    ]
-    for cut in cuts:
-        digits = _digit_count(number[:cut])
-        if digits > MAX_PHONE_DIGITS:
-            continue
-        if digits < MIN_PHONE_DIGITS:
-            return None
-        end = start + cut
-        if cut == len(number):
-            extension = _EXTENSION_RE.match(text, end)
-            if extension and _PHONE_END_OK.match(text, extension.end()):
-                return extension.end()
-        if _PHONE_END_OK.match(text, end):
+    end = start + len(number)
+    if _plausible(number):
+        extension = _EXTENSION_RE.match(text, end)
+        if extension and _CLEAN_END.match(text, extension.end()):
+            return extension.end()
+        if _CLEAN_END.match(text, end):
             return end
+    if _GLUED.match(text, end):
+        space = max(number.rfind(ch) for ch in _SPACES)
+        tail = number[space + 1 :]
+        if (
+            space > 0
+            and len(tail) <= 2
+            and tail.isdecimal()
+            and _plausible(number[:space])
+        ):
+            return start + space
+    for cut in range(len(number), 0, -1):
+        at_boundary = cut == len(number) or (
+            number[cut] in _PHONE_SEPARATORS + "("
+            and number[cut - 1] not in _PHONE_SEPARATORS
+        )
+        if at_boundary and _plausible(number[:cut]):
+            return start + cut
     return None
 
 
@@ -153,8 +207,7 @@ def _shrink_phone(value: str, limit: int) -> str | None:
     kept = head.rstrip(_PHONE_SEPARATORS)
     if len(kept) == len(head):
         return None
-    digits = _digit_count(kept)
-    return kept if MIN_PHONE_DIGITS <= digits <= MAX_PHONE_DIGITS else None
+    return kept if _plausible(kept) else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +221,8 @@ class _Rule:
     # Optionally shortens a span so it stops before a neighbouring span that
     # it runs into: returns the shortened value, or None if it can't be.
     shrink: Callable[[str, int], str | None] | None = None
+    # Optionally replaces pattern.finditer for finding raw matches.
+    finder: Callable[[str], Iterable[re.Match[str]]] | None = None
 
 
 class RegexDetector:
@@ -236,7 +291,8 @@ class RegexDetector:
         # "+1 555 123 4567") produce one span. The first rule wins.
         found: dict[tuple[int, int, str], tuple[Span, _Rule]] = {}
         for rule in self._rules:
-            for match in rule.pattern.finditer(text):
+            matches = rule.finder(text) if rule.finder else rule.pattern.finditer(text)
+            for match in matches:
                 start = match.start()
                 end = match.end() if rule.refine is None else rule.refine(match)
                 if end is None or end <= start:
@@ -301,7 +357,7 @@ def _compile(entity_type: str, pattern: PatternLike) -> re.Pattern[str]:
 
 
 _BUILTIN_RULES: tuple[_Rule, ...] = (
-    _Rule("EMAIL", EMAIL_PATTERN, RegexDetector.BUILTIN_PRIORITY),
+    _Rule("EMAIL", EMAIL_PATTERN, RegexDetector.BUILTIN_PRIORITY, finder=_find_emails),
     _Rule("PHONE", US_PHONE_PATTERN, RegexDetector.BUILTIN_PRIORITY),
     _Rule(
         "PHONE",

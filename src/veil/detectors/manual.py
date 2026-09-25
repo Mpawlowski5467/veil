@@ -13,8 +13,8 @@ class ManualDetector:
     """Finds manually registered values as exact, case-sensitive tokens.
 
     Use it for values a pattern cannot find, such as people's names. A value
-    is not matched when it is glued to a letter, digit, combining mark, or
-    underscore on a side where the value itself starts or ends with one, so
+    is not matched when it is glued to a letter, digit, or combining mark on
+    a side where the value itself starts or ends with one, so
     registering ``"Jan"`` does not mask the start of ``"January"``. Scripts
     written without spaces (Chinese, Japanese, Thai, ...) have no visible word
     boundaries, so there a registered value matches wherever it appears.

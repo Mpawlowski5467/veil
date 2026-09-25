@@ -1,4 +1,4 @@
-"""veil: reversible PII masking for LLM calls.
+"""Reversible PII masking for LLM calls.
 
 Mask personal information with placeholders before text reaches a model, then
 restore the real values in the model's reply.

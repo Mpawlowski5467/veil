@@ -3,12 +3,14 @@ import pytest
 from veil._text import contains_token, find_token, is_word_char
 
 
-@pytest.mark.parametrize("ch", ["a", "Z", "ł", "ж", "7", "_", "́", "ा"])
+@pytest.mark.parametrize("ch", ["a", "Z", "ł", "ж", "7", "\u0301", "\u093e"])
 def test_word_chars(ch):
     assert is_word_char(ch)
 
 
-@pytest.mark.parametrize("ch", [" ", "-", "'", ".", "[", "\x00", "山", "さ", "김", "ก"])
+@pytest.mark.parametrize(
+    "ch", [" ", "-", "_", "'", ".", "[", "\x00", "山", "さ", "김", "ก"]
+)
 def test_non_word_chars(ch):
     assert not is_word_char(ch)
 

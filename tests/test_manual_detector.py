@@ -53,7 +53,7 @@ def test_exact_substring_only(detector):
 
 @pytest.mark.parametrize(
     "text",
-    ["January", "Janet", "DeJan", "Jan_", "Jan2", "JanNowak"],
+    ["January", "Janet", "DeJan", "Jan2", "JanNowak"],
 )
 def test_does_not_match_inside_words(detector, text):
     detector.add("Jan", "PERSON")
@@ -62,7 +62,18 @@ def test_does_not_match_inside_words(detector, text):
 
 @pytest.mark.parametrize(
     "text",
-    ["Jan", "Jan's", "(Jan)", "Jan, hi", "hi Jan.", "Jan-Nowak", '"Jan"', "@Jan"],
+    [
+        "Jan",
+        "Jan's",
+        "(Jan)",
+        "Jan, hi",
+        "hi Jan.",
+        "Jan-Nowak",
+        '"Jan"',
+        "@Jan",
+        "_Jan_",  # Markdown emphasis
+        "Jan_",
+    ],
 )
 def test_matches_at_word_boundaries(detector, text):
     detector.add("Jan", "PERSON")
