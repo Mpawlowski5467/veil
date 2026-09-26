@@ -239,6 +239,17 @@ _IPV6_AFTER_LABEL = re.compile(
 _IPV6_PORT = re.compile(r"[.:][0-9]{1,5}[.:]*\Z")
 
 
+# Anything shaped like an IPv4 address, for `_find_us_phones`: looser than
+# IPV4_PATTERN, so a zero-padded octet, a glued letter, or a ".port" after it
+# (tcpdump's "198.51.100.123.2222") still counts. A dot and a group with a
+# leading zero is not a port, so "1.1.212.200.0123" is a list item and a number.
+_PADDED_OCTET = r"(?:25[0-5]|2[0-4]\d|[01]?\d?\d)"
+_DOTTED_QUAD = re.compile(
+    rf"(?<![\d.]){_PADDED_OCTET}(?:\.{_PADDED_OCTET}){{3}}"
+    r"(?=\.[1-9]\d{0,4}(?!\d|\.\d)|(?!\d|\.\d))"
+)
+
+
 def _find_us_phones(text: str) -> Iterator[re.Match[str]]:
     """Yield `US_PHONE_PATTERN` matches that don't start inside an IPv4 address.
 
@@ -251,12 +262,14 @@ def _find_us_phones(text: str) -> Iterator[re.Match[str]]:
     pos = 0
     while (match := US_PHONE_PATTERN.search(text, pos)) is not None:
         start = match.start()
-        if addresses is None:
-            addresses = [m.span() for m in IPV4_PATTERN.finditer(text)]
-        i = bisect.bisect_right(addresses, (start, len(text))) - 1
-        if i >= 0 and addresses[i][0] < start < addresses[i][1]:
-            pos = start + 1
-            continue
+        # Inside an address, a number can only start right after a dot.
+        if start > 0 and text[start - 1] == ".":
+            if addresses is None:
+                addresses = [m.span() for m in _DOTTED_QUAD.finditer(text)]
+            i = bisect.bisect_right(addresses, (start, len(text))) - 1
+            if i >= 0 and addresses[i][0] < start < addresses[i][1]:
+                pos = start + 1
+                continue
         yield match
         pos = match.end()
 
