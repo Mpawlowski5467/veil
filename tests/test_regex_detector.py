@@ -5,6 +5,7 @@ import unicodedata
 import pytest
 
 from veil.detectors import Detector, RegexDetector
+from veil.masker import resolve_overlaps
 from veil.types import Span
 
 
@@ -26,7 +27,14 @@ def test_satisfies_protocol(detector):
 
 
 def test_builtin_types(detector):
-    assert detector.entity_types == ("EMAIL", "PHONE", "IPV4")
+    assert detector.entity_types == (
+        "EMAIL",
+        "PHONE",
+        "IPV4",
+        "IPV6",
+        "CREDIT_CARD",
+        "IBAN",
+    )
 
 
 def test_spans_point_at_the_match(detector):
@@ -493,11 +501,153 @@ class TestIPv4:
         assert values(detector, text, "IPV4") == []
 
 
+class TestIPv6:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Server 2001:db8::1 is up", "2001:db8::1"),
+            ("fe80::1ff:fe23:4567:890a", "fe80::1ff:fe23:4567:890a"),
+            ("fe80::1", "fe80::1"),
+            (
+                "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+                "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+            ),
+            ("2001:DB8::ABCD:1", "2001:DB8::ABCD:1"),
+            ("http://[2001:db8::1]:8080/", "2001:db8::1"),
+            ("Blocked 2001:db8::1.", "2001:db8::1"),
+            ("::ffff:192.0.2.1", "::ffff:192.0.2.1"),
+            ("2001:db8::", "2001:db8::"),
+            ("服务器2001:db8::1已上线", "2001:db8::1"),
+        ],
+    )
+    def test_matches(self, detector, text, expected):
+        assert values(detector, text, "IPV6") == [expected]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "::1",  # loopback, not personal
+            "12:30:45",
+            "std::vector<int>",
+            "a[1::2]",
+            "x[100::2]",
+            "Foo::bar()",
+            "00:1A:2B:3C:4D:5E",  # MAC address
+            "cafe::babe",
+            "2001:db8::1g",
+            "1:2:3:4:5:6:7:8:9",
+            "2001:db8:::1",
+        ],
+    )
+    def test_does_not_match(self, detector, text):
+        assert values(detector, text, "IPV6") == []
+
+    def test_ipv4_mapped_address_is_masked_whole(self, detector):
+        spans = resolve_overlaps(detector.detect("from ::ffff:192.0.2.1"))
+        assert [(s.entity_type, s.value) for s in spans] == [
+            ("IPV6", "::ffff:192.0.2.1")
+        ]
+
+
+class TestCreditCard:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # Networks' published test numbers.
+            ("Card 4111 1111 1111 1111 exp 12/29", "4111 1111 1111 1111"),
+            ("4111-1111-1111-1111", "4111-1111-1111-1111"),
+            ("4111111111111111", "4111111111111111"),
+            ("4222222222222", "4222222222222"),  # 13-digit Visa
+            ("5555 5555 5555 4444", "5555 5555 5555 4444"),
+            ("2223003122003222", "2223003122003222"),  # Mastercard 2-series
+            ("Amex 3782 822463 10005", "3782 822463 10005"),
+            ("6011111111111117", "6011111111111117"),  # Discover
+            ("3530111333300000", "3530111333300000"),  # JCB
+            ("30569309025904", "30569309025904"),  # Diners Club
+            ("6200000000000005", "6200000000000005"),  # UnionPay
+            ("卡号4111111111111111。", "4111111111111111"),
+            ("5555 5555 5555 4444 1234", "5555 5555 5555 4444"),
+        ],
+    )
+    def test_matches(self, detector, text, expected):
+        assert values(detector, text, "CREDIT_CARD") == [expected]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "4111 1111 1111 1112",  # Luhn check fails
+            "1234 5678 9012 3456",
+            "9780306406157",  # ISBN-13
+            "1700000000000",  # millisecond timestamp
+            "41111111111111111111",  # 20 digits
+            "3782 8224 6310 0051 2",  # Amex prefix, wrong length
+            "DE89 3704 0044 0532 0130 01",  # an invalid IBAN's digits
+            "order 4111111111111111x",
+            "+1 555 123 4567 8900",
+            "555 123 4567 555-765",  # mixed separators, passes Luhn by chance
+            "5551 2345 6755 57 65",  # not a printed card layout
+        ],
+    )
+    def test_does_not_match(self, detector, text):
+        assert values(detector, text, "CREDIT_CARD") == []
+
+
+class TestIBAN:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # Published example IBANs.
+            ("IBAN DE89 3704 0044 0532 0130 00", "DE89 3704 0044 0532 0130 00"),
+            ("DE89370400440532013000", "DE89370400440532013000"),
+            ("GB82 WEST 1234 5698 7654 32", "GB82 WEST 1234 5698 7654 32"),
+            ("FR14 2004 1010 0505 0001 3M02 606", "FR14 2004 1010 0505 0001 3M02 606"),
+            (
+                "PL61 1090 1014 0000 0712 1981 2874",
+                "PL61 1090 1014 0000 0712 1981 2874",
+            ),
+            ("nl91 abna 0417 1643 00", "nl91 abna 0417 1643 00"),
+            (
+                "Pay DE89 3704 0044 0532 0130 00 please, thanks",
+                "DE89 3704 0044 0532 0130 00",
+            ),
+            ("账户：DE89370400440532013000。", "DE89370400440532013000"),  # noqa: RUF001
+        ],
+    )
+    def test_matches(self, detector, text, expected):
+        assert values(detector, text, "IBAN") == [expected]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "DE89 3704 0044 0532 0130 01",  # checksum fails
+            "AB12 3456 7890 1234 5678",
+            "Q3 2024 revenue report for the team",
+            "DE00 3704 0044 0532 0130 00",  # check digits out of range
+            "DE89 3704",  # too short
+            "xDE89370400440532013000",
+        ],
+    )
+    def test_does_not_match(self, detector, text):
+        assert values(detector, text, "IBAN") == []
+
+    def test_card_inside_a_valid_iban_loses_the_overlap(self, detector):
+        spans = resolve_overlaps(detector.detect("DE89 3704 0044 0532 0130 00"))
+        assert [s.entity_type for s in spans] == ["IBAN"]
+
+
 class TestCustomPatterns:
     def test_string_pattern(self):
         detector = RegexDetector(custom_patterns={"ORDER": r"#\d{5}"})
         assert found(detector, "Order #12345 shipped") == [("ORDER", "#12345")]
-        assert detector.entity_types == ("EMAIL", "PHONE", "IPV4", "ORDER")
+        assert detector.entity_types == (
+            "EMAIL",
+            "PHONE",
+            "IPV4",
+            "IPV6",
+            "CREDIT_CARD",
+            "IBAN",
+            "ORDER",
+        )
 
     def test_compiled_pattern(self):
         detector = RegexDetector(
@@ -524,7 +674,14 @@ class TestCustomPatterns:
         assert found(detector, "601 234 567") == [("PHONE", "601 234 567")]
         # The built-in US pattern is gone.
         assert found(detector, "555-123-4567") == []
-        assert detector.entity_types == ("EMAIL", "IPV4", "PHONE")
+        assert detector.entity_types == (
+            "EMAIL",
+            "IPV4",
+            "IPV6",
+            "CREDIT_CARD",
+            "IBAN",
+            "PHONE",
+        )
 
     def test_capture_groups_do_not_change_the_span(self):
         detector = RegexDetector(custom_patterns={"ORDER": r"#(\d{5})"})
@@ -587,8 +744,9 @@ class TestGeneral:
         assert text[span.start : span.end] == "jan@example.com"
 
     def test_repr(self, detector):
-        assert (
-            repr(detector) == "RegexDetector(entity_types=('EMAIL', 'PHONE', 'IPV4'))"
+        assert repr(detector) == (
+            "RegexDetector(entity_types=('EMAIL', 'PHONE', 'IPV4', 'IPV6', "
+            "'CREDIT_CARD', 'IBAN'))"
         )
 
 
@@ -607,6 +765,17 @@ class TestPerformance:
             "1." * 25_000,
             ("+" + "1" * 30 + "a ") * 640,
             "+1 " + "1 " * 25_000,
+            "a/" * 25_000,
+            "a!" * 25_000,
+            ("+12345678 " * 5000)[:50_000],
+            "".join(f"+4420{i:06d}\n" for i in range(4200))[:50_000],
+            "1:" * 25_000,
+            "abcd:" * 10_000,
+            "4" * 50_000,
+            "4111 " * 10_000,
+            "DE89 " * 10_000,
+            "DE89" + "A" * 50_000,
+            "[a " * 16_000,
         ],
         ids=[
             "dots",
@@ -618,6 +787,17 @@ class TestPerformance:
             "digits",
             "plus",
             "groups",
+            "slashes",
+            "bangs",
+            "short-phones",
+            "phone-list",
+            "colons",
+            "hex-groups",
+            "long-digits",
+            "card-groups",
+            "iban-groups",
+            "iban-letters",
+            "brackets",
         ],
     )
     def test_linear_time(self, detector, text):

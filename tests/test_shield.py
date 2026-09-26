@@ -65,7 +65,7 @@ def test_type_hints_resolve_at_runtime():
 def test_public_api_exports():
     for name in package.__all__:
         assert hasattr(package, name)
-    assert package.__version__ == "0.1.0"
+    assert package.__version__ == "0.2.0"
 
 
 def test_readme_example(shield):

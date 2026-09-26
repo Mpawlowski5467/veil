@@ -4,7 +4,7 @@
 
 The model never sees the real data. veil is pure Python with no runtime dependencies.
 
-> Status: v0.1, alpha. "veil" is a working name.
+> Status: v0.2, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -73,6 +73,9 @@ Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
 | `EMAIL` | `jan.n@example.com`, `first.last+tag@sub.example.co.uk`, `sean.o'brien@example.com`, `łucja@example.com` | `user@localhost`, `name@example` |
 | `PHONE` | `555-123-4567`, `(555) 123-4567`, `+1 555 123 4567`, `555-123-4567 ext. 89`, `+44 20 7946 0958`, `(+48) 123 456 789` | `5551234567` (no separators), `601 234 567` (no `+` country code), `2024-01-15` |
 | `IPV4` | `192.168.0.1`, `10.0.0.1` in `10.0.0.1:8080` | `256.1.1.1`, `192.168.01.1`, `1.2.3.4.5` |
+| `IPV6` | `2001:db8::1`, `fe80::1ff:fe23:4567:890a`, `::ffff:192.0.2.1` | `::1` (loopback), `12:30:45`, `std::vector`, `a[1::2]` |
+| `CREDIT_CARD` | `4111 1111 1111 1111`, `5555-5555-5555-4444`, `378282246310005` | digit runs that fail the Luhn check, lack a card network's prefix or length, or aren't in a printed card layout |
+| `IBAN` | `DE89 3704 0044 0532 0130 00`, `GB82WEST12345698765432` | IBAN-shaped text that fails the mod-97 checksum |
 
 Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones. Numbers and addresses are also found inside Chinese, Japanese, and Korean text, where there are no spaces around them.
 
@@ -198,7 +201,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Limitations
 
-- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), card numbers split across lines or in unusual groupings, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
@@ -209,7 +212,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Roadmap
 
-- **v0.2:** tolerant placeholder restoring (case, missing brackets), optional value normalization, more built-in types (IPv6, credit cards with a Luhn check, IBAN).
+- **Next:** optional value normalization (one placeholder per phone or email however it's written), masking the leftover part of overlapping matches, and a faster leak check for very large inputs.
 - **Later:** an optional Presidio/spaCy detector for names, a persistent SQLite vault, and streaming restore for placeholders split across chunks.
 
 ## Development

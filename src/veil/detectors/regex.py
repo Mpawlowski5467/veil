@@ -1,4 +1,4 @@
-"""Regex detection for emails, phone numbers, IPv4 addresses, and custom patterns.
+"""Regex detection for emails, phones, IP addresses, cards, IBANs, and custom patterns.
 
 The built-in patterns are pragmatic, not exhaustive: they aim to catch the
 formats people actually type while rejecting look-alikes such as dates, version
@@ -8,6 +8,7 @@ numbers, and long digit runs. See the README's "Limitations" section.
 from __future__ import annotations
 
 import bisect
+import ipaddress
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -217,6 +218,152 @@ def _shrink_phone(value: str, limit: int) -> str | None:
     return kept if _plausible(kept) else None
 
 
+# IPv6 candidates are whole runs of hex digits, colons, and dots (for the
+# IPv4-mapped form "::ffff:192.0.2.1"), captured atomically; `_ipv6_end`
+# validates them with the standard library.
+IPV6_PATTERN = re.compile(r"(?<![0-9A-Za-z:.])(?=(?P<run>[0-9A-Fa-f:.]{3,}))(?P=run)")
+
+
+def _ipv6_end(match: re.Match[str]) -> int | None:
+    """Accept a real IPv6 address that isn't a look-alike from code or times.
+
+    "::1" (loopback), "a[1::2]" (a Python slice), "std::cout", and "12:30:45"
+    are rejected: the address needs a digit and either three groups or a full
+    four-digit group, as in "fe80::1" or "2001:db8::1".
+    """
+    text, start, run = match.string, match.start(), match["run"]
+    if run.count(":") < 2 or _GLUED.match(text, match.end()):
+        return None
+    for candidate in dict.fromkeys((run, run.rstrip("."), run.rstrip(".:"))):
+        try:
+            ipaddress.IPv6Address(candidate)
+        except ValueError:
+            continue
+        groups = [group for group in candidate.split(":") if group]
+        if not any(ch.isdigit() for ch in candidate):
+            return None
+        if len(groups) < 3 and not any(len(group) == 4 for group in groups):
+            return None
+        return start + len(candidate)
+    return None
+
+
+# Payment card candidates: 13-19 digits, optionally split by spaces or dashes,
+# captured with room to spare so `_card_end` can back off from whatever digits
+# follow the card. The pattern only looks ahead and consumes nothing, so every
+# digit group gets its own attempt: a card right after another number ("#99999
+# 4111 ...") isn't hidden inside that number's rejected capture.
+CARD_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?=(?P<card>[0-9](?:[ \-]?[0-9]){12,22}))")
+# Issuer prefixes of the major networks, with the lengths each one issues.
+_CARD_NETWORKS: tuple[tuple[re.Pattern[str], range | tuple[int, ...]], ...] = (
+    (re.compile(r"4"), (13, 16, 19)),  # Visa
+    (
+        re.compile(r"5[1-5]|2(?:22[1-9]|2[3-9][0-9]|[3-6][0-9]{2}|7[01][0-9]|720)"),
+        (16,),
+    ),
+    (re.compile(r"3[47]"), (15,)),  # American Express
+    (re.compile(r"6(?:011|4[4-9]|5)"), range(16, 20)),  # Discover
+    (re.compile(r"35(?:2[89]|[3-8][0-9])"), range(16, 20)),  # JCB
+    (re.compile(r"3(?:0[0-5]|[689])"), range(14, 20)),  # Diners Club
+    (re.compile(r"62"), range(16, 20)),  # UnionPay
+    (re.compile(r"5[0678]|6[37]"), range(13, 20)),  # Maestro
+)
+
+
+def _card_network_ok(digits: str) -> bool:
+    return any(
+        prefix.match(digits) and len(digits) in lengths
+        for prefix, lengths in _CARD_NETWORKS
+    )
+
+
+def _luhn_ok(digits: str) -> bool:
+    total = 0
+    for position, ch in enumerate(reversed(digits)):
+        digit = ord(ch) - 48
+        if position % 2:
+            digit = digit * 2 - 9 if digit > 4 else digit * 2
+        total += digit
+    return total % 10 == 0
+
+
+_CARD_GROUP_SPLIT = re.compile(r"[ \-]")
+
+
+def _card_layout_ok(candidate: str) -> bool:
+    """Accept unseparated digits, or one separator in a printed card layout.
+
+    Cards are printed in groups of four (the last group may be shorter), or
+    4-6-5 and 4-6-4 for American Express and Diners Club. Requiring that
+    keeps runs of other numbers ("555 123 4567 555-765") from passing.
+    """
+    if (" " in candidate) and ("-" in candidate):
+        return False
+    sizes = [len(group) for group in _CARD_GROUP_SPLIT.split(candidate)]
+    if len(sizes) == 1:
+        return True
+    if sizes in ([4, 6, 5], [4, 6, 4]):
+        return True
+    return all(size == 4 for size in sizes[:-1]) and 1 <= sizes[-1] <= 4
+
+
+def _card_end(match: re.Match[str]) -> int | None:
+    """Find the longest prefix that is a valid card number, or reject it.
+
+    A card needs a printed card layout, a known issuer prefix, a length that
+    network issues, and a valid Luhn check digit, which rules out almost all
+    other digit runs (IDs, timestamps, phone numbers, an invalid IBAN).
+    """
+    text, start, run = match.string, match.start(), match["card"]
+    # Every printed layout starts with a group of four, or has no separators
+    # at all; anything else ("1 1 1 ...") can be rejected without more work.
+    first = _CARD_GROUP_SPLIT.search(run)
+    if first is not None and first.start() != 4:
+        run = run[: first.start()]
+    cuts = [len(run), *(i for i in range(len(run) - 1, 0, -1) if run[i] in " -")]
+    for cut in cuts:
+        digits = run[:cut].replace(" ", "").replace("-", "")
+        if len(digits) > 19:
+            continue
+        if len(digits) < 13:
+            return None
+        if _GLUED.match(text, start + cut):
+            continue
+        if _card_layout_ok(run[:cut]) and _card_network_ok(digits) and _luhn_ok(digits):
+            return start + cut
+    return None
+
+
+# IBAN candidates: a country code, two check digits, and up to 30 letters or
+# digits, optionally grouped by spaces; `_iban_end` backs off to the longest
+# prefix with a valid ISO 7064 mod-97 checksum. Like CARD_PATTERN, it consumes
+# nothing, so an IBAN right after other IBAN-shaped text is still tried.
+IBAN_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])(?=(?P<iban>[A-Za-z]{2}[0-9]{2}(?: ?[A-Za-z0-9]){11,30}))"
+)
+
+
+def _iban_ok(compact: str) -> bool:
+    if not 2 <= int(compact[2:4]) <= 98:
+        return False
+    rearranged = compact[4:] + compact[:4]
+    return int("".join(str(int(ch, 36)) for ch in rearranged)) % 97 == 1
+
+
+def _iban_end(match: re.Match[str]) -> int | None:
+    text, start, run = match.string, match.start(), match["iban"]
+    cuts = [len(run), *(i for i in range(len(run) - 1, 3, -1) if run[i] == " ")]
+    for cut in cuts:
+        compact = run[:cut].replace(" ", "").upper()
+        if len(compact) > 34:
+            continue
+        if len(compact) < 15:
+            return None
+        if not _GLUED.match(text, start + cut) and _iban_ok(compact):
+            return start + cut
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class _Rule:
     entity_type: str
@@ -233,9 +380,10 @@ class _Rule:
 
 
 class RegexDetector:
-    r"""Detects emails, phone numbers, IPv4 addresses, and custom patterns.
+    r"""Detects emails, phones, IP addresses, cards, IBANs, and custom patterns.
 
-    Built-in entity types are ``EMAIL``, ``PHONE``, and ``IPV4``. Custom
+    Built-in entity types are ``EMAIL``, ``PHONE``, ``IPV4``, ``IPV6``,
+    ``CREDIT_CARD``, and ``IBAN``. Custom
     patterns add new types, or replace a built-in type when they reuse its
     name. On a tie between spans of equal length, custom patterns win over
     built-in ones.
@@ -374,4 +522,9 @@ _BUILTIN_RULES: tuple[_Rule, ...] = (
         shrink=_shrink_phone,
     ),
     _Rule("IPV4", IPV4_PATTERN, RegexDetector.BUILTIN_PRIORITY),
+    _Rule("IPV6", IPV6_PATTERN, RegexDetector.BUILTIN_PRIORITY, refine=_ipv6_end),
+    _Rule(
+        "CREDIT_CARD", CARD_PATTERN, RegexDetector.BUILTIN_PRIORITY, refine=_card_end
+    ),
+    _Rule("IBAN", IBAN_PATTERN, RegexDetector.BUILTIN_PRIORITY, refine=_iban_end),
 )
