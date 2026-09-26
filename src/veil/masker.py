@@ -360,14 +360,19 @@ class Masker:
         That is every exact placeholder, and, with tolerant restore, every
         rewritten form (``[Person 1]``) of a type this vault uses.
         """
-        known_types = {placeholder_type(stored) for stored, _ in self._vault.items()}
+        known_types: set[str | None] | None = None  # built only if needed
         tokens: dict[str, None] = {}
         if self._tolerant:
             for match in LOOSE_PLACEHOLDER_RE.finditer(text):
+                if match["exact"] is not None:
+                    tokens[match.group(0)] = None
+                    continue
+                if known_types is None:
+                    known_types = {
+                        placeholder_type(stored) for stored, _ in self._vault.items()
+                    }
                 candidates = placeholder_candidates(loose_match_body(match))
-                if match["exact"] is not None or any(
-                    placeholder_type(c) in known_types for c in candidates
-                ):
+                if any(placeholder_type(c) in known_types for c in candidates):
                     tokens[match.group(0)] = None
         else:
             tokens.update(
@@ -401,10 +406,9 @@ class Masker:
         phone number. All of them are searched for together, with an index
         kept between calls (see `CachedIndex`).
         """
-        known: dict[str, str] = {}  # value -> entity type
-        for stored, value in self._vault.items():
-            match = PLACEHOLDER_RE.fullmatch(stored)
-            known[value] = match["type"] if match else "?"
+        # value -> entity type; None for a vault value, whose type is read from
+        # its placeholder only if it is reported.
+        known: dict[str, str | None] = dict.fromkeys(v for _, v in self._vault.items())
         masked_as: dict[str, str] = {}  # remembered value -> its placeholder
         for value, entity_type, masked in self._memory._remembered():
             if value not in known:
@@ -428,10 +432,13 @@ class Masker:
             found |= self._cut_leaks(text, spans, known.keys(), manual, found)
 
         warnings = []
-        for value, entity_type in known.items():
+        for value, known_type in known.items():
             if value not in found:
                 continue
             placeholder = self._vault.get_placeholder(value) or masked_as.get(value)
+            entity_type = (
+                known_type or (placeholder and placeholder_type(placeholder)) or "?"
+            )
             if self._redact:
                 where = f" ({placeholder})" if placeholder else ""
                 label = f"a known {entity_type} value{where}"
