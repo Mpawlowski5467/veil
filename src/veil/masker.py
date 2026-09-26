@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bisect
+import re
 from collections.abc import Iterable, Sequence
 
 from ._search import CachedIndex
@@ -69,6 +70,105 @@ def _resolve_sparse(ranked: list[Span]) -> list[Span]:
         kept.insert(i, span)
         starts.insert(i, span.start)
     return kept
+
+
+#: `Span.source` (and `MaskedEntity.source`) of a placeholder that covers
+#: several overlapping matches. Such a value is never normalized.
+MERGED_SOURCE = "merged"
+
+# A run of letters and digits: exactly the characters for which str.isalnum()
+# is true (the two agree on every code point).
+_ALNUM_RUN_RE = re.compile(r"[^\W_]+")
+
+
+def merge_partial_overlaps(
+    text: str, candidates: Sequence[Span], kept: list[Span]
+) -> list[tuple[Span, tuple[Span, ...]]]:
+    """Merge every partly masked span with the kept spans it overlaps.
+
+    A candidate that lost an overlap is *partly masked* when a letter or digit
+    of it lies outside every kept span. Kept spans and partly masked
+    candidates are grouped by overlap, transitively. Each group that contains
+    a partly masked candidate becomes one span covering the whole group, with
+    the type and priority of the group's highest-ranked kept span and source
+    `MERGED_SOURCE`.
+
+    Returns:
+        ``(span, members)`` pairs in text order, never overlapping. For a
+        merged span, ``members`` holds the kept spans it replaces; for a kept
+        span left as it was, ``members`` is empty.
+    """
+    if not kept:
+        return []
+    kept_set = set(kept)
+    ends = [span.end for span in kept]
+    runs: tuple[list[int], list[int]] | None = None
+    partial: list[Span] = []
+    for span in candidates:
+        if span in kept_set:
+            continue
+        i = bisect.bisect_right(ends, span.start)  # first kept span ending after
+        if i < len(kept) and kept[i].start <= span.start and span.end <= ends[i]:
+            continue  # inside one kept span
+        if runs is None:
+            runs = _uncovered_alnum_runs(text, kept)
+        run_starts, run_ends = runs
+        r = bisect.bisect_right(run_ends, span.start)
+        if r < len(run_starts) and run_starts[r] < span.end:
+            partial.append(span)
+    if not partial:
+        return [(span, ()) for span in kept]
+
+    items = sorted(
+        [(span, True) for span in kept] + [(span, False) for span in partial],
+        key=lambda item: item[0].start,
+    )
+    result: list[tuple[Span, tuple[Span, ...]]] = []
+    members: list[Span] = []
+    has_partial = False
+    start = end = 0
+    for index, (span, is_kept) in enumerate(items):
+        if index and span.start >= end:
+            result.append(_group_span(text, start, end, members, has_partial))
+            members, has_partial = [], False
+        if not members and not has_partial:
+            start, end = span.start, span.end
+        end = max(end, span.end)
+        if is_kept:
+            members.append(span)
+        else:
+            has_partial = True
+    result.append(_group_span(text, start, end, members, has_partial))
+    return result
+
+
+def _group_span(
+    text: str, start: int, end: int, members: list[Span], has_partial: bool
+) -> tuple[Span, tuple[Span, ...]]:
+    if not has_partial:
+        return members[0], ()
+    winner = min(members, key=lambda s: (-len(s), -s.priority, s.start))
+    merged = Span(
+        start=start,
+        end=end,
+        value=text[start:end],
+        entity_type=winner.entity_type,
+        source=MERGED_SOURCE,
+        priority=winner.priority,
+    )
+    return merged, tuple(members)
+
+
+def _uncovered_alnum_runs(text: str, kept: list[Span]) -> tuple[list[int], list[int]]:
+    run_starts: list[int] = []
+    run_ends: list[int] = []
+    gap_start = 0
+    for gap_end, next_start in [*((s.start, s.end) for s in kept), (len(text), 0)]:
+        for match in _ALNUM_RUN_RE.finditer(text, gap_start, gap_end):
+            run_starts.append(match.start())
+            run_ends.append(match.end())
+        gap_start = next_start
+    return run_starts, run_ends
 
 
 class _LocalMemory:
