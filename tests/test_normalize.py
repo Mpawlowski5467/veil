@@ -73,6 +73,8 @@ class TestEmail:
             "ADMIN_EMAIL=jan@example.com",  # restore would re-case the label
             "unsubscribe?email=jan@example.com",
             "Users/Jan/jan@example.com",
+            "unsubscribe?email%3DJan@example.com",  # URL-encoded glue
+            "Hello%20Jan@example.com",
             "\u212arl@example.com",  # KELVIN SIGN, lowercases to k
             "\u212bngstrom@example.com",  # ANGSTROM SIGN
             "\u0130rem@example.com",  # I WITH DOT ABOVE
@@ -141,6 +143,9 @@ class TestPhone:
             ("+49 711 1234567-890", "+49 711 1234567"),
             ("+39 06 1234 5678", "+39 6 1234 5678"),
             ("555-555-0123", "+52 555 555 0123"),
+            ("+44 20 7946 0958", "+44 20 7946 (0)0958"),  # "(0)" not a trunk
+            ("+44 20 7946 0958", "+44 20 7946 0958 (0)"),
+            ("+33 1 23 45 67 89", "+33 1 23 45 67 (0) 89"),
         ],
     )
     def test_different_numbers_stay_apart(self, a, b):
@@ -156,10 +161,18 @@ class TestPhone:
             "555-555-0123 (mobile)",
             " 555-555-0123",
             "+44 20 7946 0958 or",
+            "+44 20 7946 (0)0958",
         ],
     )
     def test_guard(self, value):
         assert normalize_phone(value) is None
+
+    @pytest.mark.parametrize(
+        "value",
+        ["+44(0)20 7946 0958", "(+44) (0) 20 7946 0958", "+44-(0)-20-7946-0958"],
+    )
+    def test_trunk_prefix_spellings(self, value):
+        assert normalize_phone(value) == normalize_phone("+44 20 7946 0958")
 
 
 class TestOtherTypes:
@@ -179,6 +192,9 @@ class TestOtherTypes:
         )
         assert same_key(normalize_card, ["3782 822463 10005", "378282246310005"])
         assert normalize_card("4111 1111 1111 1111 12/25") is None
+        assert normalize_card("Card: 4111 1111 1111 1111") is None  # a label
+        assert normalize_card("1234 5678 9012 3456 7890") is None  # 20 digits
+        assert normalize_card("1234 5678 901") is None  # 11 digits
 
     def test_iban(self):
         assert same_key(
@@ -190,6 +206,9 @@ class TestOtherTypes:
             ],
         )
         assert normalize_iban("IBAN DE89 3704 0044 0532 0130 00") is None
+        assert normalize_iban("XX12 ABCD") is None  # shorter than 15
+        assert normalize_iban("DE89" + " 0000" * 8) is None  # longer than 34
+        assert normalize_iban("DE89-3704-0044-0532-0130-00") is None
 
     def test_ipv4_and_custom_types_have_no_normalizer(self):
         assert set(BUILTIN_NORMALIZERS) == {

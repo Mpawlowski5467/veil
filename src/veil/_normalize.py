@@ -24,6 +24,7 @@ from .detectors.regex import (
     _CARD_SEPARATORS,
     _EXTENSION,
     _GROUP_SPACES,
+    _SEP,
     EMAIL_PATTERN,
     INTL_PHONE_PATTERN,
     US_PHONE_PATTERN,
@@ -37,8 +38,11 @@ from .vault.base import Vault
 Normalizer: TypeAlias = Callable[[str], str | None]
 
 _GLUE = frozenset("=&/!#$^~")
+_PERCENT_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}")
 _TRAILING_EXTENSION = re.compile(_EXTENSION + r"\Z")
 _NON_DIGITS = re.compile(r"[^0-9]+")
+# A "(0)" trunk prefix right after the country code: "+44 (0)20", "(+44)(0)20".
+_TRUNK_PREFIX = re.compile(rf"(?P<code>\(?\+[1-9]\d{{0,2}}\)?){_SEP}?\(0\)")
 
 
 def _decimal_digits(text: str) -> str:
@@ -60,9 +64,11 @@ def normalize_email(value: str) -> str | None:
     """
     if EMAIL_PATTERN.fullmatch(value) is None:
         return None
-    # The detector glues "key=", "a&b=" and "path/" onto an address; a key
-    # would let restore() rewrite that text's case. Match those exactly.
-    if any(ch in _GLUE for ch in value[: value.rindex("@")]):
+    # The detector glues "key=", "a&b=", "path/" and URL-encoded text
+    # ("email%3D") onto an address; a key would let restore() rewrite that
+    # text's case. Match those exactly.
+    local = value[: value.rindex("@")]
+    if any(ch in _GLUE for ch in local) or _PERCENT_ENCODED.search(local):
         return None
     # Letters whose case doesn't round-trip (the Kelvin sign, dotted capital
     # I, titlecase digraphs) look like other letters: match them exactly.
@@ -95,8 +101,13 @@ def normalize_phone(value: str) -> str | None:
     if match is None or _intl_phone_end(match) != len(value):
         return None
     # A "(0)" trunk prefix is not dialled from abroad: "+44 (0)20" is "+44 20".
-    digits = _decimal_digits(base.replace("(0)", ""))
-    return "+" + digits + extension
+    # Anywhere else, "(0)" is part of the number, so match that exactly.
+    trunk = _TRUNK_PREFIX.match(base)
+    if trunk is not None:
+        base = base[: trunk.end("code")] + base[trunk.end() :]
+    if "(0)" in base:
+        return None
+    return "+" + _decimal_digits(base) + extension
 
 
 _IPV6_CHARS = re.compile(r"[0-9A-Fa-f:.]+")

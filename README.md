@@ -148,8 +148,9 @@ By default, values are matched exactly, so `(555) 555-0123` and `555.555.0123` g
 | --- | --- | --- |
 | `EMAIL` | Different letter case | Plus tags and dots (`jan+news@`, `j.an@`), anything glued before the address (`ADMIN_EMAIL=`) |
 | `PHONE` | Separators and brackets, a `+1` or `1` before a North American number, an explicit `(0)` trunk prefix (`+44 (0)20 ...`) | A different extension, a trunk `0` without brackets (`+44 020 ...`), a label captured with the number (`Tel: ...`) |
-| `IPV6` | Upper or lower case, zeros written out or compressed | A zone (`%eth0`) or prefix length (`/64`) |
-| `CREDIT_CARD`, `IBAN` | Spaces and dashes between the groups; IBAN letter case | |
+| `IPV6` | Upper or lower case, zeros written out or compressed | |
+| `CREDIT_CARD` | Spaces and dashes between the groups | |
+| `IBAN` | Spaces between the groups, letter case | |
 
 Values of different types never share a placeholder, and names, IPv4 addresses, and custom types are always matched exactly. Each `MaskedEntity` still holds the text as it was written, so several entities can share a placeholder with different values.
 
