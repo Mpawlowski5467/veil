@@ -100,6 +100,13 @@ _PHONE_SEPARATORS = _SPACES + ".-\u2011\u2013"
 _SEP = r"[ \u00a0\u2009\u202f.\-\u2011\u2013]"
 _DASH_DOT = r"[.\-\u2011\u2013]"
 _EXTENSION = r"(?:[ \u00a0]?(?i:ext\.?|x)[ \u00a0]?\d{1,6})"
+# A three-digit IPv4 octet, 100 to 255.
+_OCTET3 = r"(?:25[0-5]|2[0-4]\d|1\d\d)"
+# Not right after "::" or after a group of hex digits between colons: the "1"
+# that follows ends an IPv6 address ("fe80::1", ":0:1"), but "Phone:1" doesn't.
+_NOT_AFTER_IPV6_GROUP = "(?<!::)" + "".join(
+    f"(?<!:[0-9A-Fa-f]{{{size}}}:)" for size in range(1, 5)
+)
 
 # North American numbers. Separators are required between the groups, so bare
 # ten-digit runs (order numbers, IDs) are not matched; use a leading "+" for
@@ -108,8 +115,14 @@ US_PHONE_PATTERN = re.compile(
     rf"""
     (?:
         (?<![A-Za-z\d+])
-        (?:(?<!\d\.)\+?1{_SEP}?)?           # country code, but not the last
-                                            # octet of "192.0.2.1 555..."
+        (?:
+            (?<!\d\.){_NOT_AFTER_IPV6_GROUP}  # a country code, but not the last
+            \+?1{_SEP}?                     # group of "192.0.2.1 555..." or
+                                            # of "::1 555..."
+          | (?!(?<=\d\.){_OCTET3}\.{_OCTET3}(?!\d))
+                                            # or none, but not starting at the
+                                            # 3rd octet of "198.51.100.123 2222"
+        )
         (?:\(\d{{3}}\){_SEP}?|\d{{3}}{_SEP})    # area code: (555) or 555-
       | (?<![\d+])\(\d{{3}}\){_SEP}?          # "(555)" glued to a label: Tel(555)
     )

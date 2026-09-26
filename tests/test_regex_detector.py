@@ -321,6 +321,47 @@ class TestPhone:
             ("PHONE", "555.123.4567"),
         ]
 
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("ssh 198.51.100.123 2222", [("IPV4", "198.51.100.123")]),
+            ("seen 203.0.113.187 2024 times", [("IPV4", "203.0.113.187")]),
+            ("host 10.200.100.150.1234", []),
+            (
+                "2001:db8::1 555-123-4567",
+                [("IPV6", "2001:db8::1"), ("PHONE", "555-123-4567")],
+            ),
+            ("fe80::1 555 123 4567", [("IPV6", "fe80::1"), ("PHONE", "555 123 4567")]),
+            (
+                "2001:db8:0:0:0:0:3:1 555 123 4567",
+                [("IPV6", "2001:db8:0:0:0:0:3:1"), ("PHONE", "555 123 4567")],
+            ),
+        ],
+    )
+    def test_end_of_an_ip_address_is_not_a_phone_number(self, detector, text, expected):
+        # "100.123 2222" looks like a number with dots, but its first two
+        # groups are the end of a dotted quad; and "::1" is not a "1" prefix.
+        assert found(detector, text) == expected
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Tel:555-555-0123", "555-555-0123"),
+            ("Tel:1-555-555-0123", "1-555-555-0123"),
+            ("Phone:1 (415) 555-0194", "1 (415) 555-0194"),
+            ("ID:1 555-555-0123", "1 555-555-0123"),
+            ("total 1.00.555-555-0123", "555-555-0123"),
+            ("0123.555-555-0123", "555-555-0123"),
+            ("id 12.555.555.0123", "555.555.0123"),  # 555 is not an octet
+            ("Call 1.212.200.0123", "1.212.200.0123"),
+            ("10.0.0.1.555.555.0123", "555.555.0123"),
+        ],
+    )
+    def test_numbers_after_digits_and_dots_are_still_found(
+        self, detector, text, expected
+    ):
+        assert values(detector, text, "PHONE") == [expected]
+
     def test_greedy_number_stops_before_an_ip(self, detector):
         assert found(detector, "Caller +44 20 7946 0958 192.0.2.1") == [
             ("PHONE", "+44 20 7946 0958"),

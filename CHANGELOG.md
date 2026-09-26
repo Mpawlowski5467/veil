@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The end of an IP address is no longer read as a US phone number. In `ssh 198.51.100.123 2222`, `100.123 2222` was detected as a phone and overlapped the address; and in `2001:db8::1 555-123-4567` the `1` ending the IPv6 address was taken as the number's country code.
+
 ### Performance
 
 - Resolving overlapping matches takes linear time. 200,000 detected values used to take about 3.5 s.
