@@ -20,6 +20,8 @@ class MemoryVault:
         self._placeholder_by_value: dict[str, str] = {}
         self._value_by_placeholder: dict[str, str] = {}
         self._counters: dict[str, int] = {}
+        # value -> (entity type, placeholder it was masked as); see _remember.
+        self._remembered_values: dict[str, tuple[str, str]] = {}
 
     def get_or_create(self, value: str, entity_type: str) -> str:
         """Return the placeholder for ``value``, creating one if it is new.
@@ -60,8 +62,25 @@ class MemoryVault:
         """Return every ``(placeholder, value)`` pair in creation order."""
         return list(self._value_by_placeholder.items())
 
+    def _remember(self, value: str, entity_type: str, placeholder: str) -> None:
+        """Remember ``value`` for the leak check (see `Vault` and the masker).
+
+        Ignored when ``value`` is stored in its own right or ``placeholder``
+        is unknown.
+        """
+        if (
+            placeholder in self._value_by_placeholder
+            and value not in self._placeholder_by_value
+        ):
+            self._remembered_values.setdefault(value, (entity_type, placeholder))
+
+    def _remembered(self) -> list[tuple[str, str, str]]:
+        """Return every remembered ``(value, entity_type, placeholder)``."""
+        return [(v, t, p) for v, (t, p) in self._remembered_values.items()]
+
     def clear(self) -> None:
         """Forget every mapping and restart numbering at 1 for every type."""
+        self._remembered_values.clear()
         self._placeholder_by_value.clear()
         self._value_by_placeholder.clear()
         self._counters.clear()
@@ -69,6 +88,11 @@ class MemoryVault:
     def __len__(self) -> int:
         """Return the number of stored values."""
         return len(self._placeholder_by_value)
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        """Unpickle, including a vault pickled before remembered values existed."""
+        self.__dict__.update(state)
+        self.__dict__.setdefault("_remembered_values", {})
 
     def __repr__(self) -> str:
         """Summarize the vault without revealing any stored values."""

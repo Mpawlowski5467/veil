@@ -1,6 +1,7 @@
 import pytest
 
 from veil.vault import MemoryVault, Vault
+from veil.vault.base import _Remembering
 
 
 @pytest.fixture
@@ -121,3 +122,47 @@ def test_empty_vault_is_falsy_but_still_a_vault(vault):
     # Guards against `vault or MemoryVault()` style bugs in callers.
     assert not vault
     assert isinstance(vault, Vault)
+
+
+class TestRemembered:
+    """Values the leak check should know that have no placeholder of their own."""
+
+    def test_satisfies_the_private_capability(self, vault):
+        assert isinstance(vault, _Remembering)
+
+    def test_not_part_of_the_mapping(self, vault):
+        placeholder = vault.get_or_create("555-555-0123", "PHONE")
+        vault._remember("(555) 555-0123", "PHONE", placeholder)
+        assert vault._remembered() == [("(555) 555-0123", "PHONE", "[PHONE_1]")]
+        assert vault.items() == [("[PHONE_1]", "555-555-0123")]
+        assert len(vault) == 1
+        assert vault.get_placeholder("(555) 555-0123") is None
+        assert vault.get_or_create("555.555.0123", "PHONE") == "[PHONE_2]"
+
+    def test_first_placeholder_wins(self, vault):
+        first = vault.get_or_create("a@example.com", "EMAIL")
+        second = vault.get_or_create("b@example.com", "EMAIL")
+        vault._remember("A@example.com", "EMAIL", first)
+        vault._remember("A@example.com", "EMAIL", second)
+        assert vault._remembered() == [("A@example.com", "EMAIL", "[EMAIL_1]")]
+
+    def test_stored_values_and_unknown_placeholders_are_ignored(self, vault):
+        placeholder = vault.get_or_create("a@example.com", "EMAIL")
+        vault._remember("a@example.com", "EMAIL", placeholder)
+        vault._remember("b@example.com", "EMAIL", "[EMAIL_9]")
+        assert vault._remembered() == []
+
+    def test_clear_forgets_them(self, vault):
+        vault._remember("A@example.com", "EMAIL", vault.get_or_create("a", "EMAIL"))
+        vault.clear()
+        assert vault._remembered() == []
+
+    def test_state_from_before_remembered_values(self, vault):
+        vault.get_or_create("a@example.com", "EMAIL")
+        state = dict(vault.__dict__)
+        del state["_remembered_values"]
+        clone = MemoryVault.__new__(MemoryVault)
+        clone.__setstate__(state)
+        assert clone._remembered() == []
+        clone._remember("A@example.com", "EMAIL", "[EMAIL_1]")
+        assert len(clone._remembered()) == 1

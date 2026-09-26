@@ -16,7 +16,7 @@ from .placeholders import (
     placeholder_type,
 )
 from .types import MaskedEntity, MaskResult, Span
-from .vault.base import Vault
+from .vault.base import Vault, _Remembering
 
 
 def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
@@ -71,6 +71,36 @@ def _resolve_sparse(ranked: list[Span]) -> list[Span]:
     return kept
 
 
+class _LocalMemory:
+    """Remembered values for a vault that can't keep them itself.
+
+    Each entry also records the value stored under its placeholder, and only
+    counts while the vault still stores that value there, so clearing the
+    vault some other way than `Masker.forget` drops it too.
+    """
+
+    def __init__(self, vault: Vault) -> None:
+        self._vault = vault
+        self._entries: dict[str, tuple[str, str, str]] = {}
+
+    def _remember(self, value: str, entity_type: str, placeholder: str) -> None:
+        stored = self._vault.get_value(placeholder)
+        if stored is not None and self._vault.get_placeholder(value) is None:
+            self._entries.setdefault(value, (entity_type, placeholder, stored))
+
+    def _remembered(self) -> list[tuple[str, str, str]]:
+        live = []
+        for value, (entity_type, placeholder, stored) in list(self._entries.items()):
+            if self._vault.get_value(placeholder) != stored:
+                del self._entries[value]
+            else:
+                live.append((value, entity_type, placeholder))
+        return live
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+
 class Masker:
     """Replaces sensitive spans with placeholders.
 
@@ -103,6 +133,7 @@ class Masker:
         self._vault = vault
         self._redact = redact_warnings
         self._tolerant = tolerant_restore
+        self._memory = _memory_for(vault)
         self._leak_index = CachedIndex()
 
     def forget(self) -> None:
@@ -110,6 +141,8 @@ class Masker:
 
         `Shield.reset` calls this after clearing the vault.
         """
+        if isinstance(self._memory, _LocalMemory):
+            self._memory.clear()
         self._leak_index.clear()
 
     def __getstate__(self) -> dict[str, object]:
@@ -121,6 +154,8 @@ class Masker:
     def __setstate__(self, state: dict[str, object]) -> None:
         """Unpickle, including a masker pickled by an older version."""
         self.__dict__.update(state)
+        if "_memory" not in state:
+            self._memory = _memory_for(self._vault)
         self._leak_index = CachedIndex()
 
     def mask(self, text: str) -> MaskResult:
@@ -222,18 +257,24 @@ class Masker:
         """Warn about every known value that still appears between placeholders.
 
         Known values are everything in the vault (from this call and earlier
-        ones) plus anything detected in this call, including spans that lost
-        an overlap. Registered manual entities are matched with the same
-        whole-token rule used to detect them (so "Jan" isn't reported inside
-        "January"); every other value is matched as a plain substring, because
-        a phone number glued to letters is still a phone number. All of them
-        are searched for together, with an index kept between calls (see
-        `CachedIndex`).
+        ones), the values remembered with it (spellings that have no
+        placeholder of their own), and anything detected in this call,
+        including spans that lost an overlap. Registered manual entities are
+        matched with the same whole-token rule used to detect them (so "Jan"
+        isn't reported inside "January"); every other value is matched as a
+        plain substring, because a phone number glued to letters is still a
+        phone number. All of them are searched for together, with an index
+        kept between calls (see `CachedIndex`).
         """
         known: dict[str, str] = {}  # value -> entity type
         for stored, value in self._vault.items():
             match = PLACEHOLDER_RE.fullmatch(stored)
             known[value] = match["type"] if match else "?"
+        masked_as: dict[str, str] = {}  # remembered value -> its placeholder
+        for value, entity_type, masked in self._memory._remembered():
+            if value not in known:
+                known[value] = entity_type
+                masked_as[value] = masked
         for span in candidates:
             known.setdefault(span.value, span.entity_type)
         manual: set[str] = set()
@@ -253,7 +294,7 @@ class Masker:
         for value, entity_type in known.items():
             if value not in found:
                 continue
-            placeholder = self._vault.get_placeholder(value)
+            placeholder = self._vault.get_placeholder(value) or masked_as.get(value)
             if self._redact:
                 where = f" ({placeholder})" if placeholder else ""
                 label = f"a known {entity_type} value{where}"
@@ -307,6 +348,11 @@ def _partial_masks(
                 )
             warnings[message] = None
     return list(warnings)
+
+
+def _memory_for(vault: Vault) -> _Remembering | _LocalMemory:
+    """Where to remember values: the vault itself if it can, else the masker."""
+    return vault if isinstance(vault, _Remembering) else _LocalMemory(vault)
 
 
 def _unused_char(pieces: list[str], values: Iterable[str]) -> str | None:
