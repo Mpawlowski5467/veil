@@ -342,6 +342,19 @@ class TestWarnings:
         assert len(result.warnings) == 1
         assert result.warnings[0].startswith("Leak check: known value")
 
+    def test_registered_value_next_to_a_placeholder_is_reported(self, vault, manual):
+        # The pieces between placeholders are joined with a non-word
+        # character, so "Jon" glued to a masked ticket number is a whole token.
+        masker = Masker([manual, RegexDetector({"TICKET": r"TKT-\d{4}"})], vault)
+        manual.add("Jon", "PERSON")
+        masker.mask("Hi Jon .")
+        result = masker.mask("JonTKT-1234")
+        assert result.text == "Jon[TICKET_1]"
+        assert result.warnings == [
+            "Leak check: known value 'Jon' ([PERSON_1]) still appears in the "
+            "masked text."
+        ]
+
     def test_leak_check_separator_never_matches_across_placeholders(self, vault):
         # A value containing NUL must not be "found" where NUL once stood in
         # for a placeholder.
@@ -498,6 +511,20 @@ class TestRememberedValues:
                 "Leak check: known value '(555) 555-0123' ([PHONE_1]) still "
                 "appears in the masked text."
             )
+
+    def test_label_uses_the_type_of_the_value_stored_later(self, vault):
+        # "foo" is remembered as part of a merged [A_1], then stored as [B_1].
+        patterns = {
+            "A": r"(?<=A:)[a-z]{3}",
+            "L": r"[a-z]{2}\d",
+            "B": r"(?<=B:)[a-z]{3}",
+        }
+        masker = Masker([RegexDetector(patterns)], vault, redact_warnings=True)
+        masker.mask("A:foo1 .")
+        masker.mask("B:foo .")
+        assert masker.mask("xfoox").warnings == [
+            "Leak check: a known B value ([B_1]) still appears in the masked text."
+        ]
 
     def test_a_vault_that_cant_remember_gets_a_local_memory(self):
         vault = DictVault()

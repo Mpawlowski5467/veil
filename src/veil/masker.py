@@ -484,52 +484,82 @@ class Masker:
         separator = _unused_char(pieces, known)
         haystacks = pieces if separator is None else [separator.join(pieces)]
         maybe = self._leak_index.present(haystacks, known, manual, update=False)
-        return {
-            value
-            for value in maybe - found
-            if _visible_occurrence(text, value, value in manual, gaps, merged)
-        }
+        maybe -= found
+        if not maybe:
+            return set()
+        search = _GapSearch(text, gaps, merged, haystacks)
+        return {value for value in maybe if search.visible(value, value in manual)}
 
 
-def _visible_occurrence(
-    text: str,
-    value: str,
-    token: bool,
-    gaps: list[tuple[int, int]],
-    merged: list[Span],
-) -> bool:
-    """Whether ``value`` occurs in a gap and not entirely inside one merged span.
+class _GapSearch:
+    """Finds where values occur in the gaps that merged spans reach into."""
 
-    The ends of a gap count as word boundaries, as the leak check's separator
-    does. With ``token``, only whole-token occurrences count.
-    """
-    size = len(value)
-    starts = [span.start for span in merged]
-    for gap_start, gap_end in gaps:
-        pos = text.find(value, gap_start, gap_end)
-        while pos != -1:
-            end = pos + size
-            if token and (
-                (
-                    pos > gap_start
-                    and is_word_char(text[pos])
-                    and is_word_char(text[pos - 1])
-                )
-                or (
-                    end < gap_end
-                    and is_word_char(text[end - 1])
-                    and is_word_char(text[end])
-                )
-            ):
-                pos = text.find(value, pos + 1, gap_end)
-                continue
-            i = bisect.bisect_right(starts, pos) - 1
-            if i >= 0 and end <= merged[i].end:
-                # Hidden. Later starts up to merged[i].end - size are too.
-                pos = text.find(value, max(pos + 1, merged[i].end - size + 1), gap_end)
-                continue
-            return True
-    return False
+    def __init__(
+        self,
+        text: str,
+        gaps: list[tuple[int, int]],
+        merged: list[Span],
+        haystacks: list[str],
+    ) -> None:
+        self._text = text
+        # Each haystack with the offset in it where each of its gaps starts,
+        # and those gaps' bounds in the text.
+        self._haystacks: list[tuple[str, list[int], list[tuple[int, int]]]] = []
+        if len(haystacks) == len(gaps):
+            for haystack, gap in zip(haystacks, gaps, strict=True):
+                self._haystacks.append((haystack, [0], [gap]))
+        else:  # one haystack, the gaps joined by a one-character separator
+            offsets, cursor = [], 0
+            for start, end in gaps:
+                offsets.append(cursor)
+                cursor += end - start + 1
+            self._haystacks.append((haystacks[0], offsets, gaps))
+        # Merged spans that touch hide an occurrence together.
+        self._hidden_starts: list[int] = []
+        self._hidden_ends: list[int] = []
+        for span in merged:
+            if self._hidden_ends and self._hidden_ends[-1] == span.start:
+                self._hidden_ends[-1] = span.end
+            else:
+                self._hidden_starts.append(span.start)
+                self._hidden_ends.append(span.end)
+
+    def visible(self, value: str, token: bool) -> bool:
+        """Whether ``value`` occurs in a gap and not entirely inside merged spans.
+
+        The ends of a gap count as word boundaries, as the leak check's
+        separator does. With ``token``, only whole-token occurrences count.
+        """
+        text, size = self._text, len(value)
+        for haystack, offsets, bounds in self._haystacks:
+            found = haystack.find(value)
+            while found != -1:
+                k = bisect.bisect_right(offsets, found) - 1
+                gap_start, gap_end = bounds[k]
+                start = gap_start + found - offsets[k]
+                end = start + size
+                if token and (
+                    (
+                        start > gap_start
+                        and is_word_char(text[start])
+                        and is_word_char(text[start - 1])
+                    )
+                    or (
+                        end < gap_end
+                        and is_word_char(text[end - 1])
+                        and is_word_char(text[end])
+                    )
+                ):
+                    found = haystack.find(value, found + 1)
+                    continue
+                i = bisect.bisect_right(self._hidden_starts, start) - 1
+                if i < 0 or end > self._hidden_ends[i]:
+                    return True
+                # Hidden, and so is every later start up to the end of the
+                # hidden stretch, less the value's length.
+                skip = min(max(start + 1, self._hidden_ends[i] - size + 1), gap_end)
+                found = haystack.find(value, found + skip - start)
+        return False
 
 
 def _memory_for(vault: Vault) -> _Remembering | _LocalMemory:

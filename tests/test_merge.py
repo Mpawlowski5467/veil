@@ -66,6 +66,20 @@ class TestMergePartialOverlaps:
         phone, local = Span(3, 15, text[3:], "PHONE"), Span(7, 15, text[7:], "LOCAL")
         assert merge(text, [phone, local]) == [(phone, ())]
 
+    @pytest.mark.parametrize(
+        ("patterns", "text", "masked"),
+        [
+            ({"A": r"abc", "B": r"c_"}, "abc_ z", "[A_1]_ z"),  # "_" isn't alnum
+            ({"K": r"cdef", "L": r"-cd"}, "ab-cdef gh", "ab-[K_1] gh"),  # "ab" ends
+        ],
+    )
+    def test_leftover_without_a_letter_or_digit_is_not_merged(
+        self, patterns, text, masked
+    ):
+        result = Shield(custom_patterns=patterns).mask(text)
+        assert result.text == masked
+        assert [e.source for e in result.entities] == ["regex"]
+
     def test_punctuation_only_leftover_changes_nothing(self):
         text = "(abc) tail"
         x, y = Span(0, 5, "(abc)", "X"), Span(4, 6, ") ", "Y")
@@ -402,6 +416,57 @@ class TestLeaksAroundMergedSpans:
             llm(CUT_TEXT)
         assert "0123" not in str(info.value)
 
+    def test_value_hidden_by_two_touching_merged_spans_is_not_reported(self):
+        s = shield(
+            ("Maria Kowalska", "PERSON"),
+            ("Kowalska Li.", "PERSON"),
+            ("Xy Ewa", "PERSON"),
+            ("Ewa Nowakowska", "PERSON"),
+            custom_patterns={"REF": r"(?<=ref )\S+"},
+        )
+        s.mask("see ref Li.Xy")  # stores "Li.Xy"
+        result = s.mask("Maria Kowalska Li.Xy Ewa Nowakowska")
+        assert result.text == "[PERSON_1][PERSON_2]"  # "Li." and "Xy" merged apart
+        assert result.warnings == []
+
+    def test_registered_value_cut_at_the_start_of_a_merged_span(self):
+        # "Jan" was visible between the kept spans; now "an" is merged away.
+        s = shield(
+            ("Jan", "PERSON"), custom_patterns={"KEY": r"K{10}", "LOS": r"anKKKK"}
+        )
+        s.mask("Hi Jan .")
+        result = s.mask("Hi JanKKKKKKKKKK")
+        assert result.text == "Hi J[KEY_1]"
+        assert leaks(result.warnings) == [
+            "Leak check: known value 'Jan' ([PERSON_1]) still appears in the "
+            "masked text."
+        ]
+
+    def test_registered_value_glued_outside_the_merged_span_is_not_reported(self):
+        s = shield(
+            ("Jan", "PERSON"), custom_patterns={"KEY": r"K{10}", "LOS": r"KKJan"}
+        )
+        s.mask("Hi Jan .")
+        result = s.mask("KKKKKKKKKKJan zz Janx")
+        assert result.text == "[KEY_1] zz Janx"  # "Janx" is not the name
+        assert result.warnings == []
+
+    def test_many_hidden_values_stay_fast(self):
+        # Each merge hides a known value; each is looked for once, not once
+        # per gap.
+        vault = MemoryVault()
+        for i in range(10_000):
+            vault.get_or_create(f"H{i:05d}", "PERSON")  # from an earlier chat
+        s = Shield(detectors=[], vault=vault)
+        for i in range(10_000):
+            s.add_entity(f"H{i:05d} Q{i:05d}", "PERSON")  # loses, sticks out
+            s.add_entity(f"Q{i:05d} R{i:05d}x", "PERSON")  # wins
+        text = " ".join(f"H{i:05d} Q{i:05d} R{i:05d}x" for i in range(10_000))
+        start = time.perf_counter()
+        result = s.mask(text)
+        assert time.perf_counter() - start < 2.0  # 0.6 s; 3.2 s before
+        assert result.warnings == []
+
     def test_fully_hidden_value_is_not_reported(self):
         s = shield(("Anna Maria", "PERSON"), ("Maria Kowalska", "PERSON"))
         assert s.mask("Present: Anna Maria Kowalska").warnings == []
@@ -542,6 +607,9 @@ def test_leak_rule_after_merging(monkeypatch, index):
         final = merge_partial_overlaps(text, candidates, kept)
         merged = [span for span, members in final if members]
         merges += bool(merged)
+        hidden = [False] * len(text)
+        for m in merged:
+            hidden[m.start : m.end] = [True] * len(m)
 
         result = Masker([manual, _Spans(spans)], vault).mask(text)
         got = set()
@@ -566,7 +634,7 @@ def test_leak_rule_after_merging(monkeypatch, index):
                     end = p + len(value)
                     if value in tokens and not _whole_token(text, p, end, lo, hi):
                         continue
-                    if not any(m.start <= p and end <= m.end for m in merged):
+                    if not all(hidden[i] for i in range(p, end)):
                         want.add(value)
         assert got == want, (seed, text, sorted(got ^ want))
     assert merges > 100
