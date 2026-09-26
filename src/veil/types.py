@@ -14,6 +14,29 @@ class ShieldWarning(UserWarning):
     """
 
 
+class ShieldError(Exception):
+    """Raised by a strict `Shield.wrap()` call instead of emitting warnings.
+
+    Attributes:
+        stage: ``"mask"`` if masking warned, so the model was never called, or
+            ``"restore"`` if restoring the model's reply warned.
+        warnings: The warning messages. They quote detected values unless the
+            `Shield` was created with ``redact_warnings=True``.
+    """
+
+    def __init__(self, stage: str, warnings: list[str]) -> None:
+        """Create the error from the stage that failed and its warnings."""
+        # Passing both to Exception keeps the error picklable (for process
+        # pools) and copyable.
+        super().__init__(stage, list(warnings))
+        self.stage = stage
+        self.warnings = list(warnings)
+
+    def __str__(self) -> str:
+        """Describe the stage that warned and its warnings."""
+        return f"{self.stage}() warned: " + " | ".join(self.warnings)
+
+
 @dataclass(frozen=True, slots=True)
 class Span:
     """A piece of sensitive text found by a detector.
@@ -95,17 +118,34 @@ class MaskResult:
 
 
 @dataclass(frozen=True, slots=True)
+class RepairedPlaceholder:
+    """A placeholder the model wrote in a different form, restored anyway.
+
+    Attributes:
+        written: What the reply contained, e.g. ``"[person 1]"``.
+        placeholder: The placeholder it was read as, e.g. ``"[PERSON_1]"``.
+    """
+
+    written: str
+    placeholder: str
+
+
+@dataclass(frozen=True, slots=True)
 class RestoreResult:
     """Result of restoring placeholders in a model's reply.
 
     Attributes:
         text: The reply with every known placeholder replaced by its original
             value.
-        restored_count: How many placeholder occurrences were replaced.
+        restored_count: How many placeholder occurrences were replaced,
+            including repaired ones.
         warnings: Human-readable problems, such as placeholders that are not in
             the vault. Unknown placeholders are left in ``text`` unchanged.
+        repaired: Placeholders the model rewrote (``[person 1]``,
+            ``【PERSON_1】``) that were restored anyway, in reply order.
     """
 
     text: str
     restored_count: int = 0
     warnings: list[str] = field(default_factory=list)
+    repaired: list[RepairedPlaceholder] = field(default_factory=list)

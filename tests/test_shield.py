@@ -14,6 +14,7 @@ from veil import (
     RegexDetector,
     RestoreResult,
     Shield,
+    ShieldError,
     ShieldWarning,
     Span,
     Vault,
@@ -64,7 +65,7 @@ def test_type_hints_resolve_at_runtime():
 def test_public_api_exports():
     for name in package.__all__:
         assert hasattr(package, name)
-    assert package.__version__ == "0.1.0"
+    assert package.__version__ == "0.2.0"
 
 
 def test_readme_example(shield):
@@ -316,6 +317,95 @@ class TestWrap:
         assert llm.prompts == [""]
 
 
+class TestTolerantRestoreThroughShield:
+    def test_wrap_restores_a_rewritten_placeholder(self, shield):
+        shield.add_entity("Jan Nowak", "PERSON")
+        safe_llm = shield.wrap(RecordingLLM(reply="Hi [person 1]!"), strict=True)
+        assert safe_llm(README_INPUT) == "Hi Jan Nowak!"
+
+    def test_can_be_turned_off(self):
+        shield = Shield(tolerant_restore=False)
+        shield.add_entity("Jan Nowak", "PERSON")
+        shield.mask("Jan Nowak")
+        assert shield.restore("Hi [person 1]!").text == "Hi [person 1]!"
+
+
+class TestStrictWrap:
+    def test_mask_warning_raises_before_the_model_is_called(self, shield):
+        shield.mask("Call 555-123-4567")
+        llm = RecordingLLM(reply="ok")
+        safe_llm = shield.wrap(llm, strict=True)
+        with pytest.raises(ShieldError, match="Leak check") as exc:
+            safe_llm("Call 555-123-4567-2")
+        assert exc.value.stage == "mask"
+        assert len(exc.value.warnings) == 1
+        assert llm.prompts == []
+
+    def test_restore_warning_raises_after_the_model_call(self, shield):
+        llm = RecordingLLM(reply="Hello [PERSON_3]")
+        safe_llm = shield.wrap(llm, strict=True)
+        with pytest.raises(
+            ShieldError, match=r"Unknown placeholder \[PERSON_3\]"
+        ) as exc:
+            safe_llm("hi")
+        assert exc.value.stage == "restore"
+        assert llm.prompts == ["hi"]
+
+    def test_clean_round_trip_does_not_raise(self, shield):
+        shield.add_entity("Jan Nowak", "PERSON")
+        safe_llm = shield.wrap(RecordingLLM(reply=README_REPLY), strict=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert safe_llm(README_INPUT) == README_RESTORED
+
+    def test_strict_does_not_emit_warnings(self, shield):
+        safe_llm = shield.wrap(RecordingLLM(reply="[PERSON_9]"), strict=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(ShieldError):
+                safe_llm("hi")
+
+    def test_error_is_not_a_warning_subclass(self):
+        # except ShieldWarning must not swallow a strict failure, and vice versa.
+        assert not issubclass(ShieldError, Warning)
+        assert issubclass(ShieldError, Exception)
+
+
+class TestRedactedWarnings:
+    def test_leak_warning_names_type_and_placeholder_only(self):
+        shield = Shield(redact_warnings=True)
+        shield.mask("Call 555-123-4567")
+        result = shield.mask("Call 555-123-4567-2")
+        assert result.warnings == [
+            "Leak check: a known PHONE value ([PHONE_1]) still appears in the "
+            "masked text."
+        ]
+
+    def test_partial_mask_warning_gives_lengths_only(self):
+        shield = Shield(redact_warnings=True, detectors=[])
+        shield.add_entity("Anna Maria", "PERSON")
+        shield.add_entity("Maria Kowalska", "PERSON")
+        result = shield.mask("Present: Anna Maria Kowalska")
+        assert result.text == "Present: Anna [PERSON_1]"
+        assert result.warnings == [
+            "Partial mask: a detected PERSON value (10 characters) overlapped a "
+            "match that was kept, so 5 of its characters are still in the masked "
+            "text."
+        ]
+        assert all("Anna" not in w and "Maria" not in w for w in result.warnings)
+
+    def test_strict_error_message_is_redacted(self):
+        shield = Shield(redact_warnings=True)
+        shield.mask("Call 555-123-4567")
+        with pytest.raises(ShieldError) as exc:
+            shield.wrap(RecordingLLM(reply="ok"), strict=True)("Call 555-123-4567-2")
+        assert "555" not in str(exc.value)
+
+    def test_default_quotes_values(self, shield):
+        shield.mask("Call 555-123-4567")
+        assert "'555-123-4567'" in shield.mask("Call 555-123-4567-2").warnings[0]
+
+
 class TestPluggableParts:
     def test_custom_detector(self):
         shield = Shield(detectors=[NameDetector()])
@@ -378,3 +468,43 @@ class TestPluggableParts:
 
     def test_detector_protocol_is_structural(self):
         assert isinstance(NameDetector(), Detector)
+
+
+class TestRoundTripsWithBackslashes:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Mount " + chr(92) * 2 + "192.0.2.10" + chr(92) + "share",
+            "Log in as CORP" + chr(92) + "Jan Nowak",
+            "path=C:" + chr(92) + "Users" + chr(92) + "Jan Nowak" + chr(92) + "AppData",
+        ],
+    )
+    def test_round_trip(self, shield, text):
+        shield.add_entity("Jan Nowak", "PERSON")
+        echo = shield.wrap(lambda prompt: prompt, strict=True)
+        assert echo(text) == text
+
+    def test_json_round_trip(self, shield):
+        import json
+
+        shield.add_entity("jnowak", "USERNAME")
+        text = json.dumps({"path": "C:" + chr(92) + "Users" + chr(92) + "jnowak"})
+        echo = shield.wrap(lambda prompt: prompt, strict=True)
+        assert json.loads(echo(text)) == json.loads(text)
+
+
+class TestShieldErrorIsPortable:
+    def test_pickle_and_copy(self):
+        import copy
+        import pickle
+
+        error = ShieldError("mask", ["Leak check: something"])
+        for clone in (pickle.loads(pickle.dumps(error)), copy.copy(error)):
+            assert isinstance(clone, ShieldError)
+            assert clone.stage == "mask"
+            assert clone.warnings == ["Leak check: something"]
+            assert str(clone) == str(error)
+
+    def test_message(self):
+        error = ShieldError("restore", ["a", "b"])
+        assert str(error) == "restore() warned: a | b"

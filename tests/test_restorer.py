@@ -1,7 +1,11 @@
 import pytest
 
 from veil.restorer import Restorer
+from veil.types import RepairedPlaceholder
 from veil.vault import MemoryVault
+
+FULLWIDTH = ("\N{FULLWIDTH LEFT SQUARE BRACKET}", "\N{FULLWIDTH RIGHT SQUARE BRACKET}")
+LENTICULAR = ("\N{LEFT BLACK LENTICULAR BRACKET}", "\N{RIGHT BLACK LENTICULAR BRACKET}")
 
 
 @pytest.fixture
@@ -67,19 +71,26 @@ def test_unknown_placeholders_with_empty_vault_do_not_raise(restorer):
     assert result.warnings == ["Unknown placeholder [PERSON_1] was left unchanged."]
 
 
-def test_leading_zero_is_a_different_placeholder(vault, restorer):
+def test_leading_zero_is_repaired(vault, restorer):
     vault.get_or_create("Jan Nowak", "PERSON")
     result = restorer.restore("[PERSON_01]")
-    assert result.text == "[PERSON_01]"
-    assert result.warnings == ["Unknown placeholder [PERSON_01] was left unchanged."]
+    assert result.text == "Jan Nowak"
+    assert result.warnings == []
+    assert result.repaired == [RepairedPlaceholder("[PERSON_01]", "[PERSON_1]")]
+
+
+def test_leading_zero_of_an_unknown_number_is_reported(vault, restorer):
+    vault.get_or_create("Jan Nowak", "PERSON")
+    result = restorer.restore("[PERSON_02]")
+    assert result.text == "[PERSON_02]"
+    assert result.warnings == ["Unknown placeholder [PERSON_02] was left unchanged."]
 
 
 @pytest.mark.parametrize(
-    "text",
-    ["[person_1]", "PERSON_1", "[PERSON 1]", "(PERSON_1)", "[PERSON_1", "PERSON_1]"],
+    "text", ["PERSON_1", "(PERSON_1)", "[PERSON_1", "PERSON_1]", "{PERSON_1}"]
 )
-def test_near_misses_are_not_placeholders(vault, restorer, text):
-    # Fuzzy matching is out of scope for v0.1: these are neither restored nor
+def test_unbracketed_near_misses_are_not_placeholders(vault, restorer, text):
+    # Only bracketed forms are repaired: these are neither restored nor
     # reported.
     vault.get_or_create("Jan Nowak", "PERSON")
     result = restorer.restore(text)
@@ -134,3 +145,149 @@ def test_reflects_vault_changes(vault, restorer):
 def test_non_string_input(restorer):
     with pytest.raises(TypeError, match="expects str"):
         restorer.restore(None)  # type: ignore[arg-type]
+
+
+class TestTolerantRestore:
+    @pytest.mark.parametrize(
+        "written",
+        [
+            "[person_1]",
+            "[Person_1]",
+            "[PERSON 1]",
+            "[PERSON-1]",
+            "[ PERSON_1 ]",
+            "[PERSON _ 1]",
+            "[PERSON\t1]",
+            "\\[PERSON_1\\]",  # Markdown-escaped
+            f"{FULLWIDTH[0]}PERSON_1{FULLWIDTH[1]}",
+            f"{LENTICULAR[0]}PERSON_1{LENTICULAR[1]}",
+        ],
+    )
+    def test_rewritten_placeholders_are_restored(self, vault, restorer, written):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(f"Hi {written}!")
+        assert result.text == "Hi Jan Nowak!"
+        assert result.restored_count == 1
+        assert result.warnings == []
+        assert result.repaired == [RepairedPlaceholder(written, "[PERSON_1]")]
+
+    def test_exact_placeholders_are_not_listed_as_repaired(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        assert restorer.restore("[PERSON_1]").repaired == []
+
+    def test_types_with_digits_and_underscores(self, vault, restorer):
+        vault.get_or_create("192.0.2.1", "IPV4")
+        vault.get_or_create("#12345", "ORDER_ID")
+        result = restorer.restore("[ipv4 1] [order id 1] [ipv41]")
+        assert result.text == "192.0.2.1 #12345 192.0.2.1"
+        assert [r.placeholder for r in result.repaired] == [
+            "[IPV4_1]",
+            "[ORDER_ID_1]",
+            "[IPV4_1]",
+        ]
+
+    def test_person_10_is_not_read_as_person_1(self, vault, restorer):
+        for i in range(1, 11):
+            vault.get_or_create(f"Person Number{i}", "PERSON")
+        result = restorer.restore("[person 10] [person 1]")
+        assert result.text == "Person Number10 Person Number1"
+
+    @pytest.mark.parametrize(
+        "text", ["[Figure 2]", "[see note 1]", "[Step 3]", "[v2]", "[1]", "[PERSON]"]
+    )
+    def test_ordinary_bracketed_text_is_left_alone(self, vault, restorer, text):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(text)
+        assert result.text == text
+        assert result.warnings == []
+        assert result.repaired == []
+
+    def test_rewritten_unknown_number_of_a_known_type_is_reported(
+        self, vault, restorer
+    ):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore("[person 3]")
+        assert result.text == "[person 3]"
+        assert result.warnings == ["Unknown placeholder [person 3] was left unchanged."]
+
+    def test_brackets_around_a_placeholder_are_kept(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        assert restorer.restore("[[PERSON_1]]").text == "[Jan Nowak]"
+
+    def test_single_pass_even_for_repairs(self, vault, restorer):
+        vault.get_or_create("[person 2]", "NOTE")
+        vault.get_or_create("Anna", "PERSON")
+        result = restorer.restore("[note 1]")
+        assert result.text == "[person 2]"
+        assert result.restored_count == 1
+
+    def test_can_be_turned_off(self, vault):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = Restorer(vault, tolerant=False).restore("[person 1] [PERSON_1]")
+        assert result.text == "[person 1] Jan Nowak"
+        assert result.repaired == []
+
+
+BS = chr(92)  # a backslash, spelled out to keep the test source readable
+
+
+class TestTolerantRestoreEdgeCases:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            f"C:{BS}Users{BS}[PERSON_1]{BS}AppData",
+            f"CORP{BS}[PERSON_1]",
+            f"{BS}{BS}[PERSON_1]{BS}share",
+            f'{{"user": "CORP{BS}{BS}[PERSON_1]"}}',
+        ],
+    )
+    def test_backslash_before_a_placeholder_is_kept(self, vault, restorer, text):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(text)
+        assert result.text == text.replace("[PERSON_1]", "Jan Nowak")
+        assert result.repaired == []
+
+    def test_escaped_pair_is_still_repaired(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(f"Hi {BS}[PERSON_1{BS}]!")
+        assert result.text == "Hi Jan Nowak!"
+
+    def test_unknown_placeholder_after_a_backslash_is_reported(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(f"C:{BS}Users{BS}[PERSON_7]{BS}x")
+        assert result.warnings == ["Unknown placeholder [PERSON_7] was left unchanged."]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "print(scores[email1] + scores[email2])",
+            "rows[phone1]",
+            "ages[person_1]",
+            "x = rows[email_3]",
+            "matrix[person 1]",
+            "f(x)[person_1]",
+            "a[0][person_1]",
+        ],
+    )
+    def test_code_subscripts_are_left_alone(self, vault, restorer, text):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        vault.get_or_create("a@example.com", "EMAIL")
+        vault.get_or_create("555-123-4567", "PHONE")
+        result = restorer.restore(text)
+        assert result.text == text
+        assert result.warnings == []
+
+    def test_exact_placeholder_after_an_identifier_is_restored(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        assert restorer.restore("arr[PERSON_1]").text == "arrJan Nowak"
+
+    def test_long_type_names(self, vault, restorer):
+        entity_type = "CUSTOMER_LOYALTY_PROGRAM_MEMBERSHIP_NUMBER"  # 42 characters
+        placeholder = vault.get_or_create("LP-123456", entity_type)
+        result = restorer.restore(f"Member {placeholder} called.")
+        assert result.text == "Member LP-123456 called."
+        assert result.restored_count == 1
+        unknown = placeholder.replace("_1]", "_2]")
+        assert restorer.restore(unknown).warnings == [
+            f"Unknown placeholder {unknown} was left unchanged."
+        ]

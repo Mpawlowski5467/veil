@@ -411,3 +411,45 @@ class TestErrors:
 
     def test_no_detectors(self, vault):
         assert Masker([], vault).mask("a@example.com").text == "a@example.com"
+
+
+class TestPlaceholderLikeInput:
+    def test_rewritten_form_of_a_known_type_is_reported(self, masker, manual):
+        manual.add("Jan Nowak", "PERSON")
+        result = masker.mask(
+            "Jan Nowak reviewed the memo where [Person 1] approved it."
+        )
+        assert result.warnings == [
+            "Input already contains placeholder-like text [Person 1]; "
+            "restore() will treat it as a placeholder."
+        ]
+
+    def test_type_created_in_the_same_call_counts(self, masker):
+        result = masker.mask("Field [Email 1] is required: a@example.com")
+        assert len(result.warnings) == 1
+
+    def test_bracketed_text_of_an_unknown_type_is_not_reported(self, masker, manual):
+        manual.add("Jan Nowak", "PERSON")
+        assert masker.mask("Jan Nowak, see [Figure 2] and [Step 3].").warnings == []
+
+    def test_code_subscript_is_not_reported(self, masker):
+        assert masker.mask("a@example.com and scores[email1]").warnings == []
+
+    def test_without_tolerant_restore_only_exact_forms_count(self, vault, manual):
+        manual.add("Jan Nowak", "PERSON")
+        masker = Masker([manual], vault, tolerant_restore=False)
+        result = masker.mask("Jan Nowak and [Person 1] and [PERSON_9]")
+        assert result.warnings == [
+            "Input already contains placeholder-like text [PERSON_9]; "
+            "restore() will treat it as a placeholder."
+        ]
+
+    def test_redacted(self, vault, manual):
+        manual.add("ACCT_48213", "ACCOUNT")
+        masker = Masker([manual], vault, redact_warnings=True)
+        result = masker.mask("Customer [ACCT_48213] asked for a refund.")
+        assert result.warnings == [
+            "Input already contains placeholder-like text (12 characters); "
+            "restore() will treat it as a placeholder."
+        ]
+        assert all("48213" not in w for w in result.warnings)

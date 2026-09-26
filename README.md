@@ -4,7 +4,7 @@
 
 The model never sees the real data. veil is pure Python with no runtime dependencies.
 
-> Status: v0.1, alpha. "veil" is a working name.
+> Status: v0.2, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -73,6 +73,9 @@ Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
 | `EMAIL` | `jan.n@example.com`, `first.last+tag@sub.example.co.uk`, `sean.o'brien@example.com`, `łucja@example.com` | `user@localhost`, `name@example` |
 | `PHONE` | `555-123-4567`, `(555) 123-4567`, `+1 555 123 4567`, `555-123-4567 ext. 89`, `+44 20 7946 0958`, `(+48) 123 456 789` | `5551234567` (no separators), `601 234 567` (no `+` country code), `2024-01-15` |
 | `IPV4` | `192.168.0.1`, `10.0.0.1` in `10.0.0.1:8080` | `256.1.1.1`, `192.168.01.1`, `1.2.3.4.5` |
+| `IPV6` | `2001:db8::1`, `fe80::1ff:fe23:4567:890a`, `::ffff:192.0.2.1`, `[IPv6:2001:db8::1]`, `2001:db8::1` in `2001:db8::1:54321` | `::1` (loopback), `12:30:45`, `std::vector`, `a[1::2]` |
+| `CREDIT_CARD` | `4111 1111 1111 1111`, `5555-5555-5555-4444`, `378282246310005` | digit runs that fail the Luhn check, lack a card network's prefix or length, or aren't in a printed card layout |
+| `IBAN` | `DE89 3704 0044 0532 0130 00`, `GB82WEST12345698765432` | text that isn't laid out like an IBAN, uses a country code that doesn't issue IBANs, or fails the mod-97 checksum |
 
 Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones. Numbers and addresses are also found inside Chinese, Japanese, and Korean text, where there are no spaces around them.
 
@@ -117,11 +120,29 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 `reset()` keeps registered entities and custom patterns.
 
+### When the model rewrites a placeholder
+
+Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-escaped brackets. `restore()` still finds these, and lists each one in `repaired`:
+
+```python
+>>> shield = Shield()
+>>> shield.add_entity("Jan Nowak", "PERSON")
+>>> shield.mask("Write to Jan Nowak").text
+'Write to [PERSON_1]'
+>>> result = shield.restore("Dear [person 1], and 【PERSON_1】 again")
+>>> result.text
+'Dear Jan Nowak, and Jan Nowak again'
+>>> [(r.written, r.placeholder) for r in result.repaired]
+[('[person 1]', '[PERSON_1]'), ('【PERSON_1】', '[PERSON_1]')]
+```
+
+A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. A rewritten form right after a word or a closing bracket, like the code subscript `scores[email1]`, is left alone too. To turn this off, use `Shield(tolerant_restore=False)`.
+
 ### Warnings
 
 veil reports problems instead of raising:
 
-- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
+- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains text that `restore()` would treat as a placeholder: an exact one such as `[PERSON_1]`, or a rewritten form such as `[Person 1]` of a type in use.
 - **`restore()`** leaves unknown placeholders (well-formed, but not in the vault) unchanged and lists them.
 
 ```python
@@ -130,17 +151,29 @@ veil reports problems instead of raising:
 ['Unknown placeholder [PERSON_7] was left unchanged.']
 ```
 
-`wrap()` emits these warnings through Python's `warnings` module as `ShieldWarning`. To fail closed, so the model is never called when the leak check fires, turn them into errors:
+`wrap()` emits these warnings through Python's `warnings` module as `ShieldWarning`. To fail closed instead, pass `strict=True`. If masking warns, `wrap()` raises `ShieldError` and never calls the model. If restoring the reply warns, it raises instead of returning a partly restored reply:
 
 ```python
-import warnings
+from veil import Shield, ShieldError
 
-from veil import ShieldWarning
-
-warnings.simplefilter("error", ShieldWarning)
+shield = Shield()
+shield.mask("Call 555-123-4567")
+safe_llm = shield.wrap(lambda prompt: "ok", strict=True)
+try:
+    safe_llm("Call 555-123-4567-2")  # the known number would reach the model
+except ShieldError as error:
+    assert error.stage == "mask"
 ```
 
-Leak and partial-mask warnings include the value that leaked, so treat warnings as sensitive if you log them.
+By default, leak and partial-mask warnings quote the value that leaked. To log them safely, create the shield with `Shield(redact_warnings=True)`. Warnings then give only the type, placeholder, and length:
+
+```python
+>>> shield = Shield(redact_warnings=True)
+>>> shield.mask("Call 555-123-4567").text
+'Call [PHONE_1]'
+>>> shield.mask("Call 555-123-4567-2").warnings
+['Leak check: a known PHONE value ([PHONE_1]) still appears in the masked text.']
+```
 
 ### Plugging in your own parts
 
@@ -168,18 +201,18 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Limitations
 
-- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), IPv6, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), card numbers split across lines or in unusual groupings, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, `icon@2x.png` looks like an email, and about one in ten runs of 13-19 digits with a card network's prefix passes the Luhn check (a list of four-digit IDs, a long order number). Don't make veil your only safeguard for regulated data.
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
-- **The model must copy placeholders exactly.** `[person_1]`, `PERSON_1`, or `[PERSON 1]` in a reply are not restored.
+- **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
 - **International numbers can take in digits that follow them.** When it's unclear where a number ends, veil masks too much rather than too little. In `+44 20 7946 0958 24 hours`, the separate ` 24` is masked with the number. In `+48 123 456 789 2024-01-15`, the `2024` of the date is masked with it. The model doesn't see those digits, but restoring still returns the exact original text. A short group glued to a word, such as `24h` or `9am`, is recognised and left out.
 
 ## Roadmap
 
-- **v0.2:** tolerant placeholder restoring (case, missing brackets), optional value normalization, more built-in types (IPv6, credit cards with a Luhn check, IBAN).
+- **Next:** optional value normalization (one placeholder per phone or email however it's written), masking the leftover part of overlapping matches, and a faster leak check for very large inputs.
 - **Later:** an optional Presidio/spaCy detector for names, a persistent SQLite vault, and streaming restore for placeholders split across chunks.
 
 ## Development

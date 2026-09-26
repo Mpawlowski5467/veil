@@ -12,7 +12,7 @@ from .detectors.manual import ManualDetector
 from .detectors.regex import PatternLike, RegexDetector
 from .masker import Masker
 from .restorer import Restorer
-from .types import MaskResult, RestoreResult, ShieldWarning
+from .types import MaskResult, RestoreResult, ShieldError, ShieldWarning
 from .vault.base import Vault
 from .vault.memory import MemoryVault
 
@@ -39,6 +39,8 @@ class Shield:
         custom_patterns: Mapping[str, PatternLike] | None = None,
         detectors: Sequence[Detector] | None = None,
         vault: Vault | None = None,
+        redact_warnings: bool = False,
+        tolerant_restore: bool = True,
     ) -> None:
         r"""Create a shield.
 
@@ -51,6 +53,11 @@ class Shield:
                 `RegexDetector`. Manually registered entities are always
                 detected in addition to these.
             vault: Where mappings are stored. Defaults to a new `MemoryVault`.
+            redact_warnings: Describe leaked values by type, placeholder, and
+                length instead of quoting them, so warnings (and `ShieldError`
+                messages) are safe to log.
+            tolerant_restore: Also restore placeholders the model rewrote,
+                like ``[person 1]`` or ``【PERSON_1】``. See `Restorer`.
 
         Raises:
             ValueError: If both ``custom_patterns`` and ``detectors`` are given,
@@ -85,8 +92,13 @@ class Shield:
 
         self._vault = vault
         self._manual = ManualDetector()
-        self._masker = Masker([self._manual, *detectors], vault)
-        self._restorer = Restorer(vault)
+        self._masker = Masker(
+            [self._manual, *detectors],
+            vault,
+            redact_warnings=redact_warnings,
+            tolerant_restore=tolerant_restore,
+        )
+        self._restorer = Restorer(vault, tolerant=tolerant_restore)
 
     @property
     def vault(self) -> Vault:
@@ -128,7 +140,9 @@ class Shield:
         """Replace placeholders in ``text`` with the original values.
 
         Never raises on unknown placeholders: they are left as they are and
-        listed in the result's ``warnings``.
+        listed in the result's ``warnings``. Placeholders the model rewrote
+        (``[person 1]``) are restored too and listed in ``repaired``, unless
+        the shield was created with ``tolerant_restore=False``.
 
         Args:
             text: Text from a model, usually its reply to masked input.
@@ -139,16 +153,22 @@ class Shield:
         """
         return self._restorer.restore(text)
 
-    def wrap(self, llm: Callable[[str], str]) -> Callable[[str], str]:
+    def wrap(
+        self, llm: Callable[[str], str], *, strict: bool = False
+    ) -> Callable[[str], str]:
         """Wrap a text-in, text-out model call so it only ever sees masked text.
 
         The returned function masks its input, calls ``llm`` with the masked
-        text, restores the reply, and returns it. Mask and restore warnings are
-        emitted with `warnings.warn` as `ShieldWarning`; turn them into errors
-        with ``warnings.simplefilter("error", ShieldWarning)``.
+        text, restores the reply, and returns it. By default, mask and restore
+        warnings are emitted with `warnings.warn` as `ShieldWarning`.
 
         Args:
             llm: Any callable taking a prompt string and returning a string.
+            strict: Fail closed instead of warning. If masking warns (for
+                example, a known value may have leaked), `ShieldError` is
+                raised and ``llm`` is never called. If restoring the reply
+                warns (an unknown placeholder), `ShieldError` is raised instead
+                of returning a partly restored reply.
 
         Returns:
             A callable taking one positional string. It keeps ``llm``'s name
@@ -157,14 +177,14 @@ class Shield:
 
         def safe_llm(text: str, /) -> str:
             masked = self.mask(text)
-            _emit(masked.warnings)
+            _report("mask", masked.warnings, strict=strict)
             reply = llm(masked.text)
             if not isinstance(reply, str):
                 raise TypeError(
                     f"Wrapped model returned {type(reply).__name__}, expected str"
                 )
             restored = self.restore(reply)
-            _emit(restored.warnings)
+            _report("restore", restored.warnings, strict=strict)
             return restored.text
 
         # Copy the name and docstring, but not the annotations: the wrapper
@@ -189,7 +209,11 @@ class Shield:
 _COPIED_ATTRS = ("__module__", "__name__", "__qualname__", "__doc__")
 
 
-def _emit(messages: list[str]) -> None:
+def _report(stage: str, messages: list[str], *, strict: bool) -> None:
+    if not messages:
+        return
+    if strict:
+        raise ShieldError(stage, messages)
     # stacklevel=3 attributes the warning to the code that called safe_llm().
     for message in messages:
         warnings.warn(message, ShieldWarning, stacklevel=3)
