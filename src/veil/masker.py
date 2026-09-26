@@ -8,7 +8,13 @@ from collections.abc import Iterable, Sequence
 from ._text import contains_token
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
-from .placeholders import PLACEHOLDER_RE
+from .placeholders import (
+    LOOSE_PLACEHOLDER_RE,
+    PLACEHOLDER_RE,
+    loose_match_body,
+    placeholder_candidates,
+    placeholder_type,
+)
 from .types import MaskedEntity, MaskResult, Span
 from .vault.base import Vault
 
@@ -55,6 +61,7 @@ class Masker:
         vault: Vault,
         *,
         redact_warnings: bool = False,
+        tolerant_restore: bool = True,
     ) -> None:
         """Create a masker.
 
@@ -63,10 +70,14 @@ class Masker:
             vault: Where placeholders are created and looked up.
             redact_warnings: Describe leaked values by type, placeholder, and
                 length instead of quoting them, so warnings are safe to log.
+            tolerant_restore: Whether the matching `Restorer` also restores
+                rewritten placeholders (``[person 1]``). Input that it would
+                treat as a placeholder is reported.
         """
         self._detectors = tuple(detectors)
         self._vault = vault
         self._redact = redact_warnings
+        self._tolerant = tolerant_restore
 
     def mask(self, text: str) -> MaskResult:
         """Mask ``text``.
@@ -130,10 +141,38 @@ class Masker:
         pieces.append(unmasked[-1])
         masked = "".join(reversed(pieces))
 
-        warnings = _placeholder_like_input(text)
+        warnings = self._placeholder_like_input(text)
         warnings.extend(_partial_masks(text, candidates, kept, redact=self._redact))
         warnings.extend(self._leaks(list(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
+
+    def _placeholder_like_input(self, text: str) -> list[str]:
+        """Warn about input that restore() would treat as a placeholder.
+
+        That is every exact placeholder, and, with tolerant restore, every
+        rewritten form (``[Person 1]``) of a type this vault uses.
+        """
+        known_types = {placeholder_type(stored) for stored, _ in self._vault.items()}
+        tokens: dict[str, None] = {}
+        if self._tolerant:
+            for match in LOOSE_PLACEHOLDER_RE.finditer(text):
+                candidates = placeholder_candidates(loose_match_body(match))
+                if match["exact"] is not None or any(
+                    placeholder_type(c) in known_types for c in candidates
+                ):
+                    tokens[match.group(0)] = None
+        else:
+            tokens.update(
+                dict.fromkeys(m.group(0) for m in PLACEHOLDER_RE.finditer(text))
+            )
+        warnings = []
+        for token in tokens:
+            label = f"({len(token)} characters)" if self._redact else token
+            warnings.append(
+                f"Input already contains placeholder-like text {label}; "
+                "restore() will treat it as a placeholder."
+            )
+        return warnings
 
     def _leaks(self, unmasked: list[str], candidates: Iterable[Span]) -> list[str]:
         """Warn about every known value that still appears between placeholders.
@@ -233,12 +272,3 @@ def _unused_char(pieces: list[str], values: Iterable[str]) -> str | None:
         if chr(code) not in used:
             return chr(code)
     return None
-
-
-def _placeholder_like_input(text: str) -> list[str]:
-    tokens = dict.fromkeys(match.group(0) for match in PLACEHOLDER_RE.finditer(text))
-    return [
-        f"Input already contains placeholder-like text {token}; "
-        "restore() will treat it as a placeholder."
-        for token in tokens
-    ]

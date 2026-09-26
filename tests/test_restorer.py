@@ -226,3 +226,68 @@ class TestTolerantRestore:
         result = Restorer(vault, tolerant=False).restore("[person 1] [PERSON_1]")
         assert result.text == "[person 1] Jan Nowak"
         assert result.repaired == []
+
+
+BS = chr(92)  # a backslash, spelled out to keep the test source readable
+
+
+class TestTolerantRestoreEdgeCases:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            f"C:{BS}Users{BS}[PERSON_1]{BS}AppData",
+            f"CORP{BS}[PERSON_1]",
+            f"{BS}{BS}[PERSON_1]{BS}share",
+            f'{{"user": "CORP{BS}{BS}[PERSON_1]"}}',
+        ],
+    )
+    def test_backslash_before_a_placeholder_is_kept(self, vault, restorer, text):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(text)
+        assert result.text == text.replace("[PERSON_1]", "Jan Nowak")
+        assert result.repaired == []
+
+    def test_escaped_pair_is_still_repaired(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(f"Hi {BS}[PERSON_1{BS}]!")
+        assert result.text == "Hi Jan Nowak!"
+
+    def test_unknown_placeholder_after_a_backslash_is_reported(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        result = restorer.restore(f"C:{BS}Users{BS}[PERSON_7]{BS}x")
+        assert result.warnings == ["Unknown placeholder [PERSON_7] was left unchanged."]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "print(scores[email1] + scores[email2])",
+            "rows[phone1]",
+            "ages[person_1]",
+            "x = rows[email_3]",
+            "matrix[person 1]",
+            "f(x)[person_1]",
+            "a[0][person_1]",
+        ],
+    )
+    def test_code_subscripts_are_left_alone(self, vault, restorer, text):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        vault.get_or_create("a@example.com", "EMAIL")
+        vault.get_or_create("555-123-4567", "PHONE")
+        result = restorer.restore(text)
+        assert result.text == text
+        assert result.warnings == []
+
+    def test_exact_placeholder_after_an_identifier_is_restored(self, vault, restorer):
+        vault.get_or_create("Jan Nowak", "PERSON")
+        assert restorer.restore("arr[PERSON_1]").text == "arrJan Nowak"
+
+    def test_long_type_names(self, vault, restorer):
+        entity_type = "CUSTOMER_LOYALTY_PROGRAM_MEMBERSHIP_NUMBER"  # 42 characters
+        placeholder = vault.get_or_create("LP-123456", entity_type)
+        result = restorer.restore(f"Member {placeholder} called.")
+        assert result.text == "Member LP-123456 called."
+        assert result.restored_count == 1
+        unknown = placeholder.replace("_1]", "_2]")
+        assert restorer.restore(unknown).warnings == [
+            f"Unknown placeholder {unknown} was left unchanged."
+        ]

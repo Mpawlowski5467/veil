@@ -8,6 +8,16 @@ from veil.detectors import Detector, RegexDetector
 from veil.masker import resolve_overlaps
 from veil.types import Span
 
+# Spaces used to group numbers in print: plain, no-break (HTML), narrow
+# no-break and thin (French typography), and ideographic (Japanese).
+SPACES = [
+    " ",
+    "\N{NO-BREAK SPACE}",
+    "\N{NARROW NO-BREAK SPACE}",
+    "\N{THIN SPACE}",
+    "\N{IDEOGRAPHIC SPACE}",
+]
+
 
 @pytest.fixture(scope="module")
 def detector():
@@ -535,12 +545,38 @@ class TestIPv6:
             "00:1A:2B:3C:4D:5E",  # MAC address
             "cafe::babe",
             "2001:db8::1g",
-            "1:2:3:4:5:6:7:8:9",
-            "2001:db8:::1",
+            "1:2:3:4:5:6:7:8:9:10",
+            "Genesis 1:2:3",
         ],
     )
     def test_does_not_match(self, detector, text):
         assert values(detector, text, "IPV6") == []
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # Straight after a label and a colon.
+            ("Received: from mx (unknown [IPv6:2001:db8::1])", "2001:db8::1"),
+            ("EHLO [IPv6:2001:db8::1]", "2001:db8::1"),
+            ("ip:2001:db8::1", "2001:db8::1"),
+            ("X-Real-IP:2001:db8::1", "2001:db8::1"),
+            ("id:2001:db8::1", "2001:db8::1"),
+            # Followed by a port or punctuation.
+            ("[client 2001:db8::1:54321] AH01630", "2001:db8::1"),
+            (
+                "connect to 2001:db8:85a3:0:0:8a2e:370:7334:443 failed",
+                "2001:db8:85a3:0:0:8a2e:370:7334",
+            ),
+            ("Client 2001:db8:1::: denied", "2001:db8:1::"),
+            ("Blocked 2001:db8::1.Next", "2001:db8::1"),
+        ],
+    )
+    def test_labels_ports_and_punctuation(self, detector, text, expected):
+        assert values(detector, text, "IPV6") == [expected]
+
+    def test_tcpdump_dotted_ports(self, detector):
+        text = "IP6 2001:db8::1.54321 > 2001:db8::2.443: Flags [S]"
+        assert values(detector, text, "IPV6") == ["2001:db8::1", "2001:db8::2"]
 
     def test_ipv4_mapped_address_is_masked_whole(self, detector):
         spans = resolve_overlaps(detector.detect("from ::ffff:192.0.2.1"))
@@ -592,6 +628,25 @@ class TestCreditCard:
         assert values(detector, text, "CREDIT_CARD") == []
 
 
+class TestCreditCardSeparatorsAndDecimals:
+    @pytest.mark.parametrize("space", SPACES)
+    def test_grouped_with_other_spaces(self, detector, space):
+        card = space.join(["4111", "1111", "1111", "1111"])
+        assert values(detector, f"Card {card} exp 12/29", "CREDIT_CARD") == [card]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "print(6/11)  # 0.5454545454545454",
+            '{"score": 0.3888888888888889, "loss": 0.35714285714285715}',
+            "epoch 3 acc=0.5240722607865779",
+            "x = 1,5454545454545454",
+        ],
+    )
+    def test_decimal_digits_are_not_a_card(self, detector, text):
+        assert values(detector, text, "CREDIT_CARD") == []
+
+
 class TestIBAN:
     @pytest.mark.parametrize(
         ("text", "expected"),
@@ -629,6 +684,27 @@ class TestIBAN:
     )
     def test_does_not_match(self, detector, text):
         assert values(detector, text, "IBAN") == []
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Flight BA115 departs from gate B12 at noon, boarding starts soon.",
+            "Our IP67 targets include higher margins and lower churn",
+            "fixed in cc47126 and cc4712638949",
+            "00000020: 8e9f 5fcc fd31 80b8 1a6c 92b7 658d 3b3d",
+            "md5 ed441bba3002e7c19815499c5ae1bf7a file.txt",
+        ],
+    )
+    def test_common_text_is_not_an_iban(self, detector, text):
+        assert values(detector, text, "IBAN") == []
+
+    @pytest.mark.parametrize("space", SPACES)
+    def test_grouped_with_other_spaces(self, detector, space):
+        iban = space.join(["DE89", "3704", "0044", "0532", "0130", "00"])
+        assert values(detector, f"IBAN {iban} bitte", "IBAN") == [iban]
+
+    def test_shortest_iban(self, detector):
+        assert values(detector, "NO93 8601 1117 947", "IBAN") == ["NO93 8601 1117 947"]
 
     def test_card_inside_a_valid_iban_loses_the_overlap(self, detector):
         spans = resolve_overlaps(detector.detect("DE89 3704 0044 0532 0130 00"))

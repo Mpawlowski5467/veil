@@ -468,3 +468,43 @@ class TestPluggableParts:
 
     def test_detector_protocol_is_structural(self):
         assert isinstance(NameDetector(), Detector)
+
+
+class TestRoundTripsWithBackslashes:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Mount " + chr(92) * 2 + "192.0.2.10" + chr(92) + "share",
+            "Log in as CORP" + chr(92) + "Jan Nowak",
+            "path=C:" + chr(92) + "Users" + chr(92) + "Jan Nowak" + chr(92) + "AppData",
+        ],
+    )
+    def test_round_trip(self, shield, text):
+        shield.add_entity("Jan Nowak", "PERSON")
+        echo = shield.wrap(lambda prompt: prompt, strict=True)
+        assert echo(text) == text
+
+    def test_json_round_trip(self, shield):
+        import json
+
+        shield.add_entity("jnowak", "USERNAME")
+        text = json.dumps({"path": "C:" + chr(92) + "Users" + chr(92) + "jnowak"})
+        echo = shield.wrap(lambda prompt: prompt, strict=True)
+        assert json.loads(echo(text)) == json.loads(text)
+
+
+class TestShieldErrorIsPortable:
+    def test_pickle_and_copy(self):
+        import copy
+        import pickle
+
+        error = ShieldError("mask", ["Leak check: something"])
+        for clone in (pickle.loads(pickle.dumps(error)), copy.copy(error)):
+            assert isinstance(clone, ShieldError)
+            assert clone.stage == "mask"
+            assert clone.warnings == ["Leak check: something"]
+            assert str(clone) == str(error)
+
+    def test_message(self):
+        error = ShieldError("restore", ["a", "b"])
+        assert str(error) == "restore() warned: a | b"

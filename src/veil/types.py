@@ -26,9 +26,15 @@ class ShieldError(Exception):
 
     def __init__(self, stage: str, warnings: list[str]) -> None:
         """Create the error from the stage that failed and its warnings."""
+        # Passing both to Exception keeps the error picklable (for process
+        # pools) and copyable.
+        super().__init__(stage, list(warnings))
         self.stage = stage
         self.warnings = list(warnings)
-        super().__init__(f"{stage}() warned: " + " | ".join(self.warnings))
+
+    def __str__(self) -> str:
+        """Describe the stage that warned and its warnings."""
+        return f"{self.stage}() warned: " + " | ".join(self.warnings)
 
 
 @dataclass(frozen=True, slots=True)

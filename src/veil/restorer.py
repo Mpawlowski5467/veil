@@ -7,7 +7,9 @@ import re
 from .placeholders import (
     LOOSE_PLACEHOLDER_RE,
     PLACEHOLDER_RE,
+    loose_match_body,
     placeholder_candidates,
+    placeholder_type,
 )
 from .types import RepairedPlaceholder, RestoreResult
 from .vault.base import Vault
@@ -25,7 +27,8 @@ class Restorer:
     ``[person_1]``, ``[PERSON 1]``, ``[ PERSON_1 ]``, ``[PERSON_01]``,
     ``【PERSON_1】``, or Markdown's ``\[PERSON_1\]``, is restored when its
     normalized form is in the vault, and listed in ``RestoreResult.repaired``.
-    Bracketed text that merely looks similar (``[Figure 2]``) is left alone.
+    Bracketed text that merely looks similar (``[Figure 2]``) is left alone,
+    and so is a code subscript such as ``scores[email1]``.
 
     Unknown placeholders are left as they are and reported; restoring never
     raises because of them.
@@ -63,7 +66,9 @@ class Restorer:
         repaired: list[RepairedPlaceholder] = []
         known_types: set[str | None] = set()
         if self._tolerant:
-            known_types = {_type_of(stored) for stored, _ in self._vault.items()}
+            known_types = {
+                placeholder_type(stored) for stored, _ in self._vault.items()
+            }
 
         def replace(match: re.Match[str]) -> str:
             nonlocal restored_count
@@ -72,7 +77,11 @@ class Restorer:
             if value is not None:
                 restored_count += 1
                 return value
-            candidates = placeholder_candidates(match["body"]) if self._tolerant else []
+            candidates = (
+                placeholder_candidates(loose_match_body(match))
+                if self._tolerant
+                else []
+            )
             for candidate in candidates:
                 value = self._vault.get_value(candidate)
                 if value is not None:
@@ -83,7 +92,7 @@ class Restorer:
             # vault uses ("[person 3]" when only PERSON_1 and _2 exist), but
             # not ordinary bracketed text like "[Figure 2]".
             if PLACEHOLDER_RE.fullmatch(written) or any(
-                _type_of(candidate) in known_types for candidate in candidates
+                placeholder_type(candidate) in known_types for candidate in candidates
             ):
                 unknown[written] = None
             return written
@@ -100,8 +109,3 @@ class Restorer:
             warnings=warnings,
             repaired=repaired,
         )
-
-
-def _type_of(placeholder: str) -> str | None:
-    match = PLACEHOLDER_RE.fullmatch(placeholder)
-    return match["type"] if match else None

@@ -73,9 +73,9 @@ Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
 | `EMAIL` | `jan.n@example.com`, `first.last+tag@sub.example.co.uk`, `sean.o'brien@example.com`, `łucja@example.com` | `user@localhost`, `name@example` |
 | `PHONE` | `555-123-4567`, `(555) 123-4567`, `+1 555 123 4567`, `555-123-4567 ext. 89`, `+44 20 7946 0958`, `(+48) 123 456 789` | `5551234567` (no separators), `601 234 567` (no `+` country code), `2024-01-15` |
 | `IPV4` | `192.168.0.1`, `10.0.0.1` in `10.0.0.1:8080` | `256.1.1.1`, `192.168.01.1`, `1.2.3.4.5` |
-| `IPV6` | `2001:db8::1`, `fe80::1ff:fe23:4567:890a`, `::ffff:192.0.2.1` | `::1` (loopback), `12:30:45`, `std::vector`, `a[1::2]` |
+| `IPV6` | `2001:db8::1`, `fe80::1ff:fe23:4567:890a`, `::ffff:192.0.2.1`, `[IPv6:2001:db8::1]`, `2001:db8::1` in `2001:db8::1:54321` | `::1` (loopback), `12:30:45`, `std::vector`, `a[1::2]` |
 | `CREDIT_CARD` | `4111 1111 1111 1111`, `5555-5555-5555-4444`, `378282246310005` | digit runs that fail the Luhn check, lack a card network's prefix or length, or aren't in a printed card layout |
-| `IBAN` | `DE89 3704 0044 0532 0130 00`, `GB82WEST12345698765432` | IBAN-shaped text that fails the mod-97 checksum |
+| `IBAN` | `DE89 3704 0044 0532 0130 00`, `GB82WEST12345698765432` | text that isn't laid out like an IBAN, uses a country code that doesn't issue IBANs, or fails the mod-97 checksum |
 
 Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones. Numbers and addresses are also found inside Chinese, Japanese, and Korean text, where there are no spaces around them.
 
@@ -136,13 +136,13 @@ Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-
 [('[person 1]', '[PERSON_1]'), ('【PERSON_1】', '[PERSON_1]')]
 ```
 
-A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. To turn this off, use `Shield(tolerant_restore=False)`.
+A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. A rewritten form right after a word or a closing bracket, like the code subscript `scores[email1]`, is left alone too. To turn this off, use `Shield(tolerant_restore=False)`.
 
 ### Warnings
 
 veil reports problems instead of raising:
 
-- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains placeholder-like text such as `[PERSON_1]`, because `restore()` would replace it.
+- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains text that `restore()` would treat as a placeholder: an exact one such as `[PERSON_1]`, or a rewritten form such as `[Person 1]` of a type in use.
 - **`restore()`** leaves unknown placeholders (well-formed, but not in the vault) unchanged and lists them.
 
 ```python
@@ -201,7 +201,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Limitations
 
-- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), card numbers split across lines or in unusual groupings, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, and `icon@2x.png` looks like an email. Don't make veil your only safeguard for regulated data.
+- **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), card numbers split across lines or in unusual groupings, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, `icon@2x.png` looks like an email, and about one in ten runs of 13-19 digits with a card network's prefix passes the Luhn check (a list of four-digit IDs, a long order number). Don't make veil your only safeguard for regulated data.
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.

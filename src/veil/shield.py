@@ -93,7 +93,10 @@ class Shield:
         self._vault = vault
         self._manual = ManualDetector()
         self._masker = Masker(
-            [self._manual, *detectors], vault, redact_warnings=redact_warnings
+            [self._manual, *detectors],
+            vault,
+            redact_warnings=redact_warnings,
+            tolerant_restore=tolerant_restore,
         )
         self._restorer = Restorer(vault, tolerant=tolerant_restore)
 

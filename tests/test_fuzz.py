@@ -89,10 +89,12 @@ CONTEXT = [
     "price 1.50",
     "Q3 report",
     "¿Qué tal?",
+    "C:" + chr(92) + "Users",
 ]
 # Always contain a non-word character, so no seeded value is glued to an ASCII
 # letter or digit (a documented limitation, not what this test is about).
 SEPARATORS = [" ", ", ", "\n", " (", ") ", ": ", "; ", " - ", "、", "。", " | ", "\t"]
+SEPARATORS += [chr(92), chr(92) * 2]  # backslashes, as in DOMAIN\user and UNC paths
 KINDS = [
     (EMAILS, 0.18),
     (US_PHONES, 0.12),
