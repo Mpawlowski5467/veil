@@ -326,7 +326,13 @@ class TestPhone:
         [
             ("ssh 198.51.100.123 2222", [("IPV4", "198.51.100.123")]),
             ("seen 203.0.113.187 2024 times", [("IPV4", "203.0.113.187")]),
-            ("host 10.200.100.150.1234", []),
+            ("ssh 198.51.250.123 2222", [("IPV4", "198.51.250.123")]),
+            ("198.51.100.123 443 1024 bytes", [("IPV4", "198.51.100.123")]),
+            ("conn 10.0.0.200 443 1500", [("IPV4", "10.0.0.200")]),
+            (
+                "::ffff:198.51.100.123 2222",
+                [("IPV6", "::ffff:198.51.100.123"), ("IPV4", "198.51.100.123")],
+            ),
             (
                 "2001:db8::1 555-123-4567",
                 [("IPV6", "2001:db8::1"), ("PHONE", "555-123-4567")],
@@ -336,11 +342,19 @@ class TestPhone:
                 "2001:db8:0:0:0:0:3:1 555 123 4567",
                 [("IPV6", "2001:db8:0:0:0:0:3:1"), ("PHONE", "555 123 4567")],
             ),
+            (
+                "fe80:0:0:0:0:0:abcd:1 555-123-4567",
+                [("IPV6", "fe80:0:0:0:0:0:abcd:1"), ("PHONE", "555-123-4567")],
+            ),
+            (
+                "10.0.0.1 212 200 0123",
+                [("IPV4", "10.0.0.1"), ("PHONE", "212 200 0123")],
+            ),
         ],
     )
     def test_end_of_an_ip_address_is_not_a_phone_number(self, detector, text, expected):
-        # "100.123 2222" looks like a number with dots, but its first two
-        # groups are the end of a dotted quad; and "::1" is not a "1" prefix.
+        # "100.123 2222" and "123 443 1024" look like numbers, but they start
+        # inside an IPv4 address; and "::1" is not a "1" country code.
         assert found(detector, text) == expected
 
     @pytest.mark.parametrize(
@@ -355,6 +369,12 @@ class TestPhone:
             ("id 12.555.555.0123", "555.555.0123"),  # 555 is not an octet
             ("Call 1.212.200.0123", "1.212.200.0123"),
             ("10.0.0.1.555.555.0123", "555.555.0123"),
+            # Area code and exchange that could be octets (100-255):
+            ("Contacts: 2.212.225.0199", "212.225.0199"),
+            ("dial 001.212.225.0199", "212.225.0199"),
+            ("Ref 2024-01-15.212.200.0123", "212.200.0123"),
+            ("Office 3.250.234-0131", "250.234-0131"),
+            ("host 10.200.100.150.1234", "100.150.1234"),  # not an IPv4 address
         ],
     )
     def test_numbers_after_digits_and_dots_are_still_found(

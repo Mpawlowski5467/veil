@@ -100,8 +100,6 @@ _PHONE_SEPARATORS = _SPACES + ".-\u2011\u2013"
 _SEP = r"[ \u00a0\u2009\u202f.\-\u2011\u2013]"
 _DASH_DOT = r"[.\-\u2011\u2013]"
 _EXTENSION = r"(?:[ \u00a0]?(?i:ext\.?|x)[ \u00a0]?\d{1,6})"
-# A three-digit IPv4 octet, 100 to 255.
-_OCTET3 = r"(?:25[0-5]|2[0-4]\d|1\d\d)"
 # Not right after "::" or after a group of hex digits between colons: the "1"
 # that follows ends an IPv6 address ("fe80::1", ":0:1"), but "Phone:1" doesn't.
 _NOT_AFTER_IPV6_GROUP = "(?<!::)" + "".join(
@@ -115,14 +113,9 @@ US_PHONE_PATTERN = re.compile(
     rf"""
     (?:
         (?<![A-Za-z\d+])
-        (?:
-            (?<!\d\.){_NOT_AFTER_IPV6_GROUP}  # a country code, but not the last
-            \+?1{_SEP}?                     # group of "192.0.2.1 555..." or
+        (?:(?<!\d\.){_NOT_AFTER_IPV6_GROUP}  # country code, but not the last
+            \+?1{_SEP}?)?                   # group of "192.0.2.1 555..." or
                                             # of "::1 555..."
-          | (?!(?<=\d\.){_OCTET3}\.{_OCTET3}(?!\d))
-                                            # or none, but not starting at the
-                                            # 3rd octet of "198.51.100.123 2222"
-        )
         (?:\(\d{{3}}\){_SEP}?|\d{{3}}{_SEP})    # area code: (555) or 555-
       | (?<![\d+])\(\d{{3}}\){_SEP}?          # "(555)" glued to a label: Tel(555)
     )
@@ -244,6 +237,28 @@ _IPV6_AFTER_LABEL = re.compile(
 # A port after an address without brackets: "2001:db8::1:54321", or the
 # dotted form tcpdump and netstat print, "2001:db8::1.443".
 _IPV6_PORT = re.compile(r"[.:][0-9]{1,5}[.:]*\Z")
+
+
+def _find_us_phones(text: str) -> Iterator[re.Match[str]]:
+    """Yield `US_PHONE_PATTERN` matches that don't start inside an IPv4 address.
+
+    The end of an address followed by a number reads like a number with dots:
+    "100.123 2222" in "198.51.100.123 2222", or "123 443 1024" in
+    "198.51.100.123 443 1024". A match rejected that way is retried one
+    character later, so a real number overlapping it is still found.
+    """
+    addresses: list[tuple[int, int]] | None = None
+    pos = 0
+    while (match := US_PHONE_PATTERN.search(text, pos)) is not None:
+        start = match.start()
+        if addresses is None:
+            addresses = [m.span() for m in IPV4_PATTERN.finditer(text)]
+        i = bisect.bisect_right(addresses, (start, len(text))) - 1
+        if i >= 0 and addresses[i][0] < start < addresses[i][1]:
+            pos = start + 1
+            continue
+        yield match
+        pos = match.end()
 
 
 def _find_ipv6(text: str) -> Iterator[re.Match[str]]:
@@ -597,7 +612,12 @@ def _compile(entity_type: str, pattern: PatternLike) -> re.Pattern[str]:
 
 _BUILTIN_RULES: tuple[_Rule, ...] = (
     _Rule("EMAIL", EMAIL_PATTERN, RegexDetector.BUILTIN_PRIORITY, finder=_find_emails),
-    _Rule("PHONE", US_PHONE_PATTERN, RegexDetector.BUILTIN_PRIORITY),
+    _Rule(
+        "PHONE",
+        US_PHONE_PATTERN,
+        RegexDetector.BUILTIN_PRIORITY,
+        finder=_find_us_phones,
+    ),
     _Rule(
         "PHONE",
         INTL_PHONE_PATTERN,
