@@ -579,7 +579,7 @@ def test_leak_rule_after_merging(monkeypatch, index):
     merging) without lying entirely inside one merged span.
     """
     if index:
-        for name in ("_INDEX_MIN_VALUES", "_REBUILD_WORK"):
+        for name in ("_INDEX_MIN_VALUES", "_BUILD_WORK", "_FIRST_CHAR_WORK"):
             monkeypatch.setattr(search, name, 0)
     merges = 0
     for seed in range(1000):

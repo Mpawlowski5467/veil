@@ -190,32 +190,44 @@ class TestCachedIndex:
         assert built == [1]  # the new value was checked on its own
 
     def test_recursion_error_falls_back(self, monkeypatch):
+        calls = []
+
         def deep(values):
+            calls.append(1)
             raise RecursionError
 
         monkeypatch.setattr(search, "LiteralIndex", deep)
         values = {f"user{i}@example.com" for i in range(500)}
-        text = "mail user42@example.com. " * 200
+        text = "mail user42@example.com. " * 400
         assert CachedIndex().present([text], values, set()) == {"user42@example.com"}
+        assert calls == [1]
 
     def test_empty_value_counts_like_in(self, monkeypatch):
-        monkeypatch.setattr(search, "_INDEX_MIN_VALUES", 0)
-        monkeypatch.setattr(search, "_REBUILD_WORK", 0)
+        for name in ("_INDEX_MIN_VALUES", "_BUILD_WORK", "_FIRST_CHAR_WORK"):
+            monkeypatch.setattr(search, name, 0)
         assert CachedIndex().present(["abc"], {"", "b", "z"}, set()) == {"", "b"}
         assert CachedIndex().present(["abc"], {"", "b"}, {""}) == {"b"}
 
-    def test_first_build_waits_until_it_pays_off(self, monkeypatch):
-        # Building costs about _REBUILD_WORK characters of scanning per value;
-        # until checking values one by one has cost that much, don't build.
+    @pytest.mark.parametrize(
+        ("first", "builds"),
+        [
+            (lambda i: "u", [[], [1], [1], [1], [1]]),
+            (lambda i: chr(0x4E00 + i), [[], [], [], [], []]),  # 1,000 firsts
+        ],
+        ids=["one first character", "many first characters"],
+    )
+    def test_first_build_waits_until_it_pays_off(self, monkeypatch, first, builds):
+        # Until checking values one by one has cost about what building the
+        # index would (more with many first characters), don't build.
         built = []
         real = search.LiteralIndex
         monkeypatch.setattr(
             search, "LiteralIndex", lambda v: built.append(1) or real(v)
         )
-        values = {f"user{i}@example.com" for i in range(1000)}
-        text = "no addresses here " * 170  # about 3,000 characters
+        values = {f"{first(i)}ser{i}@example.com" for i in range(1000)}
+        text = "no addresses here " * 57  # about 1,000 characters
         cache = CachedIndex()
-        for expected in ([], [], [1], [1]):
+        for expected in builds:
             assert cache.present([text], values, set()) == set()
             assert built == expected
 
@@ -234,7 +246,8 @@ class TestCachedIndex:
         r = random.Random(seed)
         tuning = {
             "_INDEX_MIN_VALUES": r.choice([0, 3, 64]),
-            "_REBUILD_WORK": r.choice([1, 50, 1 << 13, 10**9]),
+            "_BUILD_WORK": r.choice([1, 50, 1 << 11, 10**9]),
+            "_FIRST_CHAR_WORK": r.choice([0, 1 << 16]),
             "_VALUE_WORK": r.choice([0, 256]),
             "_MAX_WIDTH": r.choice([1, 2, 32]),
             "_BUCKET": r.choice([1, 16]),
@@ -281,6 +294,28 @@ def test_regexes_hold_at_most_max_depth_characters_of_a_value():
         assert index.present(["x" + values[-1]], set()) == {values[-1]}
 
 
+class TestValuesStartingOutsideTheBmp:
+    def test_astral_characters_no_value_starts_with(self):
+        index = LiteralIndex(["\U0001f600a", "\U0001f602b", "x"])
+        assert index.present(["hi \U0001f601 there"], set()) == set()
+        assert index.token_occurrences("hi \U0001f601 there") == []
+
+    @pytest.mark.parametrize("seed", range(20))
+    def test_many_values_sharing_an_astral_first_character(self, seed):
+        r = random.Random(seed)
+        first = "\U00020bb7"
+        alphabet = "\u7530\u4e2d\U00020bb7\U0001f600 ab"
+        values = {first}
+        while len(values) < r.choice([20, 60]):
+            values.add(first + "".join(r.choices(alphabet, k=r.randint(1, 5))))
+        values |= {"\U0001f600" + a for a in "abc"}
+        text = "".join(r.choice(alphabet + first * 3) for _ in range(300))
+        tokens = {v for v in values if r.random() < 0.5}
+        index = LiteralIndex(values)
+        assert index.present([text], tokens) == one_by_one([text], values, tokens)
+        assert index.token_occurrences(text) == find_token_all(text, values)
+
+
 def test_token_occurrences_falls_back_when_the_budget_runs_out(monkeypatch):
     calls = []
     real = search._tokens_one_by_one
@@ -294,6 +329,21 @@ def test_token_occurrences_falls_back_when_the_budget_runs_out(monkeypatch):
 
 class TestPerformance:
     """Inputs that take quadratic time when each value is searched on its own."""
+
+    def test_many_values_sharing_an_astral_first_character(self):
+        kana = [chr(0x3042 + i) for i in range(40)]
+        values = [
+            "\U00020bb7\u7530" + a + b + c
+            for a in kana
+            for b in kana[:10]
+            for c in kana[:8]
+        ][:3000]
+        index = LiteralIndex(values)
+        text = ("\U00020bb7" + "text " * 8) * 2000
+        start = time.perf_counter()
+        assert index.present([text], set()) == set()
+        assert index.token_occurrences(text) == []
+        assert time.perf_counter() - start < 0.1  # 0.3 s with one bucket
 
     def test_values_starting_outside_the_bmp(self):
         # re tests astral first characters one by one at every position.
@@ -351,4 +401,4 @@ class TestPerformance:
             assert index.present([text], set()) == set()
         else:
             assert index.token_occurrences(text) == []
-        assert time.perf_counter() - start < 2.0
+        assert time.perf_counter() - start < 1.0  # 0.16 s; 3.5 s undispatched

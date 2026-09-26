@@ -19,8 +19,9 @@ from __future__ import annotations
 import math
 import re
 from bisect import bisect_left
-from collections.abc import Iterable, Iterator, Sequence, Set
+from collections.abc import Collection, Iterable, Iterator, Sequence, Set
 from itertools import groupby
+from typing import TypeAlias
 
 from ._text import contains_token, find_token, is_word_char
 
@@ -93,7 +94,7 @@ class _Skeleton:
 
     def __init__(self, values: list[str]) -> None:
         self.values = values  # sorted, unique, non-empty
-        self.lookup: dict[str, tuple[str, ...] | _Wide] = {}
+        self.lookup: dict[str, _Found] = {}
 
     def alternatives(
         self,
@@ -199,6 +200,31 @@ class _Wide:
         self.table = table
 
 
+class _Astral:
+    """Values that start with the same character outside the BMP.
+
+    There are more of them than `_BUCKET`, so the rest of each value is
+    indexed on its own and matched right after that character.
+    """
+
+    __slots__ = ("above", "first", "rest")
+
+    def __init__(self, first: str, above: tuple[str, ...], rest: LiteralIndex):
+        self.first = first
+        self.above = above  # the character itself, if it is a value
+        self.rest = rest
+
+    def candidates(self, text: str, after: int) -> tuple[str, ...]:
+        """The values that may start just before ``after``."""
+        first = self.first
+        return self.above + tuple(
+            first + v for v in self.rest.candidates_at(text, after)
+        )
+
+
+_Found: TypeAlias = "tuple[str, ...] | _Wide | _Astral"
+
+
 def _class_escape(ch: str) -> str:
     return "\\" + ch if ch in "\\]^-[" else ch
 
@@ -215,9 +241,9 @@ class LiteralIndex:
     """
 
     __slots__ = ("_lookup", "_regexes", "_values")
-    _lookup: dict[str, tuple[str, ...] | _Wide]
+    _lookup: dict[str, _Found]
 
-    def __init__(self, values: Iterable[str]) -> None:
+    def __init__(self, values: Iterable[str], *, _nested: bool = False) -> None:
         """Index ``values``. Empty strings are ignored.
 
         Raises:
@@ -229,18 +255,27 @@ class LiteralIndex:
         skeleton = _Skeleton(ordered)
         # re tests first characters outside the BMP one by one at every
         # position, so values starting with one are left out of the skeleton:
-        # a single range finds them, and the character picks the values.
+        # a single range finds them, and the character picks the values (or,
+        # for many values, an index of the rest of them).
         bmp = bisect_left(ordered, _FIRST_ASTRAL)
-        top = skeleton.alternatives(0, bmp, 0, (), 0, top=True) if bmp else []
-        fanout = max(_MIN_FANOUT, math.isqrt(4 * len(top)))
-        regexes = [
-            re.compile("|".join(top[i : i + fanout]))
-            for i in range(0, len(top), fanout)
-        ]
+        regexes = []
+        if bmp:
+            top = skeleton.alternatives(0, bmp, 0, (), 0, top=True)
+            fanout = max(_MIN_FANOUT, math.isqrt(4 * len(top)), 1)
+            regexes = [
+                re.compile("|".join(top[i : i + fanout]))
+                for i in range(0, len(top), fanout)
+            ]
         if bmp < len(ordered):
             astral = ordered[bmp:]
             for first, group in groupby(astral, key=lambda value: value[0]):
-                skeleton.lookup[first] = tuple(group)
+                found = tuple(group)
+                if _nested or len(found) <= _BUCKET:
+                    skeleton.lookup[first] = found
+                else:
+                    above = found[:1] if found[0] == first else ()
+                    rest = LiteralIndex((v[1:] for v in found), _nested=True)
+                    skeleton.lookup[first] = _Astral(first, above, rest)
             low, high = re.escape(astral[0][0]), re.escape(astral[-1][0])
             regexes.append(re.compile(f"[{low}-{high}]"))
         self._regexes = tuple(regexes)
@@ -263,23 +298,22 @@ class LiteralIndex:
         values that begin with the same character.
         """
         lookup = self._lookup
-        size = len(text)
         for regex in self._regexes:
             search = regex.search
             match = search(text)
             while match is not None:
                 start = match.start()
                 key = match.group()
-                found = lookup.get(key, ())  # () for an astral non-first char
-                if isinstance(found, _Wide):
-                    after = start + len(key)
-                    found = (
-                        found.table.get(text[after], found.above)
-                        if after < size
-                        else found.above
-                    )
-                yield start, found
+                yield start, _resolve(lookup.get(key, ()), text, start + len(key))
                 match = search(text, start + 1)
+
+    def candidates_at(self, text: str, pos: int) -> tuple[str, ...]:
+        """The values that may start at ``pos``; each needs confirming."""
+        for regex in self._regexes:  # their first characters don't overlap
+            match = regex.match(text, pos)
+            if match is not None:
+                return _resolve(self._lookup.get(match.group(), ()), text, match.end())
+        return ()
 
     def present(self, haystacks: Sequence[str], tokens: Set[str]) -> set[str]:
         """Return the values that occur in any of ``haystacks``.
@@ -341,6 +375,23 @@ class LiteralIndex:
         return found
 
 
+def _resolve(found: _Found, text: str, after: int) -> tuple[str, ...]:
+    """The candidate values of a lookup hit whose key ends at ``after``.
+
+    A lookup miss is ``()``: the astral range also matches characters that
+    no value starts with.
+    """
+    if isinstance(found, _Wide):
+        return (
+            found.table.get(text[after], found.above)
+            if after < len(text)
+            else found.above
+        )
+    if isinstance(found, _Astral):
+        return found.candidates(text, after)
+    return found
+
+
 def _by_start_longest_first(pair: tuple[int, str]) -> tuple[int, int]:
     return pair[0], -len(pair[1])
 
@@ -375,16 +426,22 @@ def _tokens_one_by_one(text: str, values: Iterable[str]) -> list[tuple[int, str]
 # its own is as fast.
 _INDEX_MIN_VALUES = 64
 # CachedIndex builds (or rebuilds) its index once checking values one at a time
-# has cost about this many characters of scanning per value, which is roughly
-# what building the index costs.
-_REBUILD_WORK = 1 << 13
+# has cost about as much as building it. Building costs about _BUILD_WORK
+# characters of scanning per value, plus _FIRST_CHAR_WORK per distinct first
+# character: each is a top-level alternative that re compiles and tests.
+_BUILD_WORK = 1 << 11
+_FIRST_CHAR_WORK = 1 << 16
 # What checking one value costs besides its scan, in characters.
 _VALUE_WORK = 256
 
 
-def _worth_indexing(count: int, work: int) -> bool:
-    """Whether ``work`` spent checking ``count`` values one by one pays for an index."""
-    return count >= _INDEX_MIN_VALUES and work > count * _REBUILD_WORK
+def _worth_indexing(values: Collection[str], work: int) -> bool:
+    """Whether ``work`` spent checking ``values`` one by one pays for an index."""
+    count = len(values)
+    if count < _INDEX_MIN_VALUES or work <= count * _BUILD_WORK:
+        return False  # without counting first characters, which costs a pass
+    firsts = len({value[:1] for value in values})
+    return work > count * _BUILD_WORK + firsts * _FIRST_CHAR_WORK
 
 
 class CachedIndex:
@@ -435,7 +492,7 @@ class CachedIndex:
             if not update:
                 return _present_one_by_one(haystacks, values, tokens)
             work = len(values) * (size + _VALUE_WORK)
-            if not _worth_indexing(len(values), self._debt + work):
+            if not _worth_indexing(values, self._debt + work):
                 self._debt += work
                 return _present_one_by_one(haystacks, values, tokens)
             rest = self._rebuild(values)
@@ -444,7 +501,7 @@ class CachedIndex:
             rest = [value for value in values if value not in indexed]
             if update and rest:
                 self._debt += len(rest) * (size + _VALUE_WORK)
-                if _worth_indexing(len(values), self._debt):
+                if _worth_indexing(values, self._debt):
                     rest = self._rebuild(values)
         index = self._index
         if index is None:  # the build failed (RecursionError)
