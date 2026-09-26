@@ -145,9 +145,11 @@ A `Shield` keeps its mappings in memory, so they are gone when the process exits
 0
 ```
 
-One file holds any number of sessions, each with its own placeholders; `reset()` clears only its own. Processes and threads can use the same file at once: a value always gets one placeholder, and a number is never handed out twice. The leak check keeps knowing the spellings and merged matches it has seen, across `Shield`s and processes.
+One file holds any number of sessions, each with its own placeholders; `reset()` clears only its own. Processes and threads can use the same file at once: a value always gets one placeholder, and a number is never handed out twice. The leak check keeps knowing the spellings and merged matches it has seen, across `Shield`s and processes. With `normalize=True`, two spellings of a new value masked at the same moment by two processes can still get two placeholders; each restores correctly.
 
-The file holds the real values in plain text. veil creates it readable by its owner only; keep it on an encrypted disk, and `purge` old sessions. It uses SQLite's write-ahead log, which needs a local disk (not a network share).
+The vault holds mappings, not settings: build every `Shield` with the same `custom_patterns` and `detectors`, and call `add_entity` again for the same names, or a new `Shield` won't mask them (the leak check still warns). A copy of an `SQLiteVault` (pickled, or with `copy.deepcopy`) opens the same file and session, so it shares the data.
+
+The file holds the real values in plain text. veil creates it readable by its owner only and overwrites values when they are deleted; keep it on an encrypted disk, and `purge` old sessions. It uses SQLite's write-ahead log, which needs a local disk (not a network share).
 
 ### One placeholder however a value is written
 

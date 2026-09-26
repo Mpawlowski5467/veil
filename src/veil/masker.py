@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import bisect
 import re
+import threading
 from collections.abc import Iterable, Mapping, Sequence, Set
 
 from ._normalize import KeyIndex, Normalizer
@@ -19,7 +20,7 @@ from .placeholders import (
     placeholder_type,
 )
 from .types import MaskedEntity, MaskResult, Span
-from .vault.base import Vault, _Remembering
+from .vault.base import Vault, _batch, _Remembering
 
 
 def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
@@ -184,6 +185,7 @@ class _LocalMemory:
     def __init__(self, vault: Vault) -> None:
         self._vault = vault
         self._entries: dict[str, tuple[str, str, str]] = {}
+        self._merged_entries: dict[str, str] = {}  # placeholder -> stored value
 
     def _remember(self, value: str, entity_type: str, placeholder: str) -> None:
         stored = self._vault.get_value(placeholder)
@@ -199,8 +201,21 @@ class _LocalMemory:
                 live.append((value, entity_type, placeholder))
         return live
 
+    def _mark_merged(self, placeholder: str) -> None:
+        stored = self._vault.get_value(placeholder)
+        if stored is not None:
+            self._merged_entries[placeholder] = stored
+
+    def _merged(self) -> set[str]:
+        return {
+            placeholder
+            for placeholder, stored in self._merged_entries.items()
+            if self._vault.get_value(placeholder) == stored
+        }
+
     def clear(self) -> None:
         self._entries.clear()
+        self._merged_entries.clear()
 
 
 class Masker:
@@ -210,7 +225,7 @@ class Masker:
     match that would stay partly visible with the matches it overlaps (see
     `merge_partial_overlaps`), asks the vault for each value's placeholder (so
     a value keeps its placeholder across calls), and then warns when any known
-    value still appears in the output.
+    value still appears in the output. Calls from several threads take turns.
     """
 
     def __init__(
@@ -241,30 +256,30 @@ class Masker:
         self._vault = vault
         self._redact = redact_warnings
         self._tolerant = tolerant_restore
-        self._keys = KeyIndex(normalizers) if normalizers else None
         self._memory = _memory_for(vault)
+        self._keys = KeyIndex(normalizers, self._memory) if normalizers else None
         self._leak_index = CachedIndex()
+        self._lock = threading.Lock()
 
     def forget(self) -> None:
         """Drop what is cached about the conversation so far.
 
         `Shield.reset` calls this after clearing the vault.
         """
-        if isinstance(self._memory, _LocalMemory):
-            self._memory.clear()
-        if self._keys is not None:
-            self._keys.clear()
-        self._leak_index.clear()
+        with self._lock:
+            if isinstance(self._memory, _LocalMemory):
+                self._memory.clear()
+            if self._keys is not None:
+                self._keys.clear()
+            self._leak_index.clear()
 
     def __getstate__(self) -> dict[str, object]:
-        """Pickle without the leak check's index; it is rebuilt on demand."""
-        # Leave out values from before the vault was last cleared.
-        if self._keys is not None:
-            self._keys.forget_stale(self._vault)
+        """Pickle without caches (they are rebuilt on demand) or the lock."""
         if isinstance(self._memory, _LocalMemory):
             self._memory._remembered()  # drops entries the vault no longer backs
         state = dict(self.__dict__)
         state.pop("_leak_index", None)
+        state.pop("_lock", None)
         return state
 
     def __setstate__(self, state: dict[str, object]) -> None:
@@ -273,7 +288,10 @@ class Masker:
         self.__dict__.setdefault("_keys", None)
         if "_memory" not in state:
             self._memory = _memory_for(self._vault)
+        if self._keys is not None:
+            self._keys.use_memory(self._memory)
         self._leak_index = CachedIndex()
+        self._lock = threading.Lock()
 
     def mask(self, text: str) -> MaskResult:
         """Mask ``text``.
@@ -296,7 +314,10 @@ class Masker:
             raise TypeError(f"mask() expects str, got {type(text).__name__}")
         if not text:
             return MaskResult(text=text)
+        with self._lock:
+            return self._mask(text)
 
+    def _mask(self, text: str) -> MaskResult:
         candidates: list[Span] = []
         for detector in self._detectors:
             for span in detector.detect(text):
@@ -308,6 +329,27 @@ class Masker:
                 candidates.append(span)
 
         spans = merge_partial_overlaps(text, candidates, resolve_overlaps(candidates))
+        with _batch(self._vault):  # one check of a shared vault, one transaction
+            entities = self._store(spans)
+
+        pieces: list[str] = []
+        unmasked: list[str] = []  # the original text left between placeholders
+        cursor = len(text)
+        for entity in reversed(entities):
+            unmasked.append(text[entity.end : cursor])
+            pieces.append(unmasked[-1])
+            pieces.append(entity.placeholder)
+            cursor = entity.start
+        unmasked.append(text[:cursor])
+        pieces.append(unmasked[-1])
+        masked = "".join(reversed(pieces))
+
+        warnings = self._placeholder_like_input(text)
+        warnings.extend(self._leaks(text, spans, list(reversed(unmasked)), candidates))
+        return MaskResult(text=masked, entities=entities, warnings=warnings)
+
+    def _store(self, spans: list[tuple[Span, tuple[Span, ...]]]) -> list[MaskedEntity]:
+        """Give each span its placeholder, storing new values in the vault."""
         vault, keys, memory = self._vault, self._keys, self._memory
         entities: list[MaskedEntity] = []
         for span, members in spans:
@@ -338,26 +380,14 @@ class Masker:
                 )
             )
         # What a merged span replaced is remembered for later leak checks,
-        # without a placeholder of its own (so restore never produces it).
+        # without a placeholder of its own (so restore never produces it). The
+        # merged placeholder is marked, so no later spelling merges into it.
         for (_, members), entity in zip(spans, entities, strict=True):
+            if members:
+                memory._mark_merged(entity.placeholder)
             for member in members:
                 memory._remember(member.value, member.entity_type, entity.placeholder)
-
-        pieces: list[str] = []
-        unmasked: list[str] = []  # the original text left between placeholders
-        cursor = len(text)
-        for entity in reversed(entities):
-            unmasked.append(text[entity.end : cursor])
-            pieces.append(unmasked[-1])
-            pieces.append(entity.placeholder)
-            cursor = entity.start
-        unmasked.append(text[:cursor])
-        pieces.append(unmasked[-1])
-        masked = "".join(reversed(pieces))
-
-        warnings = self._placeholder_like_input(text)
-        warnings.extend(self._leaks(text, spans, list(reversed(unmasked)), candidates))
-        return MaskResult(text=masked, entities=entities, warnings=warnings)
+        return entities
 
     def _placeholder_like_input(self, text: str) -> list[str]:
         """Warn about input that restore() would treat as a placeholder.

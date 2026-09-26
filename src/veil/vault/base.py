@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from contextlib import AbstractContextManager, nullcontext
+from typing import Protocol, cast, runtime_checkable
 
 
 @runtime_checkable
@@ -69,3 +70,26 @@ class _Remembering(Protocol):
     def _remembered(self) -> list[tuple[str, str, str]]:
         """Return every ``(value, entity_type, placeholder)``, oldest first."""
         ...
+
+    def _mark_merged(self, placeholder: str) -> None:
+        """Record that ``placeholder`` covers several overlapping matches.
+
+        Such a value is never normalized, and no later spelling merges into
+        it; the mark lets a new `Shield` on the same vault know that too.
+        """
+        ...
+
+    def _merged(self) -> set[str]:
+        """Return the placeholders recorded with `_mark_merged`."""
+        ...
+
+
+def _batch(vault: object) -> AbstractContextManager[None]:
+    """The vault's way of grouping one call's reads and writes, if it has one.
+
+    `SQLiteVault` checks its file once per group and writes in one transaction.
+    """
+    batch = getattr(vault, "_batch", None)
+    if callable(batch):
+        return cast("AbstractContextManager[None]", batch())
+    return nullcontext()

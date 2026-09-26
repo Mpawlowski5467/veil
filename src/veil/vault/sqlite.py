@@ -35,12 +35,24 @@ _SCHEMA = (
     " id INTEGER PRIMARY KEY AUTOINCREMENT, session BLOB NOT NULL,"
     " value BLOB NOT NULL, entity_type TEXT NOT NULL, placeholder TEXT NOT NULL,"
     " UNIQUE (session, value))",
+    "CREATE TABLE IF NOT EXISTS vault_merged ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT, session BLOB NOT NULL,"
+    " placeholder TEXT NOT NULL, UNIQUE (session, placeholder))",
     "CREATE INDEX IF NOT EXISTS vault_values_by_session ON vault_values (session, id)",
     "CREATE INDEX IF NOT EXISTS vault_remembered_by_session"
     " ON vault_remembered (session, id)",
+    "CREATE INDEX IF NOT EXISTS vault_merged_by_session ON vault_merged (session, id)",
 )
 
-_SESSION_TABLES = ("vault_values", "vault_counters", "vault_remembered")
+_SESSION_TABLES = ("vault_values", "vault_counters", "vault_remembered", "vault_merged")
+
+# A generation no session has: the cache must be reloaded from scratch.
+_STALE = -1
+
+# Connections inherited across fork(). SQLite forbids using them in the child,
+# and closing them there could drop file locks the process holds through its
+# own connection, so they are kept here, untouched, for the life of the process.
+_INHERITED: list[sqlite3.Connection] = []
 
 
 def _encode(text: str) -> bytes:
@@ -55,19 +67,23 @@ class SQLiteVault:
     """Keeps value <-> placeholder mappings in an SQLite database file.
 
     Mappings survive the process, so a new `Shield` on the same file and
-    session picks up where the last one left off: the same value keeps its
-    placeholder, restoring works across runs, and the leak check still knows
-    the spellings merged by ``normalize=True`` and the matches hidden inside a
-    merged placeholder. Numbering is per entity type, as in `MemoryVault`.
+    session picks up the conversation's placeholders: the same value keeps
+    its placeholder, restoring works across runs, and the leak check still
+    knows the spellings merged by ``normalize=True`` and the matches hidden
+    inside a merged placeholder. Registered entities and custom patterns are
+    `Shield` settings, not vault contents: set them up on every `Shield`.
+    Numbering is per entity type, as in `MemoryVault`.
 
     One file holds any number of sessions, one per conversation; each session
     has its own values and numbering, and `clear` only empties its own. Several
     processes and threads can use the same file at once: a value always gets
-    one placeholder, and numbers are never handed out twice.
+    one placeholder, and numbers are never handed out twice. A copy of the
+    vault (``copy``, ``deepcopy``, or pickling) opens the same file and
+    session, so it shares the data rather than duplicating it.
 
     The file holds the real values in plain text. It is created readable and
     writable by its owner only; keep it on an encrypted disk, and delete old
-    sessions with `purge`.
+    sessions with `purge`. Deleted values are overwritten in the file.
 
     Example:
         >>> vault = SQLiteVault(":memory:", session="chat-1")
@@ -97,21 +113,32 @@ class SQLiteVault:
 
         Raises:
             ValueError: If ``session`` is not a non-empty string, or the file
-                was written by a newer version with a different layout.
+                was written by a newer version of this library.
         """
         if not isinstance(session, str) or not session:
             raise ValueError("session must be a non-empty string")
-        self._path = os.fspath(path)
+        name = os.fsdecode(path)
+        # Absolute, so a pickled or copied vault finds the same file.
+        self._path = name if name == ":memory:" else os.path.abspath(name)
         self._session = session
         self._timeout = timeout
-        self._open()
+        self._open(create=True)
 
-    def _open(self) -> None:
+    def _open(self, *, create: bool) -> None:
         self._key = _encode(self._session)
         self._lock = threading.RLock()
+        self._pid = os.getpid()
+        self._batch_depth = 0
+        self._batch_wrote = False
+        self._reset_cache()
         if self._path != ":memory:":
+            if not create and not os.path.exists(self._path):
+                raise FileNotFoundError(f"The vault file {self._path} is gone")
             # Create the file owner-only before SQLite does (with 0644).
             os.close(os.open(self._path, os.O_CREAT | os.O_RDWR, 0o600))
+        self._connect()
+
+    def _connect(self) -> None:
         self._conn = sqlite3.connect(
             self._path,
             timeout=self._timeout,
@@ -124,17 +151,21 @@ class SQLiteVault:
             self._conn.close()
             raise
 
-    def _initialize(self) -> None:
-        self._use_wal()
-        self._conn.execute("PRAGMA synchronous=NORMAL")
-        # The cache of this session's rows; see _refresh.
+    def _reset_cache(self) -> None:
+        """Empty the cache of this session's rows; the next read reloads it."""
         self._placeholder_by_value: dict[str, str] = {}
         self._value_by_placeholder: dict[str, str] = {}
         self._remembered_values: dict[str, tuple[str, str]] = {}
-        self._generation: int | None = None
-        self._last_value_id = 0
-        self._last_remembered_id = 0
+        self._merged_placeholders: set[str] = set()
+        self._generation: int | None = _STALE
+        self._last_ids: dict[str, int] = dict.fromkeys(_SESSION_TABLES, 0)
         self._data_version = -1  # what PRAGMA data_version said at the last read
+
+    def _initialize(self) -> None:
+        self._check_schema_version()
+        self._use_wal()
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA secure_delete=ON")  # overwrite deleted values
         with self._write():
             for statement in _SCHEMA:
                 self._conn.execute(statement)
@@ -145,16 +176,23 @@ class SQLiteVault:
             self._conn.execute(
                 "INSERT OR IGNORE INTO vault_meta VALUES ('generation', 0)"
             )
-            (version,) = self._conn.execute(
+            self._check_schema_version()  # another process may have made it
+            self._touch()
+        self._sync()  # load the session outside the write lock
+
+    def _check_schema_version(self) -> None:
+        """Refuse a file from a newer version, before changing anything in it."""
+        try:
+            row = self._conn.execute(
                 "SELECT value FROM vault_meta WHERE key = 'schema_version'"
             ).fetchone()
-            if version != _SCHEMA_VERSION:
-                raise ValueError(
-                    f"{self._path} has vault schema version {version}; this "
-                    f"version of the library reads version {_SCHEMA_VERSION}"
-                )
-            self._catch_up()
-            self._touch()
+        except sqlite3.OperationalError:  # no vault_meta yet: a new file
+            return
+        if row is not None and row[0] != _SCHEMA_VERSION:
+            raise ValueError(
+                f"{self._path} has vault schema version {row[0]}; this "
+                f"version of the library reads version {_SCHEMA_VERSION}"
+            )
 
     # -- Vault protocol -------------------------------------------------------
 
@@ -204,9 +242,10 @@ class SQLiteVault:
                     (self._key, entity_type, number),
                 )
                 # Caught up and holding the write lock: no row can be missing.
+                # If the transaction fails, _write throws the cache away.
                 self._placeholder_by_value[value] = placeholder
                 self._value_by_placeholder[placeholder] = value
-                self._last_value_id = row_id or self._last_value_id
+                self._last_ids["vault_values"] = row_id or 0
             return placeholder
 
     def get_placeholder(self, value: str) -> str | None:
@@ -233,9 +272,11 @@ class SQLiteVault:
         Other sessions in the file are not touched.
         """
         with self._write():
+            self._catch_up()
             self._delete_sessions([self._key])
             self._touch()
             self._refresh()
+        self._checkpoint()
 
     def __len__(self) -> int:
         """Return the number of values stored in this session."""
@@ -266,7 +307,7 @@ class SQLiteVault:
                         (self._key, _encode(value), entity_type, placeholder),
                     ).lastrowid
                     self._remembered_values[value] = (entity_type, placeholder)
-                    self._last_remembered_id = row_id or self._last_remembered_id
+                    self._last_ids["vault_remembered"] = row_id or 0
 
     def _rememberable(self, value: str, placeholder: str) -> bool:
         return (
@@ -280,6 +321,61 @@ class SQLiteVault:
         with self._lock:
             self._sync()
             return [(v, t, p) for v, (t, p) in self._remembered_values.items()]
+
+    def _mark_merged(self, placeholder: str) -> None:
+        """Record that ``placeholder`` covers several overlapping matches."""
+        with self._lock:
+            self._sync()
+            if (
+                placeholder in self._merged_placeholders
+                or placeholder not in self._value_by_placeholder
+            ):
+                return
+            with self._write():
+                self._catch_up()
+                if (
+                    placeholder in self._value_by_placeholder
+                    and placeholder not in self._merged_placeholders
+                ):
+                    row_id = self._conn.execute(
+                        "INSERT INTO vault_merged (session, placeholder) VALUES (?, ?)",
+                        (self._key, placeholder),
+                    ).lastrowid
+                    self._merged_placeholders.add(placeholder)
+                    self._last_ids["vault_merged"] = row_id or 0
+
+    def _merged(self) -> set[str]:
+        """Return the placeholders that cover several overlapping matches."""
+        with self._lock:
+            self._sync()
+            return set(self._merged_placeholders)
+
+    @contextmanager
+    def _batch(self) -> Iterator[None]:
+        """Group calls: check the file once, and make every write in one transaction.
+
+        The masker and restorer wrap each call in this. The write lock is
+        taken at the first write and released when the block ends.
+        """
+        with self._lock:
+            if not self._batch_depth:
+                self._sync()
+                self._batch_wrote = False
+            self._batch_depth += 1
+            try:
+                yield
+            except BaseException:
+                self._batch_depth -= 1
+                if not self._batch_depth and self._batch_wrote:
+                    self._abort()
+                raise
+            self._batch_depth -= 1
+            if not self._batch_depth and self._conn.in_transaction:
+                try:
+                    self._conn.execute("COMMIT")
+                except BaseException:
+                    self._abort()
+                    raise
 
     # -- Sessions --------------------------------------------------------------
 
@@ -300,9 +396,18 @@ class SQLiteVault:
 
         Returns:
             How many sessions were deleted.
+
+        Raises:
+            TypeError: If ``older_than`` is not a `datetime.timedelta`.
+            ValueError: If ``older_than`` is negative.
         """
+        if not isinstance(older_than, timedelta):
+            raise TypeError("older_than must be a datetime.timedelta")
+        if older_than < timedelta(0):
+            raise ValueError("older_than must not be negative")
         cutoff = time.time() - older_than.total_seconds()
         with self._write():
+            self._catch_up()
             stale = [
                 key
                 for (key,) in self._conn.execute(
@@ -316,6 +421,8 @@ class SQLiteVault:
                 [(key,) for key in stale],
             )
             self._refresh()
+        if stale:
+            self._checkpoint()
         return len(stale)
 
     # -- File handling ---------------------------------------------------------
@@ -329,10 +436,11 @@ class SQLiteVault:
         """Close the connection when the vault is garbage-collected.
 
         A `Shield` built on a vault has no ``close()`` of its own, so a vault
-        made per request would otherwise leave its connection open.
+        made per request would otherwise leave its connection open. A vault
+        inherited across fork() leaves the parent's connection alone.
         """
         conn = getattr(self, "_conn", None)
-        if conn is not None:
+        if conn is not None and getattr(self, "_pid", None) == os.getpid():
             with suppress(Exception):  # interpreter shutdown, or already closed
                 conn.close()
 
@@ -356,34 +464,70 @@ class SQLiteVault:
             TypeError: For an in-memory vault, whose data would be lost.
         """
         if self._path == ":memory:":
-            raise TypeError("An in-memory SQLiteVault can't be pickled")
+            raise TypeError("An in-memory SQLiteVault can't be pickled or copied")
         return {"path": self._path, "session": self._session, "timeout": self._timeout}
 
     def __setstate__(self, state: dict[str, object]) -> None:
-        """Reopen the same file and session."""
+        """Reopen the same file and session.
+
+        Raises:
+            FileNotFoundError: If the file no longer exists.
+        """
         self._path = str(state["path"])
         self._session = str(state["session"])
         timeout = state["timeout"]
         self._timeout = float(timeout) if isinstance(timeout, (int, float)) else 5.0
-        self._open()
+        self._open(create=False)
 
     def __repr__(self) -> str:
         """Summarize the vault without revealing any stored values."""
-        return f"{type(self).__name__}(<{len(self)} values>)"
+        try:
+            size = len(self)
+        except sqlite3.ProgrammingError:
+            return f"{type(self).__name__}(<closed>)"
+        return f"{type(self).__name__}(<{size} values>)"
 
     # -- Internals ---------------------------------------------------------------
 
     @contextmanager
     def _write(self) -> Iterator[None]:
-        """Run the block in a transaction that holds the database's write lock."""
+        """Run the block in a transaction that holds the database's write lock.
+
+        Inside `_batch`, the batch's transaction is used (and started if need
+        be). If the block or the commit fails, the cache is thrown away: it may
+        hold changes the database rolled back.
+        """
         with self._lock:
+            self._check_fork()
+            if self._batch_depth:
+                if not self._conn.in_transaction:
+                    self._conn.execute("BEGIN IMMEDIATE")
+                    self._batch_wrote = True
+                yield  # an error propagates to _batch, which aborts
+                return
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 yield
+                self._conn.execute("COMMIT")
             except BaseException:
-                self._conn.execute("ROLLBACK")
+                self._abort()
                 raise
-            self._conn.execute("COMMIT")
+
+    def _abort(self) -> None:
+        """Roll back if a transaction is still open, and drop the cache."""
+        if self._conn.in_transaction:
+            with suppress(sqlite3.Error):  # keep the original error
+                self._conn.execute("ROLLBACK")
+        self._reset_cache()
+
+    def _check_fork(self) -> None:
+        """After fork(), leave the parent's connection alone and open our own."""
+        if self._pid != os.getpid():
+            _INHERITED.append(self._conn)
+            self._pid = os.getpid()
+            self._batch_depth = 0
+            self._reset_cache()
+            self._connect()
 
     def _use_wal(self) -> None:
         """Switch the file to write-ahead logging, so readers don't block writers.
@@ -404,12 +548,27 @@ class SQLiteVault:
                     raise
                 time.sleep(0.01)
 
+    def _checkpoint(self) -> None:
+        """Copy the write-ahead log into the file and empty it.
+
+        After a delete, so older copies of the deleted values don't linger in
+        the log. It does nothing while another connection is reading.
+        """
+        with self._lock, suppress(sqlite3.OperationalError):
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     def _query_data_version(self) -> int:
         (version,) = self._conn.execute("PRAGMA data_version").fetchone()
         return int(version)
 
     def _sync(self) -> None:
-        """Bring the cache up to date if another connection changed the file."""
+        """Bring the cache up to date if another connection changed the file.
+
+        Inside `_batch` this was done once, when the batch started.
+        """
+        self._check_fork()
+        if self._batch_depth:
+            return
         if self._query_data_version() != self._data_version:
             self._conn.execute("BEGIN")  # one consistent snapshot
             try:
@@ -425,8 +584,8 @@ class SQLiteVault:
         """
         version = self._query_data_version()
         if version != self._data_version:
-            self._data_version = version
             self._refresh()
+            self._data_version = version  # only once the refresh is complete
 
     def _refresh(self) -> None:
         """Read this session's rows added since the last refresh.
@@ -439,45 +598,47 @@ class SQLiteVault:
         ).fetchone()
         generation = row[0] if row else None
         if generation != self._generation:
+            self._reset_cache()
             self._generation = generation
-            self._placeholder_by_value.clear()
-            self._value_by_placeholder.clear()
-            self._remembered_values.clear()
-            self._last_value_id = self._last_remembered_id = 0
-        for row_id, placeholder, data in self._conn.execute(
-            "SELECT id, placeholder, value FROM vault_values"
-            " WHERE session = ? AND id > ? ORDER BY id",
-            (self._key, self._last_value_id),
+        for row_id, placeholder, data in self._new_rows(
+            "vault_values", "placeholder, value"
         ):
             value = _decode(data)
             self._placeholder_by_value[value] = placeholder
             self._value_by_placeholder[placeholder] = value
-            self._last_value_id = row_id
-        for row_id, data, entity_type, placeholder in self._conn.execute(
-            "SELECT id, value, entity_type, placeholder FROM vault_remembered"
-            " WHERE session = ? AND id > ? ORDER BY id",
-            (self._key, self._last_remembered_id),
+            self._last_ids["vault_values"] = row_id
+        for row_id, data, entity_type, placeholder in self._new_rows(
+            "vault_remembered", "value, entity_type, placeholder"
         ):
             self._remembered_values.setdefault(
                 _decode(data), (entity_type, placeholder)
             )
-            self._last_remembered_id = row_id
+            self._last_ids["vault_remembered"] = row_id
+        for row_id, placeholder in self._new_rows("vault_merged", "placeholder"):
+            self._merged_placeholders.add(placeholder)
+            self._last_ids["vault_merged"] = row_id
+
+    def _new_rows(self, table: str, columns: str) -> sqlite3.Cursor:
+        return self._conn.execute(
+            f"SELECT id, {columns} FROM {table}"
+            " WHERE session = ? AND id > ? ORDER BY id",
+            (self._key, self._last_ids[table]),
+        )
 
     def _touch(self) -> None:
         """Mark this session used now, creating it (with a new generation).
 
-        Must run inside a write transaction, after `_catch_up`.
+        Must run inside a write transaction.
         """
         now = time.time()
         exists = self._conn.execute(
             "UPDATE vault_sessions SET last_used = ? WHERE session = ?",
             (now, self._key),
         ).rowcount
-        if not exists:  # new, or purged: the cache is already empty
-            self._generation = self._next_generation()
+        if not exists:
             self._conn.execute(
                 "INSERT INTO vault_sessions VALUES (?, ?, ?)",
-                (self._key, self._generation, now),
+                (self._key, self._next_generation(), now),
             )
 
     def _next_generation(self) -> int:

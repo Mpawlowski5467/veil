@@ -282,3 +282,305 @@ class TestWithShield:
             return time.perf_counter() - start
 
         assert timed(sqlite) < 3 * timed(memory) + 0.05
+
+
+class FlakyConnection:
+    """Wraps a connection; the first statement ``fail`` matches raises ``error``."""
+
+    def __init__(self, conn, fail, error, *, rollback_first=False):
+        self._conn = conn
+        self._fail = fail
+        self._error = error
+        self._rollback_first = rollback_first  # as SQLite does after an I/O error
+
+    def execute(self, sql, *args):
+        if self._fail is not None and self._fail(sql):
+            self._fail = None
+            if self._rollback_first and self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise self._error
+        return self._conn.execute(sql, *args)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def fresh_items(path, session="default"):
+    with open_vault(path, session) as vault:
+        return vault.items()
+
+
+class TestFailures:
+    """A failed write or read must leave the vault agreeing with its file."""
+
+    @pytest.mark.parametrize("rollback_first", [False, True])
+    def test_failed_commit_leaves_nothing_behind(self, path, rollback_first):
+        with open_vault(path) as vault:
+            vault.get_or_create("jan.n@example.com", "EMAIL")
+            vault._conn = FlakyConnection(
+                vault._conn,
+                lambda sql: sql == "COMMIT",
+                sqlite3.OperationalError("disk I/O error"),
+                rollback_first=rollback_first,
+            )
+            with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
+                vault.get_or_create("anna.k@example.com", "EMAIL")
+            assert vault.get_placeholder("anna.k@example.com") is None
+            assert vault.get_or_create("piotr.w@example.com", "EMAIL") == "[EMAIL_2]"
+            assert vault.get_or_create("anna.k@example.com", "EMAIL") == "[EMAIL_3]"
+            assert vault.items() == fresh_items(path)
+
+    def test_failed_clear_keeps_the_values(self, path):
+        with open_vault(path) as vault:
+            vault.get_or_create("jan.n@example.com", "EMAIL")
+            vault._conn = FlakyConnection(
+                vault._conn,
+                lambda sql: sql == "COMMIT",
+                sqlite3.OperationalError("disk I/O error"),
+            )
+            with pytest.raises(sqlite3.OperationalError):
+                vault.clear()
+            assert vault.get_or_create("jan.n@example.com", "EMAIL") == "[EMAIL_1]"
+            assert vault.get_value("[EMAIL_1]") == "jan.n@example.com"
+
+    def test_failed_write_in_a_mask_call(self, path):
+        shield = Shield(vault=SQLiteVault(path))
+        shield.mask("Mail jan.n@example.com")
+        vault = shield.vault
+        vault._conn = FlakyConnection(
+            vault._conn,
+            lambda sql: sql == "COMMIT",
+            sqlite3.OperationalError("disk I/O error"),
+        )
+        with pytest.raises(sqlite3.OperationalError):
+            shield.mask("Mail anna.k@example.com and piotr.w@example.com")
+        assert shield.mask("Mail piotr.w@example.com").text == "Mail [EMAIL_2]"
+        assert vault.items() == fresh_items(path)
+
+    def test_interrupted_refresh_is_finished_later(self, path):
+        with open_vault(path) as reader, open_vault(path) as writer:
+            placeholder = writer.get_or_create("555-555-0123", "PHONE")
+            writer._remember("(555) 555-0123", "PHONE", placeholder)
+            reader._conn = FlakyConnection(
+                reader._conn,
+                lambda sql: "FROM vault_remembered" in sql,
+                KeyboardInterrupt(),
+            )
+            with pytest.raises(KeyboardInterrupt):
+                reader.get_value(placeholder)
+            assert reader.get_value(placeholder) == "555-555-0123"
+            assert reader._remembered() == [("(555) 555-0123", "PHONE", "[PHONE_1]")]
+
+
+class TestOtherConnections:
+    def test_clear_after_another_connection_purged_the_session(self, path, monkeypatch):
+        with open_vault(path, "chat") as a, open_vault(path, "other") as b:
+            a.get_or_create("jan.n@example.com", "EMAIL")
+            later = time.time() + 3600
+            monkeypatch.setattr(sqlite_module.time, "time", lambda: later)
+            assert b.purge(timedelta(minutes=1)) == 2
+            a.clear()
+            assert a.items() == []
+            assert a.get_or_create("anna.k@example.com", "EMAIL") == "[EMAIL_1]"
+            assert a.get_placeholder("jan.n@example.com") is None
+            assert a.items() == fresh_items(path, "chat")
+
+    def test_shield_shared_by_threads_with_normalize(self, path):
+        shield = Shield(vault=SQLiteVault(path), normalize=True)
+        errors = []
+
+        def work(i):
+            try:
+                for n in range(60):
+                    text = f"Mail user{n}@example.com or USER{n}@EXAMPLE.COM ({i})"
+                    masked = shield.mask(text).text
+                    assert masked.count("[EMAIL_") == 2
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=work, args=(i,)) for i in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert errors == []
+        assert len(shield.vault) == 60
+
+    def test_opening_a_session_does_not_hold_the_write_lock_while_loading(
+        self, path, monkeypatch
+    ):
+        with open_vault(path) as vault:
+            for n in range(100):
+                vault.get_or_create(f"user{n}@example.com", "EMAIL")
+        held = []
+        real = SQLiteVault._refresh
+
+        def watching(self):
+            held.append(self._conn.in_transaction and self._batch_depth == 0)
+            with closing(sqlite3.connect(path, timeout=0)) as other:
+                other.execute("BEGIN IMMEDIATE")  # fails if the lock is held
+                other.execute("ROLLBACK")
+            return real(self)
+
+        monkeypatch.setattr(SQLiteVault, "_refresh", watching)
+        open_vault(path).close()
+        assert held
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork()")
+def test_forked_child_writes_survive_the_parent_closing(path):
+    import warnings
+
+    vault = open_vault(path)
+    vault.get_or_create("jan.n@example.com", "EMAIL")
+    ready_read, ready_write = os.pipe()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)  # fork with threads
+        pid = os.fork()
+    if pid == 0:  # the child: wait for the parent to close, then write
+        try:
+            os.close(ready_write)
+            os.read(ready_read, 1)
+            for n in range(10):
+                vault.get_or_create(f"child{n}@example.com", "EMAIL")
+        finally:
+            os._exit(0)  # without closing anything, as a worker may
+    os.close(ready_read)
+    vault.close()  # the parent closes while the child still has the vault
+    os.write(ready_write, b"x")
+    os.close(ready_write)
+    os.waitpid(pid, 0)
+    with open_vault(path) as later:
+        assert len(later) == 11
+
+
+class TestPrivacy:
+    def test_deleted_values_are_gone_from_the_file(self, path, monkeypatch):
+        with open_vault(path, "a") as a, open_vault(path, "b") as b:
+            a.get_or_create("jan.n@example.com", "EMAIL")
+            b.get_or_create("4111 1111 1111 1111", "CREDIT_CARD")
+            a.clear()
+            later = time.time() + 3600
+            monkeypatch.setattr(sqlite_module.time, "time", lambda: later)
+            b.purge(timedelta(minutes=1))
+        for name in (path, path.with_name(path.name + "-wal")):
+            if name.exists():
+                data = name.read_bytes()
+                assert b"jan.n@example.com" not in data, name
+                assert b"4111 1111 1111 1111" not in data, name
+
+    def test_pickled_normalizing_shield_holds_no_values(self, path):
+        shield = Shield(vault=SQLiteVault(path), normalize=True)
+        shield.mask("Mail jan.n@example.com or JAN.N@EXAMPLE.COM, call 555-555-0123")
+        data = pickle.dumps(shield)
+        assert b"jan.n" not in data.lower()
+        assert b"555-555-0123" not in data
+        clone = pickle.loads(data)
+        assert clone.mask("Mail Jan.N@Example.com").text == "Mail [EMAIL_1]"
+
+
+class TestCopies:
+    def test_relative_path_is_found_after_a_directory_change(
+        self, tmp_path, monkeypatch
+    ):
+        (tmp_path / "app").mkdir()
+        (tmp_path / "elsewhere").mkdir()
+        monkeypatch.chdir(tmp_path / "app")
+        shield = Shield(vault=SQLiteVault("conversations.db"))
+        shield.mask("Mail jan.n@example.com")
+        data = pickle.dumps(shield)
+        monkeypatch.chdir(tmp_path / "elsewhere")
+        clone = pickle.loads(data)
+        assert clone.restore("[EMAIL_1]").text == "jan.n@example.com"
+        assert not (tmp_path / "elsewhere" / "conversations.db").exists()
+
+    def test_unpickling_does_not_create_a_missing_file(self, path):
+        data = pickle.dumps(open_vault(path))
+        for name in (path, f"{path}-wal", f"{path}-shm"):
+            if os.path.exists(name):
+                os.remove(name)
+        with pytest.raises(FileNotFoundError):
+            pickle.loads(data)
+
+    def test_a_copy_shares_the_file(self, path):
+        import copy
+
+        shield = Shield(vault=SQLiteVault(path))
+        shield.mask("Mail jan.n@example.com")
+        clone = copy.deepcopy(shield)
+        clone.mask("Mail anna.k@example.com")
+        assert shield.restore("[EMAIL_2]").text == "anna.k@example.com"
+        with pytest.raises(TypeError, match="pickled or copied"):
+            copy.deepcopy(SQLiteVault(":memory:"))
+
+    def test_bytes_path(self, path):
+        vault = SQLiteVault(os.fsencode(path))
+        vault.get_or_create("jan.n@example.com", "EMAIL")
+        assert pickle.loads(pickle.dumps(vault)).items() == vault.items()
+
+
+class TestValidation:
+    def test_purge_needs_a_non_negative_timedelta(self, path):
+        with open_vault(path) as vault:
+            with pytest.raises(ValueError, match="negative"):
+                vault.purge(timedelta(days=-30))
+            with pytest.raises(TypeError, match="timedelta"):
+                vault.purge(30)
+
+    def test_newer_layout_is_refused_before_anything_changes(self, path):
+        with closing(sqlite3.connect(path)) as conn, conn:
+            conn.execute(
+                "CREATE TABLE vault_meta (key TEXT PRIMARY KEY, value INTEGER)"
+            )
+            conn.execute("INSERT INTO vault_meta VALUES ('schema_version', 2)")
+            conn.execute("CREATE TABLE vault_values (id INTEGER PRIMARY KEY, x BLOB)")
+        with pytest.raises(ValueError, match="schema version 2"):
+            open_vault(path)
+        with closing(sqlite3.connect(path)) as conn:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+
+    def test_repr_of_a_closed_vault(self, path):
+        vault = open_vault(path)
+        vault.close()
+        assert repr(vault) == "SQLiteVault(<closed>)"
+
+
+class TestBatching:
+    def test_restore_checks_the_file_once(self, path):
+        shield = Shield(vault=SQLiteVault(path))
+        shield.mask(" ".join(f"user{n}@example.com" for n in range(300)))
+        reply = " ".join(f"[EMAIL_{n}]" for n in range(1, 301))
+        vault = shield.vault
+        checks = []
+        vault._conn = FlakyConnection(
+            vault._conn, lambda sql: checks.append(sql) and False, None
+        )
+        shield.restore(reply)
+        assert checks.count("PRAGMA data_version") == 1
+
+    def test_new_values_of_one_call_are_written_together(self, path):
+        shield = Shield(vault=SQLiteVault(path))
+        vault = shield.vault
+        statements = []
+        vault._conn = FlakyConnection(
+            vault._conn, lambda sql: statements.append(sql) and False, None
+        )
+        shield.mask(" ".join(f"user{n}@example.com" for n in range(200)))
+        assert statements.count("BEGIN IMMEDIATE") == 1
+        assert len(vault) == 200
+
+
+def test_a_new_shield_never_merges_into_a_merged_placeholder(path):
+    first = "Account DE89 3704 0044 0532 0130 00 BX closed."  # IBAN + a REF
+    second = "New account DE89370400440532013000BX opened."  # one whole IBAN
+
+    def shield():
+        s = Shield(vault=SQLiteVault(path, session="c"), normalize=True)
+        s.add_entity("00 BX", "REF")
+        return s
+
+    assert shield().mask(first).text == "Account [IBAN_1] closed."
+    later = shield()
+    masked = later.mask(second)
+    assert masked.text == "New account [IBAN_2] opened."
+    assert later.restore(masked.text).text == second
