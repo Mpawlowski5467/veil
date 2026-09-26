@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `SQLiteVault(path, session=...)` keeps mappings in an SQLite file (standard library only), so they survive the process and can be shared between processes and threads. One file holds many sessions; `clear()` empties only its own, and `purge(older_than)` deletes sessions unused for that long. Writes take the database's write lock, so concurrent processes never give one value two placeholders or hand out a number twice. Each vault keeps a cache that it refreshes only when another connection has changed the file, so masking against it is about as fast as against a `MemoryVault`. The spellings and merged matches the leak check remembers are stored too. The file is created owner-only and holds the real values in plain text.
+
 ## 0.3.0
 
 ### Added

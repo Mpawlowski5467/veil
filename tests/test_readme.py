@@ -17,7 +17,8 @@ def test_readme_has_examples():
     assert len(python_blocks()) >= 5
 
 
-def test_readme_examples(capsys):
+def test_readme_examples(capsys, monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # examples may create files
     # Blocks share one namespace and run in order, like a reader following
     # along. Blocks with ">>>" are doctests (outputs are checked); the others
     # are scripts and must run without error.

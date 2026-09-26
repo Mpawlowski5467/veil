@@ -128,6 +128,27 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 `reset()` keeps registered entities and custom patterns.
 
+### Keeping mappings between runs
+
+A `Shield` keeps its mappings in memory, so they are gone when the process exits. To keep them, and to share them between processes (a web server's workers, or one Claude Code hook call after another), give it an `SQLiteVault`:
+
+```python
+>>> from datetime import timedelta
+>>> from veil import SQLiteVault
+>>> shield = Shield(vault=SQLiteVault("conversations.db", session="chat-42"))
+>>> shield.mask("Email jan.n@example.com about the invoice.").text
+'Email [EMAIL_1] about the invoice.'
+>>> later = Shield(vault=SQLiteVault("conversations.db", session="chat-42"))
+>>> later.restore("I emailed [EMAIL_1].").text  # a new Shield, maybe a new process
+'I emailed jan.n@example.com.'
+>>> later.vault.purge(timedelta(days=30))  # delete sessions unused for 30 days
+0
+```
+
+One file holds any number of sessions, each with its own placeholders; `reset()` clears only its own. Processes and threads can use the same file at once: a value always gets one placeholder, and a number is never handed out twice. The leak check keeps knowing the spellings and merged matches it has seen, across `Shield`s and processes.
+
+The file holds the real values in plain text. veil creates it readable by its owner only; keep it on an encrypted disk, and `purge` old sessions. It uses SQLite's write-ahead log, which needs a local disk (not a network share).
+
 ### One placeholder however a value is written
 
 By default, values are matched exactly, so `(555) 555-0123` and `555.555.0123` get two placeholders. Pass `normalize=True` to give every spelling of the same value one placeholder:
@@ -241,7 +262,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly unless you opt in.** Without `normalize=True`, `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`. With it, `restore()` writes the first spelling seen, so a reply can come back spelled differently from the prompt. Names, IPv4 addresses, and custom types are never normalized. Upper-case letters merge with their lower-case forms by Python's `str.lower()` (`I` with `i`, `Σ` with `σ`), and so do characters that Unicode treats as the same (NFC).
 - **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.
-- **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe. `MemoryVault` also remembers, for the leak check, the spellings merged by `normalize=True` and the matches inside a merged placeholder; with a vault of your own, each `Shield` remembers them separately.
+- **`MemoryVault` lives in memory and isn't thread-safe.** Its mappings last as long as the `Shield`. Use `SQLiteVault` to keep them between runs, or to share them between threads and processes. `MemoryVault` and `SQLiteVault` also remember, for the leak check, the spellings merged by `normalize=True` and the matches inside a merged placeholder; with a vault of your own, each `Shield` remembers them separately.
 - **Search patterns hold parts of values.** To search for many values at once, veil compiles regular expressions that contain up to 64 characters of them, and Python's `re` module may keep those in its cache after `reset()`. Call `re.purge()` if that matters.
 - **A large vault adds to every call.** `mask()` takes about linear time in the length of the input, but every stored value is looked at on every call: about 10 ms per call at 100,000 values. A new `Shield(normalize=True)` on a large existing vault also works out the key of each stored value on its first lookup, about 2-3 µs per value. Text in which thousands of overlapping matches merge is checked one known value at a time, as all text was in v0.2.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
@@ -249,8 +270,8 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Roadmap
 
-- **Next:** a persistent SQLite vault, and streaming restore for placeholders split across chunks.
-- **Later:** an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
+- **Next:** ready-made Claude Code hooks, `veil mask` and `veil restore` commands for copy-and-paste use with any chat app, and streaming restore for placeholders split across chunks.
+- **Later:** a local gateway in front of the model's API (so everything a tool like Claude Code sends is masked), an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
 
 ## Development
 

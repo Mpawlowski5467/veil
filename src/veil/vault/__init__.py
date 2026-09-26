@@ -2,5 +2,6 @@
 
 from .base import Vault
 from .memory import MemoryVault
+from .sqlite import SQLiteVault
 
-__all__ = ["MemoryVault", "Vault"]
+__all__ = ["MemoryVault", "SQLiteVault", "Vault"]

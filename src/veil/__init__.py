@@ -21,7 +21,7 @@ from .types import (
     ShieldWarning,
     Span,
 )
-from .vault import MemoryVault, Vault
+from .vault import MemoryVault, SQLiteVault, Vault
 
 __version__ = "0.3.0"
 
@@ -34,6 +34,7 @@ __all__ = [
     "RegexDetector",
     "RepairedPlaceholder",
     "RestoreResult",
+    "SQLiteVault",
     "Shield",
     "ShieldError",
     "ShieldWarning",

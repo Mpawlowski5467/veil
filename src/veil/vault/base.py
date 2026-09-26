@@ -9,8 +9,8 @@ from typing import Protocol, runtime_checkable
 class Vault(Protocol):
     """Stores the two-way mapping between original values and placeholders.
 
-    A vault owns placeholder numbering, so a persistent implementation (e.g. a
-    future SQLite vault) keeps numbering stable across processes. Values are
+    A vault owns placeholder numbering, so a persistent implementation (such
+    as `SQLiteVault`) keeps numbering stable across processes. Values are
     keyed by their exact string: the same string always maps to the same
     placeholder, and the first entity type it was stored with wins.
     """

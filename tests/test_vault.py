@@ -1,12 +1,18 @@
 import pytest
 
-from veil.vault import MemoryVault, Vault
+from veil.vault import MemoryVault, SQLiteVault, Vault
 from veil.vault.base import _Remembering
 
 
-@pytest.fixture
-def vault():
-    return MemoryVault()
+@pytest.fixture(params=["memory", "sqlite", "sqlite in memory"])
+def vault(request, tmp_path):
+    """Every vault must behave the same; these tests run against each."""
+    if request.param == "memory":
+        yield MemoryVault()
+        return
+    path = tmp_path / "vault.db" if request.param == "sqlite" else ":memory:"
+    with SQLiteVault(path) as vault:
+        yield vault
 
 
 def test_satisfies_protocol(vault):
@@ -157,7 +163,8 @@ class TestRemembered:
         vault.clear()
         assert vault._remembered() == []
 
-    def test_state_from_before_remembered_values(self, vault):
+    def test_state_from_before_remembered_values(self):
+        vault = MemoryVault()
         vault.get_or_create("a@example.com", "EMAIL")
         state = dict(vault.__dict__)
         del state["_remembered_values"]
