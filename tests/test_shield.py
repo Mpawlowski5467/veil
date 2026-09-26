@@ -385,18 +385,13 @@ class TestRedactedWarnings:
             "masked text."
         ]
 
-    def test_partial_mask_warning_gives_lengths_only(self):
+    def test_overlapping_names_leave_nothing_to_report(self):
         shield = Shield(redact_warnings=True, detectors=[])
         shield.add_entity("Anna Maria", "PERSON")
         shield.add_entity("Maria Kowalska", "PERSON")
         result = shield.mask("Present: Anna Maria Kowalska")
-        assert result.text == "Present: Anna [PERSON_1]"
-        assert result.warnings == [
-            "Partial mask: a detected PERSON value (10 characters) overlapped a "
-            "match that was kept, so 5 of its characters are still in the masked "
-            "text."
-        ]
-        assert all("Anna" not in w and "Maria" not in w for w in result.warnings)
+        assert result.text == "Present: [PERSON_1]"
+        assert result.warnings == []
 
     def test_strict_error_message_is_redacted(self):
         shield = Shield(redact_warnings=True)

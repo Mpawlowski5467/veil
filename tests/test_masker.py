@@ -3,6 +3,7 @@ import time
 
 import pytest
 
+from vaults import DictVault
 from veil.detectors import ManualDetector, RegexDetector
 from veil.masker import Masker, _LocalMemory, _resolve_sparse, resolve_overlaps
 from veil.types import MaskedEntity, Span
@@ -270,20 +271,20 @@ class TestWarnings:
             "in the masked text."
         ]
 
-    def test_partial_overlap_reports_the_part_left_in_text(self, vault):
-        # The longer span wins, and the part of the shorter one outside it
-        # stays in the text.
+    def test_partial_overlap_is_masked_as_one_placeholder(self, vault):
+        # The longer span wins, and the shorter one sticks out of it, so the
+        # two are masked together with the winner's type.
         text = "Jan Nowak Street"
         detector = FixedDetector(
             span(text, "Jan Nowak", "PERSON", source="manual", priority=100),
             span(text, "Nowak Street", "ADDRESS", source="manual", priority=100),
         )
         result = Masker([detector], vault).mask(text)
-        assert result.text == "Jan [ADDRESS_1]"
-        assert result.warnings == [
-            "Partial mask: detected PERSON value 'Jan Nowak' overlapped a match "
-            "that was kept, so 'Jan ' is still in the masked text."
+        assert result.text == "[ADDRESS_1]"
+        assert result.entities == [
+            MaskedEntity("[ADDRESS_1]", "Jan Nowak Street", "ADDRESS", 0, 16, "merged")
         ]
+        assert result.warnings == []
 
     def test_partial_overlap_on_both_sides(self, vault):
         text = "aa BBBB cc DDDD ee"
@@ -297,9 +298,9 @@ class TestWarnings:
         assert result.text == "a[Y_1]e"
         assert result.warnings == []
 
-    def test_partial_overlap_with_two_winners_reports_the_gap(self, vault):
+    def test_partial_overlap_bridging_two_winners_merges_all_three(self, vault):
         # The loser is shorter than both winners but bridges the gap between
-        # them, so only the gap is left over.
+        # them, so all three become one placeholder.
         text = "AAAAAAAAAA" + "mi" + "BBBBBBBBBB"
         detector = FixedDetector(
             Span(0, 10, "A" * 10, "X"),
@@ -307,11 +308,8 @@ class TestWarnings:
             Span(8, 14, "AAmiBB", "Z"),
         )
         result = Masker([detector], vault).mask(text)
-        assert result.text == "[X_1]mi[X_2]"
-        assert result.warnings == [
-            "Partial mask: detected Z value 'AAmiBB' overlapped a match that was "
-            "kept, so 'mi' is still in the masked text."
-        ]
+        assert result.text == "[X_1]"
+        assert result.warnings == []
 
     def test_contained_loser_is_not_a_partial_mask(self, vault):
         text = "id 555-123-4567"
@@ -478,42 +476,6 @@ class TestPlaceholderLikeInput:
             "restore() will treat it as a placeholder."
         ]
         assert all("48213" not in w for w in result.warnings)
-
-
-class DictVault:
-    """A third-party vault: implements Vault, but can't remember values."""
-
-    def __init__(self):
-        self._by_value = {}
-        self._by_placeholder = {}
-        self._counters = {}
-
-    def get_or_create(self, value, entity_type):
-        if value in self._by_value:
-            return self._by_value[value]
-        number = self._counters.get(entity_type, 0) + 1
-        self._counters[entity_type] = number
-        placeholder = f"[{entity_type}_{number}]"
-        self._by_value[value] = placeholder
-        self._by_placeholder[placeholder] = value
-        return placeholder
-
-    def get_placeholder(self, value):
-        return self._by_value.get(value)
-
-    def get_value(self, placeholder):
-        return self._by_placeholder.get(placeholder)
-
-    def items(self):
-        return list(self._by_placeholder.items())
-
-    def clear(self):
-        self._by_value.clear()
-        self._by_placeholder.clear()
-        self._counters.clear()
-
-    def __len__(self):
-        return len(self._by_value)
 
 
 class TestRememberedValues:

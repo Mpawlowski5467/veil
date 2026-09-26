@@ -101,7 +101,15 @@ Python's `\b` treats underscores and Chinese, Japanese, and Korean characters as
 '[PERSON_1] and [PERSON_2] meet in January.'
 ```
 
-Registered values match exactly and case-sensitively, but never inside a longer word: `"Jan"` does not mask the start of `"January"`. In scripts written without spaces (Chinese, Japanese, Thai, ...), where word boundaries aren't visible, a registered value matches wherever it appears. When matches overlap, the longest one wins. On a tie, a registered value beats a pattern match.
+Registered values match exactly and case-sensitively, but never inside a longer word: `"Jan"` does not mask the start of `"January"`. In scripts written without spaces (Chinese, Japanese, Thai, ...), where word boundaries aren't visible, a registered value matches wherever it appears. When matches overlap, the longest one wins. On a tie, a registered value beats a pattern match. If the match that lost sticks out past the winner, the two are masked together as one placeholder of the winner's type, so no part of either stays visible:
+
+```python
+>>> shield = Shield(detectors=[])
+>>> shield.add_entity("Anna Maria", "PERSON")
+>>> shield.add_entity("Maria Kowalska", "PERSON")
+>>> shield.mask("Present: Anna Maria Kowalska").text
+'Present: [PERSON_1]'
+```
 
 ### Multi-turn conversations
 
@@ -142,7 +150,7 @@ A rewritten form is only restored if it is in brackets and its normalized form (
 
 veil reports problems instead of raising:
 
-- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when a detected value was only partly masked because it overlapped another match that was kept, and when the input already contains text that `restore()` would treat as a placeholder: an exact one such as `[PERSON_1]`, or a rewritten form such as `[Person 1]` of a type in use.
+- **`mask()`** runs a leak check. If a known value (anything masked earlier or detected now) still appears in the masked text, it adds a warning. It also warns when the input already contains text that `restore()` would treat as a placeholder: an exact one such as `[PERSON_1]`, or a rewritten form such as `[Person 1]` of a type in use.
 - **`restore()`** leaves unknown placeholders (well-formed, but not in the vault) unchanged and lists them.
 
 ```python
@@ -165,7 +173,7 @@ except ShieldError as error:
     assert error.stage == "mask"
 ```
 
-By default, leak and partial-mask warnings quote the value that leaked. To log them safely, create the shield with `Shield(redact_warnings=True)`. Warnings then give only the type, placeholder, and length:
+By default, leak warnings quote the value that leaked. To log them safely, create the shield with `Shield(redact_warnings=True)`. Warnings then give only the type, placeholder, and length:
 
 ```python
 >>> shield = Shield(redact_warnings=True)
@@ -203,6 +211,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 - **Regex detection is not exhaustive.** Anything outside the formats above is missed. That includes national phone numbers without `+`, obfuscated addresses (`jan at example dot com`), card numbers split across lines or in unusual groupings, non-ASCII domain names (punycode `xn--` works), values split across lines, and addresses containing `?`, `*`, `` ` ``, `{`, `|`, or `}` (only the part after that character is masked). Some non-PII gets masked too: version strings like `1.2.3.4` look like IPv4 addresses, `icon@2x.png` looks like an email, and about one in ten runs of 13-19 digits with a card network's prefix passes the Luhn check (a list of four-digit IDs, a long order number). Don't make veil your only safeguard for regulated data.
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
+- **Overlapping matches are masked as one placeholder.** With `"Anna Kowalska"` registered, `Owner: Anna Kowalska/anna.k@example.com` becomes `Owner: [EMAIL_1]`: the `/` makes `Kowalska/anna.k@example.com` an address that overlaps the name. The model sees one placeholder where there were two values, and a reply that uses it restores both. The name, seen alone later, gets a placeholder of its own.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
 - **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.

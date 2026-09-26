@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Overlapping matches no longer leave part of a value visible. When the match that lost an overlap sticks out past the winner with a letter or digit, the two are masked together as one placeholder of the winner's type, and the entity's `source` is `"merged"`. This replaces the "Partial mask" warning, so `wrap(strict=True)` no longer raises for such input. The matches inside a merged placeholder get no placeholder of their own, but the leak check keeps knowing them.
 - The end of an IP address is no longer read as a US phone number. In `ssh 198.51.100.123 2222`, `100.123 2222` was detected as a phone and overlapped the address; and in `2001:db8::1 555-123-4567` the `1` ending the IPv6 address was taken as the number's country code.
 
 ### Performance

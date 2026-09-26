@@ -221,8 +221,8 @@ def _shrink_phone(value: str, limit: int) -> str | None:
 
     Only shrinks when ``limit`` is itself at a group boundary (just after a
     separator). If the other span starts mid-group, shrinking would strand the
-    digits before it, so the span is left alone and the masker's overlap
-    handling (and partial-mask warning) takes over.
+    digits before it, so the span is left alone and the masker masks the two
+    overlapping matches together.
     """
     head = value[:limit]
     kept = head.rstrip(_PHONE_SEPARATORS)

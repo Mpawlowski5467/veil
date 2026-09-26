@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import bisect
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Sequence, Set
 
 from ._search import CachedIndex
+from ._text import is_word_char
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .placeholders import (
@@ -204,10 +205,11 @@ class _LocalMemory:
 class Masker:
     """Replaces sensitive spans with placeholders.
 
-    Runs every detector, resolves overlaps with `resolve_overlaps`, asks the
-    vault for each value's placeholder (so a value keeps its placeholder across
-    calls), and then checks the output: it warns when a detected value was only
-    partly replaced, and when any known value still appears in it.
+    Runs every detector, resolves overlaps with `resolve_overlaps`, merges a
+    match that would stay partly visible with the matches it overlaps (see
+    `merge_partial_overlaps`), asks the vault for each value's placeholder (so
+    a value keeps its placeholder across calls), and then warns when any known
+    value still appears in the output.
     """
 
     def __init__(
@@ -290,9 +292,9 @@ class Masker:
                     )
                 candidates.append(span)
 
-        kept = resolve_overlaps(candidates)
+        spans = merge_partial_overlaps(text, candidates, resolve_overlaps(candidates))
         entities: list[MaskedEntity] = []
-        for span in kept:
+        for span, _ in spans:
             placeholder = self._vault.get_or_create(span.value, span.entity_type)
             # A value keeps the type it was first stored with, which may differ
             # from what this detector called it; report the type actually used.
@@ -307,6 +309,13 @@ class Masker:
                     source=span.source,
                 )
             )
+        # What a merged span replaced is remembered for later leak checks,
+        # without a placeholder of its own (so restore never produces it).
+        for (_, members), entity in zip(spans, entities, strict=True):
+            for member in members:
+                self._memory._remember(
+                    member.value, member.entity_type, entity.placeholder
+                )
 
         pieces: list[str] = []
         unmasked: list[str] = []  # the original text left between placeholders
@@ -321,8 +330,7 @@ class Masker:
         masked = "".join(reversed(pieces))
 
         warnings = self._placeholder_like_input(text)
-        warnings.extend(_partial_masks(text, candidates, kept, redact=self._redact))
-        warnings.extend(self._leaks(list(reversed(unmasked)), candidates))
+        warnings.extend(self._leaks(text, spans, list(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
     def _placeholder_like_input(self, text: str) -> list[str]:
@@ -353,7 +361,13 @@ class Masker:
             )
         return warnings
 
-    def _leaks(self, unmasked: list[str], candidates: Iterable[Span]) -> list[str]:
+    def _leaks(
+        self,
+        text: str,
+        spans: list[tuple[Span, tuple[Span, ...]]],
+        unmasked: list[str],
+        candidates: Iterable[Span],
+    ) -> list[str]:
         """Warn about every known value that still appears between placeholders.
 
         Known values are everything in the vault (from this call and earlier
@@ -389,6 +403,8 @@ class Masker:
         haystacks = unmasked if separator is None else [separator.join(unmasked)]
 
         found = self._leak_index.present(haystacks, known.keys(), manual)
+        if any(members for _, members in spans):
+            found |= self._cut_leaks(text, spans, known.keys(), manual, found)
 
         warnings = []
         for value, entity_type in known.items():
@@ -404,50 +420,86 @@ class Masker:
             warnings.append(f"Leak check: {label} still appears in the masked text.")
         return warnings
 
+    def _cut_leaks(
+        self,
+        text: str,
+        spans: list[tuple[Span, tuple[Span, ...]]],
+        known: Set[str],
+        manual: Set[str],
+        found: Set[str],
+    ) -> set[str]:
+        """Known values that a merged placeholder hides only part of.
 
-def _partial_masks(
-    text: str, candidates: Iterable[Span], kept: list[Span], *, redact: bool
-) -> list[str]:
-    """Warn about dropped spans that only partly overlapped a kept span.
+        Without merging, the leak check would have seen these between the
+        kept spans. A merged span can swallow the start or end of such an
+        occurrence, so the part left over no longer matches. Only the gaps
+        between kept spans that a merged span reaches into can hold one.
+        """
+        merged = [span for span, members in spans if members]
+        merged_starts = [span.start for span in merged]
+        kept: list[Span] = []
+        for span, members in spans:
+            kept.extend(members or (span,))
+        gaps: list[tuple[int, int]] = []
+        cursor = 0
+        for start, end in [*((k.start, k.end) for k in kept), (len(text), len(text))]:
+            if cursor < start:
+                i = bisect.bisect_right(merged_starts, start - 1) - 1
+                if i >= 0 and merged[i].end > cursor:
+                    gaps.append((cursor, start))
+            cursor = end
+        if not gaps:
+            return set()
+        pieces = [text[a:b] for a, b in gaps]
+        separator = _unused_char(pieces, known)
+        haystacks = pieces if separator is None else [separator.join(pieces)]
+        maybe = self._leak_index.present(haystacks, known, manual, update=False)
+        return {
+            value
+            for value in maybe - found
+            if _visible_occurrence(text, value, value in manual, gaps, merged)
+        }
 
-    The longest span wins an overlap, but when the loser sticks out past the
-    winner, the part outside it stays in the masked text. That part may be
-    sensitive (the tail of a phone number, a first name), so it is reported.
+
+def _visible_occurrence(
+    text: str,
+    value: str,
+    token: bool,
+    gaps: list[tuple[int, int]],
+    merged: list[Span],
+) -> bool:
+    """Whether ``value`` occurs in a gap and not entirely inside one merged span.
+
+    The ends of a gap count as word boundaries, as the leak check's separator
+    does. With ``token``, only whole-token occurrences count.
     """
-    kept_set = set(kept)
-    starts = [span.start for span in kept]
-    warnings: dict[str, None] = {}
-    for span in candidates:
-        if span in kept_set:
-            continue
-        leftovers = []
-        pos = span.start
-        i = max(bisect.bisect_right(starts, span.start) - 1, 0)
-        while i < len(kept) and kept[i].start < span.end:
-            if kept[i].end > pos:
-                if kept[i].start > pos:
-                    leftovers.append(text[pos : kept[i].start])
-                pos = kept[i].end
-            i += 1
-        if pos < span.end:
-            leftovers.append(text[pos : span.end])
-        if any(ch.isalnum() for piece in leftovers for ch in piece):
-            if redact:
-                size = sum(len(piece) for piece in leftovers)
-                message = (
-                    f"Partial mask: a detected {span.entity_type} value "
-                    f"({len(span.value)} characters) overlapped a match that was "
-                    f"kept, so {size} of its characters are still in the masked text."
+    size = len(value)
+    starts = [span.start for span in merged]
+    for gap_start, gap_end in gaps:
+        pos = text.find(value, gap_start, gap_end)
+        while pos != -1:
+            end = pos + size
+            if token and (
+                (
+                    pos > gap_start
+                    and is_word_char(text[pos])
+                    and is_word_char(text[pos - 1])
                 )
-            else:
-                shown = ", ".join(repr(piece) for piece in leftovers)
-                message = (
-                    f"Partial mask: detected {span.entity_type} value "
-                    f"{span.value!r} overlapped a match that was kept, so {shown} "
-                    "is still in the masked text."
+                or (
+                    end < gap_end
+                    and is_word_char(text[end - 1])
+                    and is_word_char(text[end])
                 )
-            warnings[message] = None
-    return list(warnings)
+            ):
+                pos = text.find(value, pos + 1, gap_end)
+                continue
+            i = bisect.bisect_right(starts, pos) - 1
+            if i >= 0 and end <= merged[i].end:
+                # Hidden. Later starts up to merged[i].end - size are too.
+                pos = text.find(value, max(pos + 1, merged[i].end - size + 1), gap_end)
+                continue
+            return True
+    return False
 
 
 def _memory_for(vault: Vault) -> _Remembering | _LocalMemory:
