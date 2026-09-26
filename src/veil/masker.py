@@ -258,6 +258,8 @@ class Masker:
 
     def __getstate__(self) -> dict[str, object]:
         """Pickle without the leak check's index; it is rebuilt on demand."""
+        if self._keys is not None:
+            self._keys.forget_stale(self._vault)
         state = dict(self.__dict__)
         state.pop("_leak_index", None)
         return state

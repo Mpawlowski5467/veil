@@ -621,6 +621,58 @@ class TestKeyIndex:
         assert len(s.vault) == 1000
         assert len(rebuilds) <= 2
 
+    def test_repeated_merged_value_keeps_the_index(self, monkeypatch):
+        import veil._normalize as normalize
+
+        rebuilds = []
+        real = normalize.KeyIndex._rebuild
+
+        def counting(self, vault):
+            rebuilds.append(1)
+            return real(self, vault)
+
+        monkeypatch.setattr(normalize.KeyIndex, "_rebuild", counting)
+        s = Shield(normalize=True)
+        s.add_entity("Anna Maria", "PERSON")
+        s.add_entity("Maria Kowalska", "PERSON")
+        for turn in range(50):
+            s.mask(f"Present: Anna Maria Kowalska, mail u{turn}@example.com")
+        assert len(rebuilds) <= 2
+
+    def test_another_writer_grows_the_shared_vault(self):
+        vault = MemoryVault()
+        a, b = Shield(vault=vault, normalize=True), Shield(vault=vault)
+        a.mask("call (555) 555-0123")  # a's index is built and in sync
+        b.mask("mail jan.n@example.com")  # b grows the vault behind a's back
+        assert a.mask("mail JAN.N@example.com").text == "mail [EMAIL_1]"
+
+    def test_another_writer_grows_the_vault_while_a_merged_value_repeats(self):
+        vault = MemoryVault()
+        a = Shield(vault=vault, normalize=True, custom_patterns={"TAIL": r"0130 00 12"})
+        b = Shield(vault=vault)
+        a.mask("call (555) 555-0123")
+        a.mask("IBAN DE89 3704 0044 0532 0130 00 12 ok")  # a merged value
+        b.mask("mail jan.n@example.com")  # a is now one value behind
+        a.mask("IBAN DE89 3704 0044 0532 0130 00 12 ok")  # the vault doesn't grow
+        assert a.mask("mail JAN.N@example.com").text == "mail [EMAIL_1]"
+
+    @pytest.mark.parametrize("then", ["pickle", "mask"])
+    @pytest.mark.parametrize("how", ["clear", "other shield's reset"])
+    def test_values_from_a_cleared_vault_are_dropped(self, how, then):
+        vault = MemoryVault()
+        s, other = Shield(vault=vault, normalize=True), Shield(vault=vault)
+        s.mask("Mail jan.n@example.com or JAN.N@EXAMPLE.COM, call 555-555-0123")
+        if how == "clear":
+            vault.clear()
+        else:
+            other.reset()
+        if then == "pickle":
+            assert b"jan.n@example.com" not in pickle.dumps(s)
+        else:
+            s.mask("Mail anna.k@example.com")
+            cached = {value for value, _ in s._masker._keys._keys.values()}
+            assert cached <= {value for _, value in vault.items()}
+
     def test_pickle_round_trip(self):
         s = Shield(normalize=True)
         s.mask("Call 555-555-0123 or (555) 555-0123, jan.n@example.com")

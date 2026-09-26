@@ -193,6 +193,23 @@ class KeyIndex:
         self._index: dict[TypeKey, str] | None = None
         self._synced = -1  # len(vault) when the index was last complete
 
+    def forget_stale(self, vault: Vault) -> None:
+        """Drop what is cached about values ``vault`` no longer stores.
+
+        Called when the vault may have been cleared by someone else (another
+        `Shield` sharing it, or a direct ``clear()``), so values from an
+        earlier conversation don't linger here or in a pickle.
+        """
+        live = {
+            placeholder: entry
+            for placeholder, entry in self._keys.items()
+            if vault.get_value(placeholder) == entry[0]
+        }
+        if len(live) != len(self._keys):
+            self._keys = live
+            self._index = None
+            self._synced = -1
+
     def type_key(self, entity_type: str, value: str) -> TypeKey | None:
         """Return ``value``'s key for ``entity_type``, or None to match exactly."""
         normalizer = self._normalizers.get(entity_type)
@@ -205,6 +222,8 @@ class KeyIndex:
         In order: the value's own placeholder; the placeholder of a stored
         value of the same type with the same key; a new placeholder.
         """
+        if len(vault) < self._synced:
+            self.forget_stale(vault)  # cleared since the last call
         placeholder = vault.get_placeholder(span.value)
         if placeholder is not None:
             return placeholder
@@ -217,17 +236,21 @@ class KeyIndex:
 
     def create(self, vault: Vault, span: Span, type_key: TypeKey | None) -> str:
         """Store ``span``'s value; index it under ``type_key`` (None: never)."""
+        if len(vault) < self._synced:
+            self.forget_stale(vault)  # cleared since the last call
         before = len(vault)
         placeholder = vault.get_or_create(span.value, span.entity_type)
         # Record the key this masker chose, even before the index exists: a
         # rebuild must not compute one for a merged value it stored as None.
-        self._keys[placeholder] = (span.value, type_key)
+        entry = (span.value, type_key)
+        previous = self._keys.get(placeholder)
+        self._keys[placeholder] = entry
         if self._index is not None:
             if self._synced == before and len(vault) == before + 1:
                 self._synced += 1
                 if type_key is not None:
                     self._index.setdefault(type_key, placeholder)
-            elif type_key is None:
+            elif type_key is None and previous != entry:
                 self._index = None  # it may list this value under a key
         return placeholder
 
@@ -249,17 +272,20 @@ class KeyIndex:
         return self._rebuild(vault).get(type_key)
 
     def _rebuild(self, vault: Vault) -> dict[TypeKey, str]:
-        keys = self._keys
+        cached = self._keys
+        keys: dict[str, tuple[str, TypeKey | None]] = {}
         index: dict[TypeKey, str] = {}
         items = vault.items()
         for placeholder, value in items:
-            entry = keys.get(placeholder)
+            entry = cached.get(placeholder)
             if entry is None or entry[0] != value:
                 entity_type = placeholder_type(placeholder)
                 type_key = self.type_key(entity_type, value) if entity_type else None
-                entry = keys[placeholder] = (value, type_key)
+                entry = (value, type_key)
+            keys[placeholder] = entry
             if entry[1] is not None:
                 index.setdefault(entry[1], placeholder)
+        self._keys = keys  # without placeholders the vault no longer has
         self._index = index
         self._synced = len(items)
         return index
