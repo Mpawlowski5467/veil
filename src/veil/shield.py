@@ -204,6 +204,7 @@ class Shield:
         patterns are configuration, not conversation state, so they are kept.
         """
         self._vault.clear()
+        self._masker.forget()
 
 
 _COPIED_ATTRS = ("__module__", "__name__", "__qualname__", "__doc__")

@@ -1,5 +1,9 @@
+import copy
 import inspect
+import pickle
+import random
 import re
+import time
 import typing
 import warnings
 
@@ -508,3 +512,98 @@ class TestShieldErrorIsPortable:
     def test_message(self):
         error = ShieldError("restore", ["a", "b"])
         assert str(error) == "restore() warned: a | b"
+
+
+def leaks(warnings):
+    return [w for w in warnings if w.startswith("Leak check")]
+
+
+class TestLargeInputs:
+    """The leak check searches with a cached index once inputs get large."""
+
+    FILLER = " filler" * 400  # with 64+ known values, big enough to index
+
+    def emails(self, count):
+        return " ".join(f"user{i}@example.com" for i in range(count))
+
+    def test_glued_known_value_is_still_reported(self):
+        shield = Shield()
+        shield.mask(self.emails(100) + " 555-555-0123")
+        result = shield.mask("call 555-555-01237" + self.FILLER)  # not detected
+        assert leaks(result.warnings) == [
+            "Leak check: known value '555-555-0123' ([PHONE_1]) still appears in "
+            "the masked text."
+        ]
+
+    def test_registered_value_needs_a_whole_token(self):
+        shield = Shield(detectors=[])
+        for i in range(100):
+            shield.add_entity(f"Name{i}", "PERSON")
+        shield.mask(" ".join(f"Name{i}" for i in range(100)))
+        assert shield.mask("Name7s and Name77x" + self.FILLER).warnings == []
+
+    def test_same_warnings_without_the_index(self, monkeypatch):
+        import veil._search as search
+
+        def conversation(seed):
+            r = random.Random(seed)
+            vault = MemoryVault()
+            shield, other = Shield(vault=vault), Shield(vault=vault)
+            out = []
+            for turn in range(40):
+                emails = [f"u{r.randrange(400)}@example.com" for _ in range(80)]
+                phones = [f"555-555-01{r.randrange(100):02d}" for _ in range(5)]
+                glued = [f"{p}7" for p in r.sample(phones, 2)]  # not detected
+                text = " ".join(emails + phones[turn % 2 :] + glued)
+                text += " filler" * (r.choice([50, 3000, 20000]) // 7)
+                if turn % 13 == 12:
+                    shield.reset()
+                elif turn % 17 == 16:
+                    other.reset()  # clears the shared vault behind shield's back
+                out.append(shield.mask(text).warnings)
+            return out
+
+        cached = conversation(3)
+        monkeypatch.setattr(search, "_worth_indexing", lambda count, size: False)
+        assert conversation(3) == cached
+        assert any(cached)
+
+    def test_conversation_does_not_fill_the_re_cache(self):
+        r = random.Random(1)
+        shield = Shield(custom_patterns={"URL": r"https://files\.example\.com/\w+"})
+        re.purge()
+        for call in range(60):
+            urls = [
+                f"https://files.example.com/{r.randrange(10**12)}{c}"
+                for c in "abcdefghijklmnopq" * 6
+            ]
+            emails = [f"user{call}_{i}@example.com" for i in range(100)]
+            shield.mask(" ".join(urls + emails) + " filler text" * 200)
+        assert len(re._cache) < 40  # one index per call would add 60
+
+    def test_pickle_leaves_the_index_out(self):
+        shield = Shield()
+        for i in range(20):
+            shield.add_entity(f"Name{i} Example", "PERSON")
+        shield.mask("Name3 Example " + self.emails(100) + self.FILLER)
+        data = pickle.dumps(shield)
+        assert b"_search" not in data
+        clone = pickle.loads(data)
+        text = "Name3 Example wrote to xuser7@example.com" + self.FILLER
+        assert clone.mask(text) == shield.mask(text)
+        assert copy.deepcopy(shield).mask(text) == shield.mask(text)
+
+    def test_linear_time(self):
+        shield = Shield()
+        for i in range(1600):
+            shield.add_entity(f"Person{i} Surname{i}", "PERSON")
+        text = " ".join(
+            f"Mail user{i}@example.com or call +44 20 7946 {i % 10000:04d}. "
+            f"Person{i % 1600} Surname{i % 1600} said hi."
+            for i in range(16_000)
+        )
+        start = time.perf_counter()
+        result = shield.mask(text)
+        assert time.perf_counter() - start < 3.0  # 1.3 MB: 0.6 s, 4.5 s in v0.2
+        assert len(result.entities) == 48_000
+        assert result.warnings == []

@@ -4,7 +4,7 @@ import time
 import pytest
 
 import veil._search as search
-from veil._search import LiteralIndex
+from veil._search import CachedIndex, LiteralIndex
 from veil._text import contains_token, find_token
 
 
@@ -161,6 +161,102 @@ def test_same_results_as_one_scan_per_value(monkeypatch, tuning):
             if text.startswith(v, p)
         )
         assert every_occurrence(index, text) == want
+
+
+class TestCachedIndex:
+    def test_small_inputs_check_values_one_by_one(self, monkeypatch):
+        def fail(*args):
+            raise AssertionError("built an index for a small input")
+
+        monkeypatch.setattr(search, "LiteralIndex", fail)
+        values = {f"v{i}" for i in range(1000)}
+        cache = CachedIndex()
+        assert cache.present(["v7 and v12"], values, set()) == {"v1", "v7", "v12"}
+        assert cache.present(["x" * 100_000], set(sorted(values)[:10]), set()) == set()
+
+    def test_large_inputs_use_the_index(self, monkeypatch):
+        built = []
+        real = search.LiteralIndex
+        monkeypatch.setattr(
+            search, "LiteralIndex", lambda v: built.append(1) or real(v)
+        )
+        values = {f"user{i}@example.com" for i in range(500)}
+        text = "mail user42@example.com. " * 200
+        cache = CachedIndex()
+        assert cache.present([text], values, set()) == {"user42@example.com"}
+        assert cache.present([text], values | {"new@example.com"}, set()) == {
+            "user42@example.com"
+        }
+        assert built == [1]  # the new value was checked on its own
+
+    def test_recursion_error_falls_back(self, monkeypatch):
+        def deep(values):
+            raise RecursionError
+
+        monkeypatch.setattr(search, "LiteralIndex", deep)
+        values = {f"user{i}@example.com" for i in range(500)}
+        text = "mail user42@example.com. " * 200
+        assert CachedIndex().present([text], values, set()) == {"user42@example.com"}
+
+    def test_empty_value_counts_like_in(self, monkeypatch):
+        monkeypatch.setattr(search, "_INDEX_MIN_VALUES", 0)
+        monkeypatch.setattr(search, "_INDEX_MIN_TEXT", 0)
+        monkeypatch.setattr(search, "_INDEX_MIN_WORK", 0)
+        assert CachedIndex().present(["abc"], {"", "b", "z"}, set()) == {"", "b"}
+        assert CachedIndex().present(["abc"], {"", "b"}, {""}) == {"b"}
+
+    def test_values_no_longer_asked_about_are_ignored(self):
+        cache = CachedIndex()
+        values = {f"user{i}@example.com" for i in range(100)}
+        text = " ".join(sorted(values)) + " filler" * 2000  # big enough to index
+        assert cache.present([text], values, set()) == values
+        fewer = set(sorted(values)[:60])
+        assert cache.present([text], fewer, set(), update=False) == fewer
+
+    @pytest.mark.parametrize("seed", range(40))
+    def test_same_results_as_one_scan_per_value_as_values_change(
+        self, monkeypatch, seed
+    ):
+        r = random.Random(seed)
+        tuning = {
+            "_INDEX_MIN_VALUES": r.choice([0, 3, 64]),
+            "_INDEX_MIN_TEXT": r.choice([0, 50]),
+            "_INDEX_MIN_WORK": r.choice([0, 200]),
+            "_REBUILD_WORK": r.choice([1, 50, 1 << 13, 10**9]),
+            "_VALUE_WORK": r.choice([0, 256]),
+            "_MAX_WIDTH": r.choice([1, 2, 32]),
+            "_BUCKET": r.choice([1, 16]),
+            "_MIN_PREFIX": r.choice([1, 3]),
+        }
+        for name, value in tuning.items():
+            monkeypatch.setattr(search, name, value)
+        alpha = r.choice(
+            ["ab", "abc -", "aB1_ ", "a\u00e9\u0301 \u4e2dx", "-.", "ab\x00\x01"]
+        )
+
+        def word():
+            size = r.randint(0 if r.random() < 0.02 else 1, 6)
+            return "".join(r.choice(alpha) for _ in range(size))
+
+        cache = CachedIndex()
+        values = {word() for _ in range(r.randint(0, 40))}
+        for _ in range(r.randint(1, 25)):
+            op = r.random()
+            if op < 0.1:
+                values = {word() for _ in range(r.randint(0, 5))}  # vault cleared
+            elif op < 0.15:
+                cache.clear()
+            else:
+                values |= {word() for _ in range(r.randint(0, 15))}
+            haystacks = [
+                "".join(r.choice(alpha) for _ in range(r.randint(0, 120)))
+                for _ in range(r.randint(1, 3))
+            ]
+            tokens = {v for v in values if r.random() < 0.4}
+            update = r.random() < 0.8
+            assert cache.present(
+                haystacks, set(values), tokens, update=update
+            ) == one_by_one(haystacks, values, tokens)
 
 
 class TestPerformance:

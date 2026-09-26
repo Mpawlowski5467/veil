@@ -360,3 +360,100 @@ def _tokens_one_by_one(text: str, values: Iterable[str]) -> list[tuple[int, str]
     pairs = [(start, value) for value in values for start in find_token(text, value)]
     pairs.sort(key=_by_start_longest_first)
     return pairs
+
+
+# CachedIndex builds an index only when it pays off; below these sizes
+# (measured) checking each value on its own is as fast or faster.
+_INDEX_MIN_VALUES = 64
+_INDEX_MIN_TEXT = 2048
+_INDEX_MIN_WORK = 1 << 20  # values x characters
+
+
+def _worth_indexing(count: int, size: int) -> bool:
+    """Whether building an index for one scan beats checking each value."""
+    return (
+        count >= _INDEX_MIN_VALUES
+        and size >= _INDEX_MIN_TEXT
+        and count * size >= _INDEX_MIN_WORK
+    )
+
+
+# CachedIndex rebuilds once checking the values missing from its index one at
+# a time has cost about this many characters of scanning per indexed value
+# (building costs roughly that much per value).
+_REBUILD_WORK = 1 << 13
+# What checking one value costs besides its scan, in characters.
+_VALUE_WORK = 256
+
+
+class CachedIndex:
+    """A `LiteralIndex` kept from call to call for a set of values that grows.
+
+    The leak check looks for every known value in every masked text, and the
+    known values mostly carry over from one call to the next. This keeps one
+    index over the values it last saw and checks newer values one at a time,
+    until that has cost about as much as rebuilding the index ("ski rental").
+    Results never depend on what is cached: indexed values that are no longer
+    asked about are ignored, and values that aren't indexed are checked
+    directly.
+    """
+
+    __slots__ = ("_debt", "_index", "_indexed")
+
+    def __init__(self) -> None:
+        """Create an empty cache."""
+        self._index: LiteralIndex | None = None
+        self._indexed: frozenset[str] = frozenset()
+        self._debt = 0
+
+    def clear(self) -> None:
+        """Drop the index."""
+        self._index = None
+        self._indexed = frozenset()
+        self._debt = 0
+
+    def present(
+        self,
+        haystacks: Sequence[str],
+        values: Set[str],
+        tokens: Set[str],
+        *,
+        update: bool = True,
+    ) -> set[str]:
+        """Return the ``values`` that occur in any of ``haystacks``.
+
+        Same rules as `find_present`. With ``update=False`` the cache is only
+        read, never rebuilt.
+        """
+        size = sum(map(len, haystacks))
+        if update and self._index is not None and 2 * len(values) < len(self._indexed):
+            self.clear()  # most indexed values are gone: the vault was cleared
+        index = self._index
+        if index is None:
+            if not (update and _worth_indexing(len(values), size)):
+                return _present_one_by_one(haystacks, values, tokens)
+            rest = self._rebuild(values)
+        else:
+            indexed = self._indexed
+            rest = [value for value in values if value not in indexed]
+            if update and rest:
+                self._debt += len(rest) * (size + _VALUE_WORK)
+                if self._debt > len(values) * _REBUILD_WORK:
+                    rest = self._rebuild(values)
+        index = self._index
+        if index is None:  # the build failed (RecursionError)
+            return _present_one_by_one(haystacks, values, tokens)
+        found = {value for value in index.present(haystacks, tokens) if value in values}
+        if rest:
+            found |= _present_one_by_one(haystacks, rest, tokens)
+        return found
+
+    def _rebuild(self, values: Set[str]) -> list[str]:
+        """Index ``values``; return the ones left to check one at a time."""
+        self.clear()
+        try:
+            self._index = LiteralIndex(values)
+        except RecursionError:
+            return list(values)
+        self._indexed = frozenset(value for value in values if value)
+        return [""] if "" in values else []

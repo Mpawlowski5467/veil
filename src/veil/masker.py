@@ -5,7 +5,7 @@ from __future__ import annotations
 import bisect
 from collections.abc import Iterable, Sequence
 
-from ._text import contains_token
+from ._search import CachedIndex
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .placeholders import (
@@ -103,6 +103,25 @@ class Masker:
         self._vault = vault
         self._redact = redact_warnings
         self._tolerant = tolerant_restore
+        self._leak_index = CachedIndex()
+
+    def forget(self) -> None:
+        """Drop what is cached about the conversation so far.
+
+        `Shield.reset` calls this after clearing the vault.
+        """
+        self._leak_index.clear()
+
+    def __getstate__(self) -> dict[str, object]:
+        """Pickle without the leak check's index; it is rebuilt on demand."""
+        state = dict(self.__dict__)
+        state.pop("_leak_index", None)
+        return state
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        """Unpickle, including a masker pickled by an older version."""
+        self.__dict__.update(state)
+        self._leak_index = CachedIndex()
 
     def mask(self, text: str) -> MaskResult:
         """Mask ``text``.
@@ -207,7 +226,9 @@ class Masker:
         an overlap. Registered manual entities are matched with the same
         whole-token rule used to detect them (so "Jan" isn't reported inside
         "January"); every other value is matched as a plain substring, because
-        a phone number glued to letters is still a phone number.
+        a phone number glued to letters is still a phone number. All of them
+        are searched for together, with an index kept between calls (see
+        `CachedIndex`).
         """
         known: dict[str, str] = {}  # value -> entity type
         for stored, value in self._vault.items():
@@ -226,13 +247,11 @@ class Masker:
         separator = _unused_char(unmasked, known)
         haystacks = unmasked if separator is None else [separator.join(unmasked)]
 
+        found = self._leak_index.present(haystacks, known.keys(), manual)
+
         warnings = []
         for value, entity_type in known.items():
-            if value in manual:
-                found = any(contains_token(piece, value) for piece in haystacks)
-            else:
-                found = any(value in piece for piece in haystacks)
-            if not found:
+            if value not in found:
                 continue
             placeholder = self._vault.get_placeholder(value)
             if self._redact:
