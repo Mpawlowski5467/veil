@@ -451,6 +451,42 @@ class TestLeaksAroundMergedSpans:
         assert result.text == "[KEY_1] zz Janx"  # "Janx" is not the name
         assert result.warnings == []
 
+    @pytest.mark.parametrize(
+        ("patterns", "text", "masked"),
+        [
+            # The gap starts where the merged span ends: that is a boundary.
+            ({"KEY": "K{10}", "LOS": "KKJa"}, "KKKKKKKKKKJan zz", "[KEY_1]n zz"),
+            # A glued occurrence first; the cut one after it still counts.
+            ({"KEY": "K{10}", "LOS": "anKKKK"}, "Janx JanKKKKKKKKKK", "Janx J[KEY_1]"),
+        ],
+    )
+    def test_registered_value_cut_by_a_merged_span(self, patterns, text, masked):
+        s = shield(("Jan", "PERSON"), custom_patterns=patterns)
+        s.mask("Hi Jan .")
+        result = s.mask(text)
+        assert result.text == masked
+        assert leaks(result.warnings) == [
+            "Leak check: known value 'Jan' ([PERSON_1]) still appears in the "
+            "masked text."
+        ]
+
+    @pytest.mark.parametrize(
+        "prefix", ["", "".join(map(chr, [*range(9), *range(14, 32)]))]
+    )
+    def test_value_hidden_once_and_cut_later_in_the_same_gap(self, prefix):
+        # "abc" is hidden in the merged span, then cut by it; the search skips
+        # past the hidden one without leaving the gap. With every control
+        # character in the text there is no separator, and gaps are searched
+        # one at a time.
+        vault = MemoryVault()
+        vault.get_or_create("abc", "V")
+        s = Shield(vault=vault, custom_patterns={"K": "KKKKK", "L": "abcK", "R": "KKa"})
+        result = s.mask(prefix + "abcKKKKKabcz")
+        assert result.text == prefix + "[K_1]bcz"
+        assert leaks(result.warnings) == [
+            "Leak check: known value 'abc' ([V_1]) still appears in the masked text."
+        ]
+
     def test_many_hidden_values_stay_fast(self):
         # Each merge hides a known value; each is looked for once, not once
         # per gap.

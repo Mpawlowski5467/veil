@@ -74,6 +74,7 @@ class TestEmail:
             "unsubscribe?email=jan@example.com",
             "Users/Jan/jan@example.com",
             "unsubscribe?email%3DJan@example.com",  # URL-encoded glue
+            "unsubscribe?email%3dJan@example.com",
             "Hello%20Jan@example.com",
             "\u212arl@example.com",  # KELVIN SIGN, lowercases to k
             "\u212bngstrom@example.com",  # ANGSTROM SIGN
