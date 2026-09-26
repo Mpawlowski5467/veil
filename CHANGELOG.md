@@ -5,6 +5,7 @@
 ### Performance
 
 - Resolving overlapping matches takes linear time. 200,000 detected values used to take about 3.5 s.
+- Registered values are found in about one pass over the text, however many there are (from 8 on). Detecting 5,000 registered names in 1.4 MB went from 2.2 s to 0.1 s.
 
 ## 0.2.0
 

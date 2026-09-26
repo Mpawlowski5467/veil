@@ -1,14 +1,22 @@
+import copy
+import pickle
+import time
 import unicodedata
 
 import pytest
 
 from veil.detectors import Detector, ManualDetector
+from veil.detectors import manual as manual_module
 from veil.types import Span
 
 
-@pytest.fixture
-def detector():
-    return ManualDetector()
+@pytest.fixture(params=["loop", "index"])
+def detector(request):
+    """A detector searching one value at a time, or all at once with an index."""
+    detector = ManualDetector()
+    if request.param == "index":
+        detector._INDEX_MIN_VALUES = 1
+    return detector
 
 
 def found(detector, text):
@@ -181,3 +189,92 @@ def test_overlapping_occurrences_of_one_value(detector):
     # A rejected occurrence must not hide a valid one that overlaps it.
     detector.add("ab-ab", "CODE")
     assert [s.start for s in detector.detect("xab-ab-ab")] == [4]
+
+
+def registered(count, template="Name{} Example"):
+    detector = ManualDetector()
+    for i in range(count):
+        detector.add(template.format(i), "PERSON")
+    return detector
+
+
+class TestIndex:
+    """From _INDEX_MIN_VALUES registered values on, detect() uses a LiteralIndex."""
+
+    def test_index_is_rebuilt_after_add(self):
+        detector = registered(10, "Name{}")
+        assert [s.value for s in detector.detect("Name3 Name99")] == ["Name3"]
+        detector.add("Name99", "PERSON")
+        assert [s.value for s in detector.detect("Name3 Name99")] == ["Name3", "Name99"]
+
+    def test_reregistering_changes_the_type(self):
+        detector = registered(10, "Name{}")
+        detector.detect("Name1")
+        detector.add("Name1", "ORG")
+        assert detector.detect("Name1") == [
+            Span(0, 5, "Name1", "ORG", "manual", ManualDetector.PRIORITY)
+        ]
+
+    def test_recursion_error_falls_back(self, monkeypatch):
+        def deep(values):
+            raise RecursionError
+
+        monkeypatch.setattr(manual_module, "LiteralIndex", deep)
+        detector = registered(10, "Name{}")
+        assert [s.value for s in detector.detect("Name3, Name4")] == ["Name3", "Name4"]
+
+    def test_value_added_while_the_index_is_built(self, monkeypatch):
+        detector = registered(20)
+        real = manual_module.LiteralIndex
+
+        def racing(values):
+            index = real(values)
+            detector.add("Anna Example", "PERSON")  # lands after the snapshot
+            return index
+
+        monkeypatch.setattr(manual_module, "LiteralIndex", racing)
+        detector.detect("x")
+        monkeypatch.setattr(manual_module, "LiteralIndex", real)
+        assert [s.value for s in detector.detect("Hi Anna Example")] == ["Anna Example"]
+
+    def test_shallow_copy_shares_the_values(self):
+        original = registered(20)
+        original.detect("warm the index")
+        clone = copy.copy(original)
+        clone.add("Anna Example", "PERSON")
+        assert [s.value for s in original.detect("Anna Example")] == ["Anna Example"]
+
+    def test_pickle_leaves_the_index_out(self):
+        detector = registered(20)
+        detector.detect("warm the index")
+        data = pickle.dumps(detector)
+        assert b"_search" not in data
+        assert [s.value for s in pickle.loads(data).detect("Name3 Example")] == [
+            "Name3 Example"
+        ]
+
+    def test_state_from_before_the_index(self):
+        # What unpickling a v0.2 detector hands __setstate__: no _index.
+        detector = registered(20)
+        state = {"_entities": dict(detector._entities)}
+        clone = ManualDetector.__new__(ManualDetector)
+        clone.__dict__.update(state)
+        assert [s.value for s in clone.detect("Name3 Example")] == ["Name3 Example"]
+
+
+class TestPerformance:
+    def test_many_entities(self):
+        detector = registered(5000, "Person{0} Surname{0}")
+        text = " ".join(
+            f"Person{i % 5000} Surname{i % 5000} wrote." for i in range(40_000)
+        )
+        start = time.perf_counter()
+        assert len(detector.detect(text)) == 40_000
+        assert time.perf_counter() - start < 1.5
+
+    def test_long_shared_prefix_repeated(self):
+        base = "x" * 5000
+        detector = registered(200, base + "{}")
+        start = time.perf_counter()
+        assert detector.detect((base + "y") * 100) == []
+        assert time.perf_counter() - start < 1.0

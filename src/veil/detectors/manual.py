@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from .._search import LiteralIndex
 from .._text import find_token
 from ..placeholders import validate_entity_type
 from ..types import Span
@@ -28,6 +29,14 @@ class ManualDetector:
 
     #: Tie-break priority of manual spans; higher than any regex span.
     PRIORITY: ClassVar[int] = 100
+
+    # From this many registered values on, detect() searches for all of them
+    # in one pass (see LiteralIndex) instead of one value at a time.
+    _INDEX_MIN_VALUES: ClassVar[int] = 8
+
+    # Built on demand. A class-level default, so a detector unpickled from an
+    # older version (whose __dict__ lacks it) still works.
+    _index: LiteralIndex | None = None
 
     def __init__(self) -> None:
         """Create a detector with no registered values."""
@@ -58,6 +67,20 @@ class ManualDetector:
         Occurrences of different values may overlap (``"Jan Nowak"`` and
         ``"Nowak"``); the masker keeps the longest.
         """
+        entities = self._entities
+        index = self._current_index()
+        if index is not None:
+            return [
+                Span(
+                    start=start,
+                    end=start + len(value),
+                    value=value,
+                    entity_type=entities[value],
+                    source="manual",
+                    priority=self.PRIORITY,
+                )
+                for start, value in index.token_occurrences(text)
+            ]
         spans = [
             Span(
                 start=start,
@@ -67,11 +90,38 @@ class ManualDetector:
                 source="manual",
                 priority=self.PRIORITY,
             )
-            for value, entity_type in self._entities.items()
+            for value, entity_type in entities.items()
             for start in find_token(text, value)
         ]
         spans.sort(key=lambda s: (s.start, -len(s)))
         return spans
+
+    def _current_index(self) -> LiteralIndex | None:
+        """Return an index of every registered value, or None to use the loop.
+
+        Values are never removed, so an index with as many values as are
+        registered has all of them. Checking that here, rather than dropping
+        the index in add(), also catches an index built from a snapshot taken
+        while another thread was adding a value, and a shallow copy that
+        shares the entity dict.
+        """
+        entities = self._entities
+        if len(entities) < self._INDEX_MIN_VALUES:
+            return None
+        index = self._index
+        if index is None or len(index) != len(entities):
+            try:
+                index = LiteralIndex(tuple(entities))
+            except RecursionError:  # the stack is nearly full: use the loop
+                return None
+            self._index = index
+        return index
+
+    def __getstate__(self) -> dict[str, object]:
+        """Pickle the registered values only; the index is rebuilt on demand."""
+        state = dict(self.__dict__)
+        state.pop("_index", None)
+        return state
 
     def __len__(self) -> int:
         """Return the number of registered values."""
