@@ -516,7 +516,7 @@ def leaks(warnings):
 class TestLargeInputs:
     """The leak check searches with a cached index once inputs get large."""
 
-    FILLER = " filler" * 400  # with 64+ known values, big enough to index
+    FILLER = " filler" * 1500  # with 100 known values, big enough to index
 
     def emails(self, count):
         return " ".join(f"user{i}@example.com" for i in range(count))

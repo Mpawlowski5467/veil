@@ -20,6 +20,7 @@ import math
 import re
 from bisect import bisect_left
 from collections.abc import Iterable, Iterator, Sequence, Set
+from itertools import groupby
 
 from ._text import contains_token, find_token, is_word_char
 
@@ -45,6 +46,7 @@ _MIN_FANOUT = 16
 # child's values from a dict (see `_Wide`).
 _MAX_WIDTH = 32
 _LAST_CODE_POINT = 0x10FFFF
+_FIRST_ASTRAL = "\U00010000"
 
 # A scan gives up and checks the values it hasn't settled one at a time once
 # its work passes _BASE_WORK + values x characters / _CHARS_PER_WORK. A
@@ -110,7 +112,7 @@ class _Skeleton:
         path starts with; they are candidates wherever the path matches.
         """
         values, lookup = self.values, self.lookup
-        forced = nesting >= _MAX_NESTING or depth >= _MAX_DEPTH
+        forced = nesting >= _MAX_NESTING or depth >= _MAX_DEPTH - 1
         alts: list[str] = []
         leaves: list[str] = []  # one-character branch ends, merged into a class
         for i, j in self.children(lo, hi, depth):
@@ -131,7 +133,7 @@ class _Skeleton:
             else:
                 end = _common_prefix_len(values[i], values[j - 1])
                 if end > depth + 1:
-                    end = min(end, _MAX_DEPTH)
+                    end = min(end, _MAX_DEPTH - 1)
                 alts.append(
                     re.escape(values[i][depth:end])
                     + self.node(i, j, end, above, nesting + 1)
@@ -225,16 +227,23 @@ class LiteralIndex:
         """
         ordered = sorted({value for value in values if value})
         skeleton = _Skeleton(ordered)
-        top = (
-            skeleton.alternatives(0, len(ordered), 0, (), 0, top=True)
-            if ordered
-            else []
-        )
+        # re tests first characters outside the BMP one by one at every
+        # position, so values starting with one are left out of the skeleton:
+        # a single range finds them, and the character picks the values.
+        bmp = bisect_left(ordered, _FIRST_ASTRAL)
+        top = skeleton.alternatives(0, bmp, 0, (), 0, top=True) if bmp else []
         fanout = max(_MIN_FANOUT, math.isqrt(4 * len(top)))
-        self._regexes = tuple(
+        regexes = [
             re.compile("|".join(top[i : i + fanout]))
             for i in range(0, len(top), fanout)
-        )
+        ]
+        if bmp < len(ordered):
+            astral = ordered[bmp:]
+            for first, group in groupby(astral, key=lambda value: value[0]):
+                skeleton.lookup[first] = tuple(group)
+            low, high = re.escape(astral[0][0]), re.escape(astral[-1][0])
+            regexes.append(re.compile(f"[{low}-{high}]"))
+        self._regexes = tuple(regexes)
         self._lookup = skeleton.lookup
         self._values = tuple(ordered)
 
@@ -261,7 +270,7 @@ class LiteralIndex:
             while match is not None:
                 start = match.start()
                 key = match.group()
-                found = lookup[key]
+                found = lookup.get(key, ())  # () for an astral non-first char
                 if isinstance(found, _Wide):
                     after = start + len(key)
                     found = (
@@ -362,28 +371,20 @@ def _tokens_one_by_one(text: str, values: Iterable[str]) -> list[tuple[int, str]
     return pairs
 
 
-# CachedIndex builds an index only when it pays off; below these sizes
-# (measured) checking each value on its own is as fast or faster.
+# CachedIndex never indexes fewer values than this: checking each value on
+# its own is as fast.
 _INDEX_MIN_VALUES = 64
-_INDEX_MIN_TEXT = 2048
-_INDEX_MIN_WORK = 1 << 20  # values x characters
-
-
-def _worth_indexing(count: int, size: int) -> bool:
-    """Whether building an index for one scan beats checking each value."""
-    return (
-        count >= _INDEX_MIN_VALUES
-        and size >= _INDEX_MIN_TEXT
-        and count * size >= _INDEX_MIN_WORK
-    )
-
-
-# CachedIndex rebuilds once checking the values missing from its index one at
-# a time has cost about this many characters of scanning per indexed value
-# (building costs roughly that much per value).
+# CachedIndex builds (or rebuilds) its index once checking values one at a time
+# has cost about this many characters of scanning per value, which is roughly
+# what building the index costs.
 _REBUILD_WORK = 1 << 13
 # What checking one value costs besides its scan, in characters.
 _VALUE_WORK = 256
+
+
+def _worth_indexing(count: int, work: int) -> bool:
+    """Whether ``work`` spent checking ``count`` values one by one pays for an index."""
+    return count >= _INDEX_MIN_VALUES and work > count * _REBUILD_WORK
 
 
 class CachedIndex:
@@ -422,15 +423,20 @@ class CachedIndex:
     ) -> set[str]:
         """Return the ``values`` that occur in any of ``haystacks``.
 
-        Same rules as `find_present`. With ``update=False`` the cache is only
-        read, never rebuilt.
+        A value in ``tokens`` only counts where it is a whole token (see
+        `find_token`); any other value counts wherever it occurs, as with
+        ``in``. With ``update=False`` the cache is only read, never rebuilt.
         """
         size = sum(map(len, haystacks))
         if update and self._index is not None and 2 * len(values) < len(self._indexed):
             self.clear()  # most indexed values are gone: the vault was cleared
         index = self._index
         if index is None:
-            if not (update and _worth_indexing(len(values), size)):
+            if not update:
+                return _present_one_by_one(haystacks, values, tokens)
+            work = len(values) * (size + _VALUE_WORK)
+            if not _worth_indexing(len(values), self._debt + work):
+                self._debt += work
                 return _present_one_by_one(haystacks, values, tokens)
             rest = self._rebuild(values)
         else:
@@ -438,7 +444,7 @@ class CachedIndex:
             rest = [value for value in values if value not in indexed]
             if update and rest:
                 self._debt += len(rest) * (size + _VALUE_WORK)
-                if self._debt > len(values) * _REBUILD_WORK:
+                if _worth_indexing(len(values), self._debt):
                     rest = self._rebuild(values)
         index = self._index
         if index is None:  # the build failed (RecursionError)

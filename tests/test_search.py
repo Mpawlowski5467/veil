@@ -181,7 +181,7 @@ class TestCachedIndex:
             search, "LiteralIndex", lambda v: built.append(1) or real(v)
         )
         values = {f"user{i}@example.com" for i in range(500)}
-        text = "mail user42@example.com. " * 200
+        text = "mail user42@example.com. " * 400
         cache = CachedIndex()
         assert cache.present([text], values, set()) == {"user42@example.com"}
         assert cache.present([text], values | {"new@example.com"}, set()) == {
@@ -200,10 +200,24 @@ class TestCachedIndex:
 
     def test_empty_value_counts_like_in(self, monkeypatch):
         monkeypatch.setattr(search, "_INDEX_MIN_VALUES", 0)
-        monkeypatch.setattr(search, "_INDEX_MIN_TEXT", 0)
-        monkeypatch.setattr(search, "_INDEX_MIN_WORK", 0)
+        monkeypatch.setattr(search, "_REBUILD_WORK", 0)
         assert CachedIndex().present(["abc"], {"", "b", "z"}, set()) == {"", "b"}
         assert CachedIndex().present(["abc"], {"", "b"}, {""}) == {"b"}
+
+    def test_first_build_waits_until_it_pays_off(self, monkeypatch):
+        # Building costs about _REBUILD_WORK characters of scanning per value;
+        # until checking values one by one has cost that much, don't build.
+        built = []
+        real = search.LiteralIndex
+        monkeypatch.setattr(
+            search, "LiteralIndex", lambda v: built.append(1) or real(v)
+        )
+        values = {f"user{i}@example.com" for i in range(1000)}
+        text = "no addresses here " * 170  # about 3,000 characters
+        cache = CachedIndex()
+        for expected in ([], [], [1], [1]):
+            assert cache.present([text], values, set()) == set()
+            assert built == expected
 
     def test_values_no_longer_asked_about_are_ignored(self):
         cache = CachedIndex()
@@ -220,8 +234,6 @@ class TestCachedIndex:
         r = random.Random(seed)
         tuning = {
             "_INDEX_MIN_VALUES": r.choice([0, 3, 64]),
-            "_INDEX_MIN_TEXT": r.choice([0, 50]),
-            "_INDEX_MIN_WORK": r.choice([0, 200]),
             "_REBUILD_WORK": r.choice([1, 50, 1 << 13, 10**9]),
             "_VALUE_WORK": r.choice([0, 256]),
             "_MAX_WIDTH": r.choice([1, 2, 32]),
@@ -259,8 +271,41 @@ class TestCachedIndex:
             ) == one_by_one(haystacks, values, tokens)
 
 
+def test_regexes_hold_at_most_max_depth_characters_of_a_value():
+    # The patterns can outlive reset() in re's cache; the README says so.
+    for count in (2, 20, 40):  # a bucket, a forced branch, a wide node
+        values = ["k" * 100 + f"{i:02d}" for i in range(count)]
+        index = LiteralIndex(values)
+        for regex in index._regexes:
+            assert "k" * (search._MAX_DEPTH + 1) not in regex.pattern
+        assert index.present(["x" + values[-1]], set()) == {values[-1]}
+
+
+def test_token_occurrences_falls_back_when_the_budget_runs_out(monkeypatch):
+    calls = []
+    real = search._tokens_one_by_one
+    monkeypatch.setattr(
+        search, "_tokens_one_by_one", lambda t, v: calls.append(1) or real(t, v)
+    )
+    index = LiteralIndex("-" * 100 + f"{i:04d}" for i in range(1000))
+    assert index.token_occurrences("-" * 60_000) == []
+    assert calls == [1]
+
+
 class TestPerformance:
     """Inputs that take quadratic time when each value is searched on its own."""
+
+    def test_values_starting_outside_the_bmp(self):
+        # re tests astral first characters one by one at every position.
+        index = LiteralIndex(chr(0x20000 + i) + "\u5c71" for i in range(1000))
+        text = "plain English text, nothing to find here. " * 2400  # 100 KB
+        start = time.perf_counter()
+        assert index.present([text], set()) == set()
+        assert index.token_occurrences(text) == []
+        assert time.perf_counter() - start < 0.05  # 0.2 s before
+        astral = chr(0x20000 + 7) + "\u5c71"
+        assert index.present([f"x{astral}y"], set()) == {astral}
+        assert index.token_occurrences(f"{chr(0x20000)}{astral}") == [(1, astral)]
 
     def test_many_values(self):
         values = [f"user{i}@example.com" for i in range(15_000)]
