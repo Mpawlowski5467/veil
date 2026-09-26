@@ -14,9 +14,9 @@
 ### Performance
 
 - Resolving overlapping matches takes linear time. 200,000 detected values used to take about 3.5 s.
-- The leak check searches for every known value in about one pass, with an index kept from call to call, instead of scanning the text once per value. Masking 1.3 MB with 48,000 values went from 4.5 s to 0.6 s.
-- A large vault costs less per call: with 100,000 stored values, masking a short prompt went from 70 ms to 20 ms.
-- Registered values are found in about one pass over the text, however many there are (from 8 on). Detecting 5,000 registered names in 1.4 MB went from 2.2 s to 0.1 s.
+- The leak check searches for every known value in about one pass, with an index kept from call to call, instead of scanning the text once per value. Masking 1.3 MB with 48,000 values went from 4.5 s to 0.4 s.
+- A large vault costs less per call: with 100,000 stored values, masking a short prompt went from 70 ms to 10 ms.
+- Registered values are found in about one pass over the text, however many there are (from 8 on). Detecting 5,000 registered names in 1.2 MB went from 2.2 s to 0.05 s.
 
 ## 0.2.0
 
