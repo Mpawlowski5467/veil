@@ -7,6 +7,7 @@ import inspect
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 
+from ._normalize import BUILTIN_NORMALIZERS
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .detectors.regex import PatternLike, RegexDetector
@@ -41,6 +42,7 @@ class Shield:
         vault: Vault | None = None,
         redact_warnings: bool = False,
         tolerant_restore: bool = True,
+        normalize: bool = False,
     ) -> None:
         r"""Create a shield.
 
@@ -58,13 +60,17 @@ class Shield:
                 messages) are safe to log.
             tolerant_restore: Also restore placeholders the model rewrote,
                 like ``[person 1]`` or ``【PERSON_1】``. See `Restorer`.
+            normalize: Give one placeholder to every spelling of the same
+                email address, phone number, IPv6 address, card number, or
+                IBAN (``(555) 555-0123`` and ``555.555.0123``). `restore`
+                writes each of them as the spelling seen first.
 
         Raises:
             ValueError: If both ``custom_patterns`` and ``detectors`` are given,
                 or a custom pattern is invalid.
             TypeError: If a custom pattern is not a ``str`` or a ``str``-based
-                ``re.Pattern``, or a detector or the vault does not implement
-                its protocol.
+                ``re.Pattern``, a detector or the vault does not implement its
+                protocol, or ``normalize`` is not a bool.
         """
         if detectors is not None and custom_patterns is not None:
             raise ValueError(
@@ -85,6 +91,10 @@ class Shield:
                     f"{type(detector).__name__} does not implement "
                     "detect(text) -> list[Span]"
                 )
+        if not isinstance(normalize, bool):
+            raise TypeError(
+                f"normalize must be True or False, got {type(normalize).__name__}"
+            )
         if vault is None:
             vault = MemoryVault()
         elif not isinstance(vault, Vault):
@@ -97,6 +107,7 @@ class Shield:
             vault,
             redact_warnings=redact_warnings,
             tolerant_restore=tolerant_restore,
+            normalizers=BUILTIN_NORMALIZERS if normalize else None,
         )
         self._restorer = Restorer(vault, tolerant=tolerant_restore)
 
@@ -200,8 +211,9 @@ class Shield:
     def reset(self) -> None:
         """Clear the vault, e.g. to start a new conversation.
 
-        Placeholder numbering restarts at 1. Registered entities and custom
-        patterns are configuration, not conversation state, so they are kept.
+        Placeholder numbering restarts at 1, and the spellings remembered for
+        the leak check are forgotten. Registered entities and custom patterns
+        are configuration, not conversation state, so they are kept.
         """
         self._vault.clear()
         self._masker.forget()

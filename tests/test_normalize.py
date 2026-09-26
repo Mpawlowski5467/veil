@@ -1,10 +1,14 @@
 """Normalizers: when two spellings are the same value."""
 
+import copy
+import pickle
+import random
 import unicodedata
 
 import pytest
 
-from veil import RegexDetector
+from vaults import DictVault
+from veil import MemoryVault, RegexDetector, Shield, ShieldError
 from veil._normalize import (
     BUILTIN_NORMALIZERS,
     normalize_card,
@@ -13,6 +17,9 @@ from veil._normalize import (
     normalize_ipv6,
     normalize_phone,
 )
+from veil.detectors import ManualDetector
+from veil.masker import Masker
+from veil.restorer import Restorer
 
 FW = str.maketrans(
     "0123456789", "\uff10\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18\uff19"
@@ -207,3 +214,407 @@ class TestOtherTypes:
     def test_every_detected_form_is_one_whole_span(self, value):
         # The forms above are what the built-in detector emits as a whole span.
         assert [s.value for s in RegexDetector().detect(f"x {value} y")][:1] == [value]
+
+
+class TestShield:
+    def test_default_is_exact(self):
+        shield = Shield()
+        assert shield.mask("(555) 555-0123 555-555-0123").text == "[PHONE_1] [PHONE_2]"
+
+    def test_normalize_must_be_bool(self):
+        with pytest.raises(TypeError):
+            Shield(normalize={"ORDER": str.upper})
+
+    def test_one_placeholder_restores_the_first_spelling(self):
+        shield = Shield(normalize=True)
+        masked = shield.mask("Call 555-555-0123, or (555) 555-0123. Jan.N@Example.com")
+        assert masked.text == "Call [PHONE_1], or [PHONE_1]. [EMAIL_1]"
+        assert [(e.placeholder, e.value, e.entity_type) for e in masked.entities] == [
+            ("[PHONE_1]", "555-555-0123", "PHONE"),
+            ("[PHONE_1]", "(555) 555-0123", "PHONE"),
+            ("[EMAIL_1]", "Jan.N@Example.com", "EMAIL"),
+        ]
+        assert shield.restore(masked.text).text == (
+            "Call 555-555-0123, or 555-555-0123. Jan.N@Example.com"
+        )
+        assert masked.warnings == []
+
+    def test_across_calls_the_vault_keeps_one_value(self):
+        shield = Shield(normalize=True)
+        shield.mask("jan.n@example.com")
+        assert shield.mask("JAN.N@EXAMPLE.COM and Jan.N@example.com").text == (
+            "[EMAIL_1] and [EMAIL_1]"
+        )
+        assert shield.vault.items() == [("[EMAIL_1]", "jan.n@example.com")]
+
+    def test_tolerant_restore_uses_the_first_spelling(self):
+        shield = Shield(normalize=True)
+        shield.mask("+44 20 7946 0958 / +44 (0)20 7946 0958")
+        assert shield.restore("[phone 1] 【PHONE_1】").text == (
+            "+44 20 7946 0958 +44 20 7946 0958"
+        )
+
+    def test_leak_check_remembers_variant_spellings(self):
+        shield = Shield(normalize=True)
+        shield.mask("555-555-0123 (555) 555-0123")
+        assert shield.mask("(555) 555-01234").warnings == [
+            "Leak check: known value '(555) 555-0123' ([PHONE_1]) still appears "
+            "in the masked text."
+        ]
+
+    def test_redacted_variant_leak(self):
+        shield = Shield(normalize=True, redact_warnings=True)
+        shield.mask("555-555-0123 (555) 555-0123")
+        assert shield.mask("(555) 555-01234").warnings == [
+            "Leak check: a known PHONE value ([PHONE_1]) still appears in the "
+            "masked text."
+        ]
+        with pytest.raises(ShieldError) as error:
+            shield.wrap(lambda prompt: prompt, strict=True)("(555) 555-01234")
+        assert "555" not in str(error.value)
+
+    def test_reset_forgets_variants(self):
+        shield = Shield(normalize=True)
+        shield.mask("555-555-0123 (555) 555-0123")
+        shield.reset()
+        assert shield.mask("(555) 555-01234").warnings == []
+        assert shield.mask("(555) 555-0123 555-555-0123").text == "[PHONE_1] [PHONE_1]"
+        assert shield.vault.items() == [("[PHONE_1]", "(555) 555-0123")]
+
+    def test_variant_dropped_when_its_placeholder_changes_hands(self):
+        shield = Shield(normalize=True)
+        shield.mask("555-555-0123 (555) 555-0123")
+        shield.vault.clear()  # directly, not through reset()
+        shield.mask("555-555-0199")  # [PHONE_1] is now another number
+        assert shield.mask("(555) 555-01234").warnings == []
+        assert shield.mask("(555) 555-0123").text == "[PHONE_2]"
+
+    def test_shared_vault(self):
+        vault = MemoryVault()
+        exact, norm = Shield(vault=vault), Shield(vault=vault, normalize=True)
+        exact.mask("jan.n@example.com")
+        assert norm.mask("JAN.N@EXAMPLE.COM").text == "[EMAIL_1]"
+        assert exact.mask("JAN.N@EXAMPLE.COM").text == "[EMAIL_2]"
+        assert norm.mask("Jan.N@example.com JAN.N@EXAMPLE.COM").text == (
+            "[EMAIL_1] [EMAIL_2]"  # first stored spelling wins; exact hits win
+        )
+
+    def test_types_never_merge(self):
+        shield = Shield(
+            normalize=True, custom_patterns={"CONTACT": r"jan@example\.com"}
+        )
+        assert shield.mask("jan@example.com JAN@example.com").text == (
+            "[CONTACT_1] [EMAIL_1]"
+        )
+        shield = Shield(normalize=True)
+        shield.add_entity("555-555-0123", "PERSON")
+        assert shield.mask("555-555-0123 (555) 555-0123").text == "[PERSON_1] [PHONE_1]"
+
+    def test_manual_email_merges_with_detected_spellings(self):
+        shield = Shield(normalize=True)
+        shield.add_entity("Jan.N@Example.com", "EMAIL")
+        assert shield.mask("Jan.N@Example.com jan.n@example.com").text == (
+            "[EMAIL_1] [EMAIL_1]"
+        )
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: Shield(
+                normalize=True,
+                custom_patterns={"PHONE": r"Tel: \d{3}-\d{3}-\d{4}|\d{3}-\d{3}-\d{4}"},
+            ),
+            lambda: _with_entity(Shield(normalize=True), "Tel: 555-555-0123", "PHONE"),
+        ],
+    )
+    def test_value_with_a_label_is_not_merged(self, make):
+        shield = make()
+        assert shield.mask("Tel: 555-555-0123, 555-555-0123").text == (
+            "[PHONE_1], [PHONE_2]"
+        )
+
+    def test_placeholder_like_warnings_unchanged(self):
+        exact, norm = Shield(), Shield(normalize=True)
+        for shield in (exact, norm):
+            shield.mask("555-555-0123 (555) 555-0123")
+        text = "see [PHONE_2] and [phone 3]"
+        assert norm.mask(text).warnings == exact.mask(text).warnings
+
+    def test_person_1_vs_person_10_style(self):
+        shield = Shield(normalize=True)
+        shield.mask(" ".join(f"555-555-01{i:02d}" for i in range(1, 12)))
+        masked = shield.mask(" ".join(f"(555) 555-01{i:02d}" for i in range(1, 12)))
+        assert masked.text.split() == [f"[PHONE_{i}]" for i in range(1, 12)]
+        assert (
+            shield.restore("[PHONE_1] [PHONE_10]").text == "555-555-0101 555-555-0110"
+        )
+
+    def test_masker_accepts_custom_normalizers(self):
+        masker = Masker(
+            [ManualDetector(), RegexDetector({"ORDER": r"(?i)ord-\d{4}"})],
+            MemoryVault(),
+            normalizers={"ORDER": str.upper},
+        )
+        assert masker.mask("ord-1234 ORD-1234 ord-9999").text == (
+            "[ORDER_1] [ORDER_1] [ORDER_2]"
+        )
+
+    def test_equal_keys_of_different_types_never_merge(self):
+        masker = Masker(
+            [
+                RegexDetector(
+                    {"ORDER": r"ord-\d{4}", "TICKET": r"ORD-\d{4}"},
+                    include_builtins=False,
+                )
+            ],
+            MemoryVault(),
+            normalizers={"ORDER": str.upper, "TICKET": str.upper},
+        )
+        assert masker.mask("ord-1234 ORD-1234 ord-1234").text == (
+            "[ORDER_1] [TICKET_1] [ORDER_1]"
+        )
+
+
+def _with_entity(shield, value, entity_type):
+    shield.add_entity(value, entity_type)
+    return shield
+
+
+PHONES = [*US_FORMS, *UK_FORMS, "555-555-0199", "+44 20 7946 0999", "555-555-0123 x12"]
+EMAILS = [
+    "jan.n@example.com",
+    "Jan.N@Example.com",
+    "JAN.N@EXAMPLE.COM",
+    "anna.k@example.org",
+    "Anna.K@Example.org",
+    "jan.n+news@example.com",
+]
+OTHERS = [
+    "2001:db8::1",
+    "2001:DB8:0:0:0:0:0:1",
+    "4111 1111 1111 1111",
+    "4111111111111111",
+    "DE89 3704 0044 0532 0130 00",
+    "de89370400440532013000",
+]
+GLUE = [" ", ", ", "\n", " (", ") ", "; ", " | "]
+BREAK = ["7", "x"]  # glued to a phone or card, the detector misses it
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_fuzz_matches_exact_mode(seed):
+    """Same spans, round trip to first spellings, and the same leak reports."""
+    rng = random.Random(seed)
+    exact, norm = Shield(), Shield(normalize=True)
+    for turn in range(600):
+        if turn % 30 == 0:
+            exact.reset()
+            norm.reset()
+        parts = []
+        for _ in range(rng.randint(1, 6)):
+            value = rng.choice(rng.choice([PHONES, EMAILS, OTHERS]))
+            parts.append(value + (rng.choice(BREAK) if rng.random() < 0.1 else ""))
+        text = rng.choice(GLUE).join(parts)
+        m_exact, m_norm = exact.mask(text), norm.mask(text)
+        context = f"seed={seed} turn={turn} text={text!r}"
+        spans = [(e.start, e.end, e.value) for e in m_norm.entities]
+        assert spans == [(e.start, e.end, e.value) for e in m_exact.entities], context
+        expected, cursor = "", 0
+        for e in m_norm.entities:
+            expected += text[cursor : e.start] + norm.vault.get_value(e.placeholder)
+            cursor = e.end
+        restored = norm.restore(m_norm.text)
+        assert restored.text == expected + text[cursor:], context
+        assert restored.warnings == [], context
+        assert len(m_norm.warnings) == len(m_exact.warnings), context
+        assert len({e.placeholder for e in m_norm.entities}) <= len(
+            {e.placeholder for e in m_exact.entities}
+        ), context
+
+
+CARD = "4111 1111 1111 1111"
+
+
+def leaks(warnings):
+    return [w for w in warnings if w.startswith("Leak check")]
+
+
+class TestSharedVaults:
+    VARIANTS = "Call 555-555-0123 or (555) 555-0123."
+    LATER = "Old note: (555) 555-01234"
+
+    def test_new_shield_per_request(self):
+        vault = MemoryVault()
+        Shield(vault=vault, normalize=True).mask(self.VARIANTS)
+        assert leaks(Shield(vault=vault, normalize=True).mask(self.LATER).warnings) == [
+            "Leak check: known value '(555) 555-0123' ([PHONE_1]) still appears "
+            "in the masked text."
+        ]
+
+    def test_exact_shield_sees_the_other_shields_variants(self):
+        vault = MemoryVault()
+        Shield(vault=vault, normalize=True).mask(self.VARIANTS)
+        assert len(leaks(Shield(vault=vault).mask(self.LATER).warnings)) == 1
+
+    def test_strict_wrap_on_a_shared_vault(self):
+        vault = MemoryVault()
+        Shield(vault=vault, normalize=True).mask(self.VARIANTS)
+        llm = Shield(vault=vault, normalize=True).wrap(lambda p: p, strict=True)
+        with pytest.raises(ShieldError):
+            llm(self.LATER)
+
+    def test_other_shields_reset_forgets_variants(self):
+        vault = MemoryVault()
+        a = Shield(vault=vault, normalize=True)
+        b = Shield(vault=vault)
+        a.mask(self.VARIANTS)
+        b.reset()
+        a.mask("New chat: 555-555-0123")
+        assert a.mask(self.LATER).warnings == []
+
+
+class TestThirdPartyVault:
+    def test_masker_remembers_variants_itself(self):
+        s = Shield(vault=DictVault(), normalize=True)
+        assert s.mask(TestSharedVaults.VARIANTS).text == "Call [PHONE_1] or [PHONE_1]."
+        assert len(leaks(s.mask(TestSharedVaults.LATER).warnings)) == 1
+
+    def test_reset_forgets(self):
+        s = Shield(vault=DictVault(), normalize=True)
+        s.mask(TestSharedVaults.VARIANTS)
+        s.reset()
+        s.mask("New chat: 555-555-0123")  # the same number gets [PHONE_1] again
+        assert s.mask(TestSharedVaults.LATER).warnings == []
+
+    def test_clearing_the_vault_elsewhere_drops_stale_entries(self):
+        vault = DictVault()
+        s = Shield(vault=vault, normalize=True)
+        s.mask(TestSharedVaults.VARIANTS)
+        vault.clear()
+        s.mask("555-555-0199")  # [PHONE_1] now holds another number
+        assert s.mask(TestSharedVaults.LATER).warnings == []
+
+
+EXT = {"EXT": r"0123 [A-Z]+"}  # merges with a phone ending in 0123
+
+
+class TestNormalizeAndMerge:
+    @pytest.mark.parametrize(
+        "turns",
+        [
+            ["Call 555-555-0123", "Call 555-555-0123 ABC", "Call (555) 555-0123"],
+            ["Call 555-555-0123 ABC", "Call (555) 555-0123", "Call 555-555-0123"],
+        ],
+    )
+    def test_union_is_never_normalized(self, turns):
+        s = Shield(custom_patterns=EXT, normalize=True)
+        for turn in turns:
+            masked = s.mask(turn)
+            restored = s.restore(masked.text).text
+            if "ABC" in turn:
+                assert [e.source for e in masked.entities] == ["merged"]
+                assert restored == turn  # never merged with the plain number
+            else:
+                assert "ABC" not in restored
+
+    def test_union_first_then_variant_gets_its_own_placeholder(self):
+        s = Shield(custom_patterns=EXT, normalize=True)
+        assert s.mask("Call 555-555-0123 ABC").text == "Call [PHONE_1]"
+        assert s.mask("Call (555) 555-0123").text == "Call [PHONE_2]"
+        assert s.mask("Call 555.555.0123").text == "Call [PHONE_2]"
+
+    def test_merged_member_variant_is_known(self):
+        s = Shield(normalize=True)
+        s.mask(f"Pay +1 {CARD} today")
+        [warning] = s.mask(f"card x{CARD}").warnings
+        assert "[CREDIT_CARD_1]" in warning
+
+
+class TestMergedValuesAreExact:
+    """Through the internal seam, with a lossy normalizer (digits only)."""
+
+    @staticmethod
+    def masker():
+        vault = MemoryVault()
+        detectors = [RegexDetector({"EXT": r"0123 [A-Z]+"})]
+
+        def digits(value: str) -> str:
+            return "".join(ch for ch in value if ch.isdigit())
+
+        return Masker(detectors, vault, normalizers={"PHONE": digits}), vault
+
+    @pytest.mark.parametrize(
+        "turns",
+        [
+            ["Call 555-555-0123", "Call 555-555-0123 ABC"],
+            ["Call 555-555-0123 ABC", "Call 555-555-0123", "Call (555) 555-0123"],
+        ],
+    )
+    def test_round_trip(self, turns):
+        masker, vault = self.masker()
+        for turn in turns:
+            restored = Restorer(vault).restore(masker.mask(turn).text).text
+            assert ("ABC" in restored) == ("ABC" in turn)
+
+
+class TestNormalizeGuards:
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            ("ADMIN_EMAIL=jan@example.com", "admin_email=jan@example.com"),
+            ("unsubscribe?email=Jan@example.com", "unsubscribe?EMAIL=jan@example.com"),
+            ("Users/Jan/jan@example.com", "users/jan/jan@example.com"),
+            ("\u212arl@example.com", "karl@example.com"),  # KELVIN SIGN
+        ],
+    )
+    def test_glued_labels_and_lookalike_letters_stay_exact(self, first, second):
+        s = Shield(normalize=True)
+        a, b = s.mask(first), s.mask(second)
+        assert a.entities[0].placeholder != b.entities[0].placeholder
+        assert s.restore(b.text).text == second
+
+
+class TestKeyIndex:
+    def test_vault_refilled_to_the_same_size(self):
+        vault = MemoryVault()
+        s = Shield(vault=vault, normalize=True)
+        assert s.mask("555-555-0123").text == "[PHONE_1]"
+        vault.clear()
+        vault.get_or_create("555-555-0199", "PHONE")  # [PHONE_1] again, same size
+        masked = s.mask("(555) 555-0123")
+        assert masked.text == "[PHONE_2]"
+        assert s.restore(masked.text).text == "(555) 555-0123"
+
+    def test_growing_conversation_rarely_rebuilds(self, monkeypatch):
+        import veil._normalize as normalize
+
+        rebuilds = []
+        real = normalize.KeyIndex._rebuild
+
+        def counting(self, vault):
+            rebuilds.append(1)
+            return real(self, vault)
+
+        monkeypatch.setattr(normalize.KeyIndex, "_rebuild", counting)
+        s = Shield(normalize=True)
+        for turn in range(1000):
+            s.mask(f"Call 555-555-{turn:04d} or ({555}) 555-{turn:04d}")
+        assert len(s.vault) == 1000
+        assert len(rebuilds) <= 2
+
+    def test_pickle_round_trip(self):
+        s = Shield(normalize=True)
+        s.mask("Call 555-555-0123 or (555) 555-0123, jan.n@example.com")
+        clone = pickle.loads(pickle.dumps(s))
+        text = "Call 555.555.0123, JAN.N@example.com, x(555) 555-01234"
+        assert clone.mask(text) == s.mask(text)
+        assert copy.deepcopy(s).mask(text) == s.mask(text)
+
+    def test_state_from_before_normalization(self):
+        # What unpickling a v0.2 masker hands __setstate__: no _keys.
+        s = Shield()
+        masker = s._masker
+        state = {k: v for k, v in masker.__dict__.items() if k != "_keys"}
+        masker.__dict__.clear()
+        masker.__setstate__(state)
+        assert s.mask("555-555-0123 (555) 555-0123").text == "[PHONE_1] [PHONE_2]"

@@ -128,6 +128,31 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 `reset()` keeps registered entities and custom patterns.
 
+### One placeholder however a value is written
+
+By default, values are matched exactly, so `(555) 555-0123` and `555.555.0123` get two placeholders. Pass `normalize=True` to give every spelling of the same value one placeholder:
+
+```python
+>>> shield = Shield(normalize=True)
+>>> shield.mask("Call (555) 555-0123 or 555.555.0123, or mail Jan.N@Example.com.").text
+'Call [PHONE_1] or [PHONE_1], or mail [EMAIL_1].'
+>>> shield.mask("New address: jan.n@example.com").text
+'New address: [EMAIL_1]'
+>>> shield.restore("I called [PHONE_1] and wrote to [EMAIL_1].").text
+'I called (555) 555-0123 and wrote to Jan.N@Example.com.'
+```
+
+`restore()` writes each value the way it was first seen. What counts as the same value:
+
+| Type | Shares a placeholder | Stays apart |
+| --- | --- | --- |
+| `EMAIL` | Different letter case | Plus tags and dots (`jan+news@`, `j.an@`), anything glued before the address (`ADMIN_EMAIL=`) |
+| `PHONE` | Separators and brackets, a `+1` or `1` before a North American number, an explicit `(0)` trunk prefix (`+44 (0)20 ...`) | A different extension, a trunk `0` without brackets (`+44 020 ...`), a label captured with the number (`Tel: ...`) |
+| `IPV6` | Upper or lower case, zeros written out or compressed | A zone (`%eth0`) or prefix length (`/64`) |
+| `CREDIT_CARD`, `IBAN` | Spaces and dashes between the groups; IBAN letter case | |
+
+Values of different types never share a placeholder, and names, IPv4 addresses, and custom types are always matched exactly. Each `MaskedEntity` still holds the text as it was written, so several entities can share a placeholder with different values.
+
 ### When the model rewrites a placeholder
 
 Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-escaped brackets. `restore()` still finds these, and lists each one in `repaired`:
@@ -213,7 +238,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Overlapping matches are masked as one placeholder.** With `"Anna Kowalska"` registered, `Owner: Anna Kowalska/anna.k@example.com` becomes `Owner: [EMAIL_1]`: the `/` makes `Kowalska/anna.k@example.com` an address that overlaps the name. The model sees one placeholder where there were two values, and a reply that uses it restores both. The name, seen alone later, gets a placeholder of its own.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
-- **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
+- **Values are matched exactly unless you opt in.** Without `normalize=True`, `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`. With it, `restore()` writes the first spelling seen, so a reply can come back spelled differently from the prompt. Names, IPv4 addresses, and custom types are never normalized. Upper-case letters merge with their lower-case forms by Python's `str.lower()` (`I` with `i`, `Σ` with `σ`), and so do characters that Unicode treats as the same (NFC).
 - **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.

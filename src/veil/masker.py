@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import bisect
 import re
-from collections.abc import Iterable, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 
+from ._normalize import KeyIndex, Normalizer
 from ._search import CachedIndex
 from ._text import is_word_char
 from .detectors.base import Detector
@@ -219,6 +220,7 @@ class Masker:
         *,
         redact_warnings: bool = False,
         tolerant_restore: bool = True,
+        normalizers: Mapping[str, Normalizer] | None = None,
     ) -> None:
         """Create a masker.
 
@@ -230,11 +232,16 @@ class Masker:
             tolerant_restore: Whether the matching `Restorer` also restores
                 rewritten placeholders (``[person 1]``). Input that it would
                 treat as a placeholder is reported.
+            normalizers: Internal and may change. Maps an entity type to a
+                function giving a value's key (see ``veil._normalize``); a
+                value whose key matches a stored value of its type shares that
+                value's placeholder.
         """
         self._detectors = tuple(detectors)
         self._vault = vault
         self._redact = redact_warnings
         self._tolerant = tolerant_restore
+        self._keys = KeyIndex(normalizers) if normalizers else None
         self._memory = _memory_for(vault)
         self._leak_index = CachedIndex()
 
@@ -245,6 +252,8 @@ class Masker:
         """
         if isinstance(self._memory, _LocalMemory):
             self._memory.clear()
+        if self._keys is not None:
+            self._keys.clear()
         self._leak_index.clear()
 
     def __getstate__(self) -> dict[str, object]:
@@ -256,6 +265,7 @@ class Masker:
     def __setstate__(self, state: dict[str, object]) -> None:
         """Unpickle, including a masker pickled by an older version."""
         self.__dict__.update(state)
+        self.__dict__.setdefault("_keys", None)
         if "_memory" not in state:
             self._memory = _memory_for(self._vault)
         self._leak_index = CachedIndex()
@@ -293,9 +303,22 @@ class Masker:
                 candidates.append(span)
 
         spans = merge_partial_overlaps(text, candidates, resolve_overlaps(candidates))
+        vault, keys, memory = self._vault, self._keys, self._memory
         entities: list[MaskedEntity] = []
-        for span, _ in spans:
-            placeholder = self._vault.get_or_create(span.value, span.entity_type)
+        for span, members in spans:
+            if keys is None:
+                placeholder = vault.get_or_create(span.value, span.entity_type)
+            elif members:
+                # A merged value is not one value of its type: never normalize
+                # it, and never let a later spelling merge into it.
+                placeholder = keys.create(vault, span, None)
+            else:
+                placeholder = keys.placeholder_for(vault, span)
+                if vault.get_value(placeholder) != span.value:
+                    # A variant spelling: not in the vault, so remember it.
+                    memory._remember(
+                        span.value, placeholder_type(placeholder) or "?", placeholder
+                    )
             # A value keeps the type it was first stored with, which may differ
             # from what this detector called it; report the type actually used.
             match = PLACEHOLDER_RE.fullmatch(placeholder)
@@ -313,9 +336,7 @@ class Masker:
         # without a placeholder of its own (so restore never produces it).
         for (_, members), entity in zip(spans, entities, strict=True):
             for member in members:
-                self._memory._remember(
-                    member.value, member.entity_type, entity.placeholder
-                )
+                memory._remember(member.value, member.entity_type, entity.placeholder)
 
         pieces: list[str] = []
         unmasked: list[str] = []  # the original text left between placeholders

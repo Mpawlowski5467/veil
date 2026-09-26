@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `Shield(normalize=True)` gives one placeholder to every spelling of the same value: email addresses that differ only in case; phone numbers written with different separators, with or without `+1`, or with a `(0)` trunk prefix (extensions are kept apart); IPv6 addresses in any form; and card numbers and IBANs with or without spaces. `restore()` writes each value as it was first seen. Values of different types never merge, and names, IPv4 addresses, and custom types stay exact, as does anything that isn't one whole value (`Tel: ...`, `ADMIN_EMAIL=...`). The leak check still knows every spelling it has masked until `reset()`. Off by default.
+
 ### Changed
 
 - Overlapping matches no longer leave part of a value visible. When the match that lost an overlap sticks out past the winner with a letter or digit, the two are masked together as one placeholder of the winner's type, and the entity's `source` is `"merged"`. This replaces the "Partial mask" warning, so `wrap(strict=True)` no longer raises for such input. The matches inside a merged placeholder get no placeholder of their own, but the leak check keeps knowing them.

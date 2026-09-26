@@ -29,6 +29,9 @@ from .detectors.regex import (
     US_PHONE_PATTERN,
     _intl_phone_end,
 )
+from .placeholders import placeholder_type
+from .types import Span
+from .vault.base import Vault
 
 #: A normalizer maps a value to its key, or to ``None`` to match it exactly.
 Normalizer: TypeAlias = Callable[[str], str | None]
@@ -151,3 +154,101 @@ BUILTIN_NORMALIZERS: Mapping[str, Normalizer] = MappingProxyType(
         "IBAN": normalize_iban,
     }
 )
+
+
+#: An entity type and a key: values with the same one share a placeholder.
+TypeKey: TypeAlias = tuple[str, str]
+
+
+class KeyIndex:
+    """Finds the stored value a new spelling should share a placeholder with.
+
+    Maps ``(entity type, key)`` to the placeholder of the first stored value
+    with that key. The index is derived from the vault and kept between calls
+    while ``len(vault)`` is what it was when the index was last in sync; every
+    hit is checked against the vault, so a stale index can only miss a merge
+    (giving a new placeholder), never make a wrong one.
+    """
+
+    def __init__(self, normalizers: Mapping[str, Normalizer]) -> None:
+        """Create an index for the given normalizers, by entity type."""
+        self._normalizers = dict(normalizers)
+        self.clear()
+
+    def clear(self) -> None:
+        """Forget everything cached."""
+        # placeholder -> (value stored under it, its type key or None)
+        self._keys: dict[str, tuple[str, TypeKey | None]] = {}
+        self._index: dict[TypeKey, str] | None = None
+        self._synced = -1  # len(vault) when the index was last complete
+
+    def type_key(self, entity_type: str, value: str) -> TypeKey | None:
+        """Return ``value``'s key for ``entity_type``, or None to match exactly."""
+        normalizer = self._normalizers.get(entity_type)
+        key = normalizer(value) if normalizer is not None else None
+        return None if key is None else (entity_type, key)
+
+    def placeholder_for(self, vault: Vault, span: Span) -> str:
+        """Return the placeholder for ``span``'s value.
+
+        In order: the value's own placeholder; the placeholder of a stored
+        value of the same type with the same key; a new placeholder.
+        """
+        placeholder = vault.get_placeholder(span.value)
+        if placeholder is not None:
+            return placeholder
+        type_key = self.type_key(span.entity_type, span.value)
+        if type_key is not None:
+            shared = self._lookup(vault, type_key)
+            if shared is not None:
+                return shared
+        return self.create(vault, span, type_key)
+
+    def create(self, vault: Vault, span: Span, type_key: TypeKey | None) -> str:
+        """Store ``span``'s value; index it under ``type_key`` (None: never)."""
+        before = len(vault)
+        placeholder = vault.get_or_create(span.value, span.entity_type)
+        # Record the key this masker chose, even before the index exists: a
+        # rebuild must not compute one for a merged value it stored as None.
+        self._keys[placeholder] = (span.value, type_key)
+        if self._index is not None:
+            if self._synced == before and len(vault) == before + 1:
+                self._synced += 1
+                if type_key is not None:
+                    self._index.setdefault(type_key, placeholder)
+            elif type_key is None:
+                self._index = None  # it may list this value under a key
+        return placeholder
+
+    def _lookup(self, vault: Vault, type_key: TypeKey) -> str | None:
+        index = self._index
+        if index is None or len(vault) != self._synced:
+            index = self._rebuild(vault)
+        placeholder = index.get(type_key)
+        if placeholder is None:
+            return None
+        entry = self._keys.get(placeholder)
+        if (
+            entry is not None
+            and entry[1] == type_key
+            and vault.get_value(placeholder) == entry[0]
+        ):
+            return placeholder
+        # The vault changed without changing size (cleared and refilled).
+        return self._rebuild(vault).get(type_key)
+
+    def _rebuild(self, vault: Vault) -> dict[TypeKey, str]:
+        keys = self._keys
+        index: dict[TypeKey, str] = {}
+        items = vault.items()
+        for placeholder, value in items:
+            entry = keys.get(placeholder)
+            if entry is None or entry[0] != value:
+                entity_type = placeholder_type(placeholder)
+                type_key = self.type_key(entity_type, value) if entity_type else None
+                entry = keys[placeholder] = (value, type_key)
+            if entry[1] is not None:
+                index.setdefault(entry[1], placeholder)
+        self._index = index
+        self._synced = len(items)
+        return index
