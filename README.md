@@ -4,7 +4,7 @@
 
 The model never sees the real data. veil is pure Python with no runtime dependencies.
 
-> Status: v0.2, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
+> Status: v0.3, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -240,14 +240,16 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly unless you opt in.** Without `normalize=True`, `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`. With it, `restore()` writes the first spelling seen, so a reply can come back spelled differently from the prompt. Names, IPv4 addresses, and custom types are never normalized. Upper-case letters merge with their lower-case forms by Python's `str.lower()` (`I` with `i`, `Σ` with `σ`), and so do characters that Unicode treats as the same (NFC).
 - **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.
-- **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
+- **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe. `MemoryVault` also remembers, for the leak check, the spellings merged by `normalize=True` and the matches inside a merged placeholder; with a vault of your own, each `Shield` remembers them separately.
+- **Search patterns hold parts of values.** To search for many values at once, veil compiles regular expressions that contain up to 64 characters of them, and Python's `re` module may keep those in its cache after `reset()`. Call `re.purge()` if that matters.
+- **A large vault adds a fixed cost to each call.** `mask()` takes about linear time in the length of the input, but every stored value is looked at on every call: about 20 ms per call at 100,000 values.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
 - **International numbers can take in digits that follow them.** When it's unclear where a number ends, veil masks too much rather than too little. In `+44 20 7946 0958 24 hours`, the separate ` 24` is masked with the number. In `+48 123 456 789 2024-01-15`, the `2024` of the date is masked with it. The model doesn't see those digits, but restoring still returns the exact original text. A short group glued to a word, such as `24h` or `9am`, is recognised and left out.
 
 ## Roadmap
 
-- **Next:** optional value normalization (one placeholder per phone or email however it's written), masking the leftover part of overlapping matches, and a faster leak check for very large inputs.
-- **Later:** an optional Presidio/spaCy detector for names, a persistent SQLite vault, and streaming restore for placeholders split across chunks.
+- **Next:** a persistent SQLite vault, and streaming restore for placeholders split across chunks.
+- **Later:** an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
 
 ## Development
 

@@ -233,7 +233,7 @@ class Masker:
                 rewritten placeholders (``[person 1]``). Input that it would
                 treat as a placeholder is reported.
             normalizers: Internal and may change. Maps an entity type to a
-                function giving a value's key (see ``veil._normalize``); a
+                function giving a value's key (see ``_normalize``); a
                 value whose key matches a stored value of its type shares that
                 value's placeholder.
         """

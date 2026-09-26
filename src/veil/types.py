@@ -91,6 +91,10 @@ class MaskedEntity:
         end: End offset of the value in the *original* text.
         source: Which detector found it, or ``"merged"`` when it covers
             several overlapping matches (see `Span.source`).
+
+    With ``Shield(normalize=True)``, several entities can share a placeholder
+    while their ``value`` differs (``(555) 555-0123`` and ``555.555.0123``);
+    restoring writes the vault's value for that placeholder.
     """
 
     placeholder: str
