@@ -258,8 +258,11 @@ class Masker:
 
     def __getstate__(self) -> dict[str, object]:
         """Pickle without the leak check's index; it is rebuilt on demand."""
+        # Leave out values from before the vault was last cleared.
         if self._keys is not None:
             self._keys.forget_stale(self._vault)
+        if isinstance(self._memory, _LocalMemory):
+            self._memory._remembered()  # drops entries the vault no longer backs
         state = dict(self.__dict__)
         state.pop("_leak_index", None)
         return state

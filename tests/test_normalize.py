@@ -673,6 +673,43 @@ class TestKeyIndex:
             cached = {value for value, _ in s._masker._keys._keys.values()}
             assert cached <= {value for _, value in vault.items()}
 
+    def test_vault_cleared_and_refilled_to_the_same_size_by_another_shield(self):
+        vault = MemoryVault()
+        a = Shield(vault=vault, normalize=True)
+        b = Shield(vault=vault, normalize=True)
+        b.mask("Mail kai@example.net")  # b's index: one value
+        a.reset()
+        a.mask("Call (213) 555-0199")  # one value again, a different one
+        assert b.mask("Call 213-555-0199").text == "Call [PHONE_1]"
+
+    def test_stale_index_never_gives_another_types_placeholder(self):
+        vault = MemoryVault()
+        a, b = Shield(vault=vault, normalize=True), Shield(vault=vault)
+        a.mask("x@example.com ; DE89 3704 0044 0532 0130 00")
+        vault.clear()
+        b.mask("y@example.com ; 555-555-0100")  # refilled to the same size
+        text = "gb82west12345698765432 ; de89370400440532013000"
+        masked = a.mask(text)
+        assert masked.text == "[IBAN_1] ; [IBAN_2]"
+        assert a.restore(masked.text).text == text
+
+    def test_reset_clears_the_key_index(self):
+        s = Shield(normalize=True)
+        s.mask("Call 555-555-0101 or (555) 555-0101")
+        s.reset()
+        assert s._masker._keys._keys == {}
+        assert s._masker._keys._index is None
+
+    @pytest.mark.parametrize("make_vault", [MemoryVault, DictVault])
+    def test_pickle_leaves_out_values_of_a_vault_another_shield_reset(self, make_vault):
+        vault = make_vault()
+        a, b = Shield(vault=vault, normalize=True), Shield(vault=vault)
+        a.mask("Mail Jan.N@Example.com and jan.n@example.com")
+        b.reset()
+        b.mask("Mail anna@example.org")  # the vault holds one value again
+        data = pickle.dumps(a)
+        assert b"jan.n" not in data.lower()
+
     def test_pickle_round_trip(self):
         s = Shield(normalize=True)
         s.mask("Call 555-555-0123 or (555) 555-0123, jan.n@example.com")

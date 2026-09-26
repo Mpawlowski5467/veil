@@ -192,6 +192,7 @@ class KeyIndex:
         self._keys: dict[str, tuple[str, TypeKey | None]] = {}
         self._index: dict[TypeKey, str] | None = None
         self._synced = -1  # len(vault) when the index was last complete
+        self._first: tuple[str, str] | None = None  # the vault's first item then
 
     def forget_stale(self, vault: Vault) -> None:
         """Drop what is cached about values ``vault`` no longer stores.
@@ -205,10 +206,11 @@ class KeyIndex:
             for placeholder, entry in self._keys.items()
             if vault.get_value(placeholder) == entry[0]
         }
-        if len(live) != len(self._keys):
+        if len(live) != len(self._keys) or not self._same_vault(vault):
             self._keys = live
             self._index = None
             self._synced = -1
+            self._first = None
 
     def type_key(self, entity_type: str, value: str) -> TypeKey | None:
         """Return ``value``'s key for ``entity_type``, or None to match exactly."""
@@ -248,6 +250,8 @@ class KeyIndex:
         if self._index is not None:
             if self._synced == before and len(vault) == before + 1:
                 self._synced += 1
+                if self._first is None:
+                    self._first = (placeholder, span.value)
                 if type_key is not None:
                     self._index.setdefault(type_key, placeholder)
             elif type_key is None and previous != entry:
@@ -256,7 +260,7 @@ class KeyIndex:
 
     def _lookup(self, vault: Vault, type_key: TypeKey) -> str | None:
         index = self._index
-        if index is None or len(vault) != self._synced:
+        if index is None or len(vault) != self._synced or not self._same_vault(vault):
             index = self._rebuild(vault)
         placeholder = index.get(type_key)
         if placeholder is None:
@@ -270,6 +274,15 @@ class KeyIndex:
             return placeholder
         # The vault changed without changing size (cleared and refilled).
         return self._rebuild(vault).get(type_key)
+
+    def _same_vault(self, vault: Vault) -> bool:
+        """Whether the vault still starts as it did at the last rebuild.
+
+        A vault cleared and refilled to the same size (by another `Shield`)
+        would otherwise look in sync.
+        """
+        first = self._first
+        return first is None or vault.get_value(first[0]) == first[1]
 
     def _rebuild(self, vault: Vault) -> dict[TypeKey, str]:
         cached = self._keys
@@ -286,6 +299,7 @@ class KeyIndex:
             if entry[1] is not None:
                 index.setdefault(entry[1], placeholder)
         self._keys = keys  # without placeholders the vault no longer has
+        self._first = items[0] if items else None
         self._index = index
         self._synced = len(items)
         return index
