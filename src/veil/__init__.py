@@ -12,7 +12,14 @@ Example:
 
 from .detectors import Detector, ManualDetector, RegexDetector
 from .shield import Shield
-from .types import MaskedEntity, MaskResult, RestoreResult, ShieldWarning, Span
+from .types import (
+    MaskedEntity,
+    MaskResult,
+    RestoreResult,
+    ShieldError,
+    ShieldWarning,
+    Span,
+)
 from .vault import MemoryVault, Vault
 
 __version__ = "0.1.0"
@@ -26,6 +33,7 @@ __all__ = [
     "RegexDetector",
     "RestoreResult",
     "Shield",
+    "ShieldError",
     "ShieldWarning",
     "Span",
     "Vault",

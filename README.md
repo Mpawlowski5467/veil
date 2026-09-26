@@ -130,17 +130,29 @@ veil reports problems instead of raising:
 ['Unknown placeholder [PERSON_7] was left unchanged.']
 ```
 
-`wrap()` emits these warnings through Python's `warnings` module as `ShieldWarning`. To fail closed, so the model is never called when the leak check fires, turn them into errors:
+`wrap()` emits these warnings through Python's `warnings` module as `ShieldWarning`. To fail closed instead, pass `strict=True`. If masking warns, `wrap()` raises `ShieldError` and never calls the model. If restoring the reply warns, it raises instead of returning a partly restored reply:
 
 ```python
-import warnings
+from veil import Shield, ShieldError
 
-from veil import ShieldWarning
-
-warnings.simplefilter("error", ShieldWarning)
+shield = Shield()
+shield.mask("Call 555-123-4567")
+safe_llm = shield.wrap(lambda prompt: "ok", strict=True)
+try:
+    safe_llm("Call 555-123-4567-2")  # the known number would reach the model
+except ShieldError as error:
+    assert error.stage == "mask"
 ```
 
-Leak and partial-mask warnings include the value that leaked, so treat warnings as sensitive if you log them.
+By default, leak and partial-mask warnings quote the value that leaked. To log them safely, create the shield with `Shield(redact_warnings=True)`. Warnings then give only the type, placeholder, and length:
+
+```python
+>>> shield = Shield(redact_warnings=True)
+>>> shield.mask("Call 555-123-4567").text
+'Call [PHONE_1]'
+>>> shield.mask("Call 555-123-4567-2").warnings
+['Leak check: a known PHONE value ([PHONE_1]) still appears in the masked text.']
+```
 
 ### Plugging in your own parts
 

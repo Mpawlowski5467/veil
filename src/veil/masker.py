@@ -49,15 +49,24 @@ class Masker:
     partly replaced, and when any known value still appears in it.
     """
 
-    def __init__(self, detectors: Sequence[Detector], vault: Vault) -> None:
+    def __init__(
+        self,
+        detectors: Sequence[Detector],
+        vault: Vault,
+        *,
+        redact_warnings: bool = False,
+    ) -> None:
         """Create a masker.
 
         Args:
             detectors: Detectors to run, in order. Their spans are pooled.
             vault: Where placeholders are created and looked up.
+            redact_warnings: Describe leaked values by type, placeholder, and
+                length instead of quoting them, so warnings are safe to log.
         """
         self._detectors = tuple(detectors)
         self._vault = vault
+        self._redact = redact_warnings
 
     def mask(self, text: str) -> MaskResult:
         """Mask ``text``.
@@ -122,7 +131,7 @@ class Masker:
         masked = "".join(reversed(pieces))
 
         warnings = _placeholder_like_input(text)
-        warnings.extend(_partial_masks(text, candidates, kept))
+        warnings.extend(_partial_masks(text, candidates, kept, redact=self._redact))
         warnings.extend(self._leaks(list(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
@@ -136,8 +145,12 @@ class Masker:
         "January"); every other value is matched as a plain substring, because
         a phone number glued to letters is still a phone number.
         """
-        known = dict.fromkeys(value for _, value in self._vault.items())
-        known.update(dict.fromkeys(span.value for span in candidates))
+        known: dict[str, str] = {}  # value -> entity type
+        for stored, value in self._vault.items():
+            match = PLACEHOLDER_RE.fullmatch(stored)
+            known[value] = match["type"] if match else "?"
+        for span in candidates:
+            known.setdefault(span.value, span.entity_type)
         manual: set[str] = set()
         for detector in self._detectors:
             if isinstance(detector, ManualDetector):
@@ -150,22 +163,26 @@ class Masker:
         haystacks = unmasked if separator is None else [separator.join(unmasked)]
 
         warnings = []
-        for value in known:
+        for value, entity_type in known.items():
             if value in manual:
                 found = any(contains_token(piece, value) for piece in haystacks)
             else:
                 found = any(value in piece for piece in haystacks)
-            if found:
-                placeholder = self._vault.get_placeholder(value)
-                label = f"{value!r} ({placeholder})" if placeholder else repr(value)
-                warnings.append(
-                    f"Leak check: known value {label} still appears in the masked text."
-                )
+            if not found:
+                continue
+            placeholder = self._vault.get_placeholder(value)
+            if self._redact:
+                where = f" ({placeholder})" if placeholder else ""
+                label = f"a known {entity_type} value{where}"
+            else:
+                label = f"known value {value!r}"
+                label += f" ({placeholder})" if placeholder else ""
+            warnings.append(f"Leak check: {label} still appears in the masked text.")
         return warnings
 
 
 def _partial_masks(
-    text: str, candidates: Iterable[Span], kept: list[Span]
+    text: str, candidates: Iterable[Span], kept: list[Span], *, redact: bool
 ) -> list[str]:
     """Warn about dropped spans that only partly overlapped a kept span.
 
@@ -191,12 +208,20 @@ def _partial_masks(
         if pos < span.end:
             leftovers.append(text[pos : span.end])
         if any(ch.isalnum() for piece in leftovers for ch in piece):
-            shown = ", ".join(repr(piece) for piece in leftovers)
-            message = (
-                f"Partial mask: detected {span.entity_type} value {span.value!r} "
-                f"overlapped a match that was kept, so {shown} is still in the "
-                "masked text."
-            )
+            if redact:
+                size = sum(len(piece) for piece in leftovers)
+                message = (
+                    f"Partial mask: a detected {span.entity_type} value "
+                    f"({len(span.value)} characters) overlapped a match that was "
+                    f"kept, so {size} of its characters are still in the masked text."
+                )
+            else:
+                shown = ", ".join(repr(piece) for piece in leftovers)
+                message = (
+                    f"Partial mask: detected {span.entity_type} value "
+                    f"{span.value!r} overlapped a match that was kept, so {shown} "
+                    "is still in the masked text."
+                )
             warnings[message] = None
     return list(warnings)
 

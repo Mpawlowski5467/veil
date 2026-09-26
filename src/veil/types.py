@@ -14,6 +14,23 @@ class ShieldWarning(UserWarning):
     """
 
 
+class ShieldError(Exception):
+    """Raised by a strict `Shield.wrap()` call instead of emitting warnings.
+
+    Attributes:
+        stage: ``"mask"`` if masking warned, so the model was never called, or
+            ``"restore"`` if restoring the model's reply warned.
+        warnings: The warning messages. They quote detected values unless the
+            `Shield` was created with ``redact_warnings=True``.
+    """
+
+    def __init__(self, stage: str, warnings: list[str]) -> None:
+        """Create the error from the stage that failed and its warnings."""
+        self.stage = stage
+        self.warnings = list(warnings)
+        super().__init__(f"{stage}() warned: " + " | ".join(self.warnings))
+
+
 @dataclass(frozen=True, slots=True)
 class Span:
     """A piece of sensitive text found by a detector.
