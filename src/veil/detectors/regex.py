@@ -154,7 +154,9 @@ _EXTENSION_RE = re.compile(_EXTENSION)
 
 
 def _plausible(number: str) -> bool:
-    digits = sum(ch.isdecimal() for ch in number)
+    # A "(0)" trunk prefix ("+49 (0)711 ...") is not dialled from abroad, so it
+    # doesn't count toward the E.164 limit.
+    digits = sum(ch.isdecimal() for ch in number) - number.count("(0)")
     return MIN_PHONE_DIGITS <= digits <= MAX_PHONE_DIGITS
 
 

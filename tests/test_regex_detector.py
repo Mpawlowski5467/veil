@@ -370,9 +370,10 @@ class TestPhone:
     @pytest.mark.parametrize(
         ("text", "expected"),
         [
+            # The "(0)" trunk prefix doesn't count, so the extension fits.
+            ("Tel.: +49 (0)711 1234567-890", "+49 (0)711 1234567-890"),
+            ("Tel.: +43 (0)662 123456-7890", "+43 (0)662 123456-7890"),
             # Over 15 digits with the extension: mask the base number.
-            ("Tel.: +49 (0)711 1234567-890", "+49 (0)711 1234567"),
-            ("Tel.: +43 (0)662 123456-7890", "+43 (0)662 123456"),
             ("Tel.: +49 89 12345678-1234", "+49 89 12345678"),
             ("Tel. +44 20 7946 0958-0959", "+44 20 7946 0958"),
             # A date right after a number: its first group is over-masked.
