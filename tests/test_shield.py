@@ -317,6 +317,19 @@ class TestWrap:
         assert llm.prompts == [""]
 
 
+class TestTolerantRestoreThroughShield:
+    def test_wrap_restores_a_rewritten_placeholder(self, shield):
+        shield.add_entity("Jan Nowak", "PERSON")
+        safe_llm = shield.wrap(RecordingLLM(reply="Hi [person 1]!"), strict=True)
+        assert safe_llm(README_INPUT) == "Hi Jan Nowak!"
+
+    def test_can_be_turned_off(self):
+        shield = Shield(tolerant_restore=False)
+        shield.add_entity("Jan Nowak", "PERSON")
+        shield.mask("Jan Nowak")
+        assert shield.restore("Hi [person 1]!").text == "Hi [person 1]!"
+
+
 class TestStrictWrap:
     def test_mask_warning_raises_before_the_model_is_called(self, shield):
         shield.mask("Call 555-123-4567")

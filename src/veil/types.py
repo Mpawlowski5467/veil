@@ -112,17 +112,34 @@ class MaskResult:
 
 
 @dataclass(frozen=True, slots=True)
+class RepairedPlaceholder:
+    """A placeholder the model wrote in a different form, restored anyway.
+
+    Attributes:
+        written: What the reply contained, e.g. ``"[person 1]"``.
+        placeholder: The placeholder it was read as, e.g. ``"[PERSON_1]"``.
+    """
+
+    written: str
+    placeholder: str
+
+
+@dataclass(frozen=True, slots=True)
 class RestoreResult:
     """Result of restoring placeholders in a model's reply.
 
     Attributes:
         text: The reply with every known placeholder replaced by its original
             value.
-        restored_count: How many placeholder occurrences were replaced.
+        restored_count: How many placeholder occurrences were replaced,
+            including repaired ones.
         warnings: Human-readable problems, such as placeholders that are not in
             the vault. Unknown placeholders are left in ``text`` unchanged.
+        repaired: Placeholders the model rewrote (``[person 1]``,
+            ``【PERSON_1】``) that were restored anyway, in reply order.
     """
 
     text: str
     restored_count: int = 0
     warnings: list[str] = field(default_factory=list)
+    repaired: list[RepairedPlaceholder] = field(default_factory=list)

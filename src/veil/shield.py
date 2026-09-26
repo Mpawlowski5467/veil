@@ -40,6 +40,7 @@ class Shield:
         detectors: Sequence[Detector] | None = None,
         vault: Vault | None = None,
         redact_warnings: bool = False,
+        tolerant_restore: bool = True,
     ) -> None:
         r"""Create a shield.
 
@@ -55,6 +56,8 @@ class Shield:
             redact_warnings: Describe leaked values by type, placeholder, and
                 length instead of quoting them, so warnings (and `ShieldError`
                 messages) are safe to log.
+            tolerant_restore: Also restore placeholders the model rewrote,
+                like ``[person 1]`` or ``【PERSON_1】``. See `Restorer`.
 
         Raises:
             ValueError: If both ``custom_patterns`` and ``detectors`` are given,
@@ -92,7 +95,7 @@ class Shield:
         self._masker = Masker(
             [self._manual, *detectors], vault, redact_warnings=redact_warnings
         )
-        self._restorer = Restorer(vault)
+        self._restorer = Restorer(vault, tolerant=tolerant_restore)
 
     @property
     def vault(self) -> Vault:
@@ -134,7 +137,9 @@ class Shield:
         """Replace placeholders in ``text`` with the original values.
 
         Never raises on unknown placeholders: they are left as they are and
-        listed in the result's ``warnings``.
+        listed in the result's ``warnings``. Placeholders the model rewrote
+        (``[person 1]``) are restored too and listed in ``repaired``, unless
+        the shield was created with ``tolerant_restore=False``.
 
         Args:
             text: Text from a model, usually its reply to masked input.

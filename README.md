@@ -117,6 +117,24 @@ Within one `Shield`, a value keeps its placeholder across every `mask()` call. U
 
 `reset()` keeps registered entities and custom patterns.
 
+### When the model rewrites a placeholder
+
+Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-escaped brackets. `restore()` still finds these, and lists each one in `repaired`:
+
+```python
+>>> shield = Shield()
+>>> shield.add_entity("Jan Nowak", "PERSON")
+>>> shield.mask("Write to Jan Nowak").text
+'Write to [PERSON_1]'
+>>> result = shield.restore("Dear [person 1], and 【PERSON_1】 again")
+>>> result.text
+'Dear Jan Nowak, and Jan Nowak again'
+>>> [(r.written, r.placeholder) for r in result.repaired]
+[('[person 1]', '[PERSON_1]'), ('【PERSON_1】', '[PERSON_1]')]
+```
+
+A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. To turn this off, use `Shield(tolerant_restore=False)`.
+
 ### Warnings
 
 veil reports problems instead of raising:
@@ -184,7 +202,7 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 - **Text glued to an email address can be masked with it.** Characters like `=`, `&`, and `/` can be part of an address (bounce addresses use `=`), so `ADMIN_EMAIL=jan@example.com` becomes a single `[EMAIL_1]`. Chinese or Japanese written right before an address (`連絡先はjan@example.com`) is masked with it too, because CJK characters can be part of an address as well. Add a space or quotes (`ADMIN_EMAIL="jan@example.com"`) to keep the text before it visible.
 - **Names must be registered manually in v0.1.** Nothing detects names automatically. Only the exact strings you register are masked, so `"Jan Nowak"` does not cover `"Nowak"`, `"JAN NOWAK"`, or inflected forms like `"Janem Nowakiem"`. Register each form you expect.
 - **Values are matched exactly, with no normalization.** `(555) 123-4567` and `555-123-4567` get different placeholders, and so do `Jan.N@Example.com` and `jan.n@example.com`.
-- **The model must copy placeholders exactly.** `[person_1]`, `PERSON_1`, or `[PERSON 1]` in a reply are not restored.
+- **The model must keep the brackets.** Rewritten forms like `[person 1]` are restored, but a placeholder without its brackets (`PERSON_1`, `(PERSON_1)`) is not.
 - **The vault lives in memory.** Mappings last as long as the `Shield` and are gone when the process exits. It is not thread-safe.
 - **Placeholders reveal types and counts.** The model can tell there are two people and one email address, just not who they are.
 - **International numbers can take in digits that follow them.** When it's unclear where a number ends, veil masks too much rather than too little. In `+44 20 7946 0958 24 hours`, the separate ` 24` is masked with the number. In `+48 123 456 789 2024-01-15`, the `2024` of the date is masked with it. The model doesn't see those digits, but restoring still returns the exact original text. A short group glued to a word, such as `24h` or `9am`, is recognised and left out.

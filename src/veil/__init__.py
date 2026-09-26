@@ -15,6 +15,7 @@ from .shield import Shield
 from .types import (
     MaskedEntity,
     MaskResult,
+    RepairedPlaceholder,
     RestoreResult,
     ShieldError,
     ShieldWarning,
@@ -31,6 +32,7 @@ __all__ = [
     "MaskedEntity",
     "MemoryVault",
     "RegexDetector",
+    "RepairedPlaceholder",
     "RestoreResult",
     "Shield",
     "ShieldError",
