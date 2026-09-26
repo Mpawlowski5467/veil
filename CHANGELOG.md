@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+
+- Resolving overlapping matches takes linear time. 200,000 detected values used to take about 3.5 s.
+
 ## 0.2.0
 
 ### Added

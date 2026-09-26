@@ -1,9 +1,10 @@
+import random
 import time
 
 import pytest
 
 from veil.detectors import ManualDetector, RegexDetector
-from veil.masker import Masker, resolve_overlaps
+from veil.masker import Masker, _resolve_sparse, resolve_overlaps
 from veil.types import MaskedEntity, Span
 from veil.vault import MemoryVault
 
@@ -97,6 +98,30 @@ class TestResolveOverlaps:
     def test_identical_spans_collapse(self):
         a = Span(0, 3, "aaa", "X")
         assert resolve_overlaps([a, a]) == [a]
+
+    @pytest.mark.parametrize("seed", range(200))
+    def test_many_spans_resolve_like_the_insert_loop(self, seed):
+        # From 64 spans on, a per-character bitmap replaces the insert loop.
+        r = random.Random(seed)
+        spans = []
+        for _ in range(r.randint(0, 150)):
+            start = r.randrange(300)
+            size = r.randint(1, 12)
+            spans.append(
+                Span(start, start + size, "x" * size, "A", "t", r.choice([0, 100]))
+            )
+        ranked = sorted(spans, key=lambda s: (-len(s), -s.priority, s.start))
+        assert resolve_overlaps(spans) == _resolve_sparse(ranked)
+
+    def test_linear_time(self):
+        r = random.Random(1)
+        spans = []
+        for i in range(200_000):
+            size = r.randint(1, 9)
+            spans.append(Span(i * 10, i * 10 + size, "x" * size, "A"))
+        start = time.perf_counter()
+        assert len(resolve_overlaps(spans)) == 200_000
+        assert time.perf_counter() - start < 2.0
 
 
 class TestMask:

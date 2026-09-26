@@ -33,6 +33,31 @@ def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
         The kept spans, ordered by ``start``.
     """
     ranked = sorted(spans, key=lambda s: (-len(s), -s.priority, s.start))
+    if len(ranked) < _FEW_SPANS:
+        return _resolve_sparse(ranked)
+    size = max(span.end for span in ranked)
+    if size > _DENSE_LIMIT and size > 8 * sum(map(len, ranked)):
+        return _resolve_sparse(ranked)
+    # One flag per character already covered by a kept span: checking and
+    # marking a span costs its length, so the whole pass is linear.
+    taken = bytearray(size)
+    kept: list[Span] = []
+    for span in ranked:
+        if taken.find(1, span.start, span.end) == -1:
+            taken[span.start : span.end] = b"\x01" * (span.end - span.start)
+            kept.append(span)
+    kept.sort(key=lambda s: s.start)
+    return kept
+
+
+# resolve_overlaps() uses a bisect-and-insert loop, O(spans^2) but fastest for
+# a handful of spans, below this many; and when the spans are spread so thinly
+# (far past _DENSE_LIMIT characters) that a byte per character is wasteful.
+_FEW_SPANS = 64
+_DENSE_LIMIT = 1 << 26
+
+
+def _resolve_sparse(ranked: list[Span]) -> list[Span]:
     kept: list[Span] = []  # sorted by start; never overlapping
     starts: list[int] = []
     for span in ranked:
