@@ -206,6 +206,25 @@ class TestSettings:
                 {"hooks": [{"type": "command", "command": command, "timeout": 60}]}
             ]
 
+    def test_extra_settings_add_hooks_and_replace_the_rest(self):
+        base = harness.settings("probe")
+        extra = {
+            "env": {"A": "1"},
+            "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}], "Custom": []},
+        }
+        merged = harness.merge_settings(base, extra)
+        assert merged["env"] == {"A": "1"}
+        assert merged["hooks"]["PreToolUse"] == [
+            *base["hooks"]["PreToolUse"],
+            {"matcher": "Bash", "hooks": []},
+        ]
+        assert merged["hooks"]["Custom"] == []
+        assert merged["hooks"]["Stop"] == base["hooks"]["Stop"]
+        assert (
+            base["hooks"]["PreToolUse"]
+            == harness.settings("probe")["hooks"]["PreToolUse"]
+        )
+
     def test_command_quotes_paths(self, tmp_path):
         spaced = tmp_path / "a b"
         command = harness.hook_command(spaced / "r.json", spaced / "l.jsonl")

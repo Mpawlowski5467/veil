@@ -92,6 +92,22 @@ def settings(
     return {"hooks": {event: [{"hooks": [entry]}] for event in events}}
 
 
+def merge_settings(base: dict[str, Any], extra: Mapping[str, Any]) -> dict[str, Any]:
+    """Return ``base`` with ``extra`` on top; hooks are added, not replaced."""
+    merged = dict(base)
+    for key, value in extra.items():
+        if key == "hooks":
+            hooks = {
+                event: list(groups) for event, groups in base.get("hooks", {}).items()
+            }
+            for event, groups in value.items():
+                hooks.setdefault(event, []).extend(groups)
+            merged["hooks"] = hooks
+        else:
+            merged[key] = value
+    return merged
+
+
 def environment(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """Return the clean environment the CLI runs in."""
     env = {key: os.environ[key] for key in _PASSED_ENV if key in os.environ}
@@ -315,8 +331,9 @@ class Workspace:
         log = run_dir / "hooks.jsonl"
         log.touch()
         settings_file = run_dir / "settings.json"
-        run_settings = settings(hook_command(rules_file, log))
-        run_settings.update(extra_settings or {})
+        run_settings = merge_settings(
+            settings(hook_command(rules_file, log)), extra_settings or {}
+        )
         settings_file.write_text(json.dumps(run_settings, indent=1), encoding="utf-8")
         command = [
             claude,
