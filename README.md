@@ -75,10 +75,10 @@ veil claude              # instead of claude; any claude arguments work
 
 What happens:
 
-- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through `--settings`, which outrank a project's settings and your environment.
-- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A request with a field the gateway doesn't know is refused, never sent as it is.
+- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through settings that outrank a project's settings and your own, kept in a file only you can read. Those settings also keep hooks on, other providers and Remote Control off. `veil claude` won't start with `--settings`, `--bare`, or `--safe-mode`, or when `ANTHROPIC_BASE_URL` is already set, since each would send requests past the gateway.
+- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A known value is masked even glued to a word (`Jan Nowakem` goes out as `[PERSON_1]em`). A request with a field the gateway doesn't know is refused, never sent as it is. The model's thinking can't be changed (it is signed), so thinking about data it saw before it was masked, such as a name you registered later, is dropped.
 - **Replies are restored as they stream.** Tool calls get the real values back, so an Edit matches the text in your file and a Write puts real values on disk. When Claude Code sends a reply back as history, the model's own words go back exactly as it wrote them.
-- **Real values don't leave through tools.** A shell command that contains one asks you first (in `claude -p`, where nobody can answer, it is refused). A web request or MCP call that contains one is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off.
+- **Real values don't leave through tools.** A hook checks every tool call but plain file reads and edits. A shell command that contains a real value asks you first (in `claude -p`, where nobody can answer, it is refused). A call to any other tool that could send one off the machine, such as a web request, an MCP call, or a remote agent, is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off. If the hooks can't run, `veil claude` doesn't start Claude Code, and before each prompt a hook checks that the gateway is still there.
 - **Placeholders last per session.** They are kept in `~/.veil/vault.db`, one set per Claude Code session, so `--resume` works. Sessions unused for 30 days are deleted.
 
 Settings live in `~/.veil/config.json`, and only there, so a repository you clone can't change them:
@@ -94,7 +94,7 @@ Settings live in `~/.veil/config.json`, and only there, so a repository you clon
 }
 ```
 
-`entities` are names and other values no pattern finds (with `identity`, your git name and email are added). `patterns` are extra types, as for `custom_patterns`. `note` adds a line to the system prompt telling the model about placeholders. `allow_mcp_tools` lists MCP tools that may receive real values. Every key is optional. An unknown key or a wrong value stops `veil claude` with a message that names the key.
+`entities` are names and other values no pattern finds, one line each (with `identity`, your git name and email are added). `patterns` are extra types, as for `custom_patterns`. `note` adds a line to the system prompt telling the model about placeholders. `allow_mcp_tools` lists MCP tools that may receive real values. Every key is optional. An unknown key or a wrong value stops `veil claude` with a message that names the key.
 
 What it doesn't cover:
 
