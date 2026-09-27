@@ -1,0 +1,39 @@
+{
+ "cwd": "/work",
+ "duration_ms": 3,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "file_path": "/work/out.txt",
+  "new_string": "hi jane.doe@example.com",
+  "old_string": "hello jane.doe@example.com",
+  "replace_all": false
+ },
+ "tool_name": "Edit",
+ "tool_response": {
+  "filePath": "/work/out.txt",
+  "newString": "hi jane.doe@example.com",
+  "oldString": "hello jane.doe@example.com",
+  "originalFile": "hello jane.doe@example.com",
+  "replaceAll": false,
+  "structuredPatch": [
+   {
+    "lines": [
+     "-hello jane.doe@example.com",
+     "\\ No newline at end of file",
+     "+hi jane.doe@example.com",
+     "\\ No newline at end of file"
+    ],
+    "newLines": 1,
+    "newStart": 1,
+    "oldLines": 1,
+    "oldStart": 1
+   }
+  ],
+  "userModified": false
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

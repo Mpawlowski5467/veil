@@ -6,6 +6,7 @@ import pytest
 from vaults import DictVault
 from veil.detectors import ManualDetector, RegexDetector
 from veil.masker import Masker, _LocalMemory, _resolve_sparse, resolve_overlaps
+from veil.restorer import Restorer
 from veil.types import MaskedEntity, Span
 from veil.vault import MemoryVault
 
@@ -401,6 +402,17 @@ class TestWarnings:
         masker = Masker([manual, RegexDetector()], vault)
         result = masker.mask("a@example.com and [EMAIL_1]")
         assert result.text == "[EMAIL_1] and [SECRET_1]"
+        # The lookalike was masked itself, so it restores as written: no
+        # warning (restore gives back "a@example.com and [EMAIL_1]").
+        assert result.warnings == []
+        assert (
+            Restorer(vault).restore(result.text).text == "a@example.com and [EMAIL_1]"
+        )
+
+    def test_unmasked_placeholder_lookalike_still_warns(self, vault, manual):
+        masker = Masker([manual, RegexDetector()], vault)
+        result = masker.mask("a@example.com and [EMAIL_1]")
+        assert result.text == "[EMAIL_1] and [EMAIL_1]"
         assert result.warnings == [
             "Input already contains placeholder-like text [EMAIL_1]; "
             "restore() will treat it as a placeholder."
@@ -481,14 +493,30 @@ class TestPlaceholderLikeInput:
         ]
 
     def test_redacted(self, vault, manual):
-        manual.add("ACCT_48213", "ACCOUNT")
+        manual.add("Jan Nowak", "PERSON")
         masker = Masker([manual], vault, redact_warnings=True)
-        result = masker.mask("Customer [ACCT_48213] asked for a refund.")
+        result = masker.mask("Jan Nowak asked about [ACCT_48213] for a refund.")
         assert result.warnings == [
             "Input already contains placeholder-like text (12 characters); "
             "restore() will treat it as a placeholder."
         ]
         assert all("48213" not in w for w in result.warnings)
+
+    def test_masked_lookalike_is_not_reported(self, vault, manual):
+        # The registered value inside the brackets is masked, so the text
+        # restores exactly as written: nothing is left to mistake.
+        manual.add("ACCT_48213", "ACCOUNT")
+        masker = Masker([manual], vault)
+        result = masker.mask("Customer [ACCT_48213] asked for a refund.")
+        assert result.text == "Customer [[ACCOUNT_1]] asked for a refund."
+        assert result.warnings == []
+        restored = Restorer(vault).restore(result.text).text
+        assert restored == "Customer [ACCT_48213] asked for a refund."
+
+    def test_lookalike_split_by_a_placeholder_is_not_joined(self, vault, manual):
+        manual.add("Jan", "PERSON")
+        result = Masker([manual], vault).mask("[PERSON_Jan 1]")
+        assert result.warnings == []
 
 
 class TestRememberedValues:

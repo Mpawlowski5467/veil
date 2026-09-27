@@ -1,0 +1,11 @@
+{
+ "context_tokens": 22124,
+ "cwd": "/work",
+ "estimated_cache_write_usd": 0.0442,
+ "hook_event_name": "SessionStart",
+ "prompt_cache_likely_expired": false,
+ "seconds_since_last_response": 65,
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "source": "resume",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

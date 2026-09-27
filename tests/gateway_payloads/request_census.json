@@ -1,0 +1,1593 @@
+{
+ "POST /v1/messages": {
+  "$": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management.edits": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management.edits[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management.edits[].keep": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management.edits[].type": {
+   "kinds": [
+    "type=clear_thinking_20251015"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.max_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content": {
+   "kinds": [
+    "array",
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].cache_control": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].cache_control.ttl": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].cache_control.type": {
+   "kinds": [
+    "type=ephemeral"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].content": {
+   "kinds": [
+    "array",
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].content[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "mcp/run-1",
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].source": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].source.data": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].source.media_type": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].source.type": {
+   "kinds": [
+    "type=base64"
+   ],
+   "scenarios": [
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "mcp/run-1",
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].content[].type": {
+   "kinds": [
+    "type=document",
+    "type=image",
+    "type=text"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "mcp/run-1",
+    "media/run-1"
+   ]
+  },
+  "$.messages[].content[].id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].input": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].input.command": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1",
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.content": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1",
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.description": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.file_path": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.name": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "mcp/run-1"
+   ]
+  },
+  "$.messages[].content[].input.new_string": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.old_string": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.output_mode": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.path": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.pattern": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].input.prompt": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].input.query": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].input.run_in_background": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "agents/run-1"
+   ]
+  },
+  "$.messages[].content[].input.subagent_type": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1"
+   ]
+  },
+  "$.messages[].content[].input.url": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].is_error": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1",
+    "tools/run-1",
+    "tools/run-11"
+   ]
+  },
+  "$.messages[].content[].name": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].signature": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].thinking": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].tool_use_id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "tools/run-11",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].content[].type": {
+   "kinds": [
+    "type=text",
+    "type=thinking",
+    "type=tool_result",
+    "type=tool_use"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.messages[].role": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.metadata": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.metadata.user_id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.model": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.output_config": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.output_config.effort": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.artifact_consent_holdback": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.auto_mode": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.auto_mode.allow": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.auto_mode.environment": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.auto_mode.hard_deny": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.auto_mode.soft_deny": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.case_insensitive_paths": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.classify_all_shell": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.branch": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.cwd": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.default_branch": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.error": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.root": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.status": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.visibility": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.visibility.origin": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.visibility.push_remote": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.visibility.remotes": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.git_state.visibility.visibility_cache": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.home_dir": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.is_remote_mode": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.live_cwd": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.permission_mode": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.platform": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.branch": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.cwd": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.default_branch": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.error": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.root": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.status": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.visibility": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.visibility.origin": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.visibility.push_remote": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.visibility.remotes": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.git_state.visibility.visibility_cache": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.live_cwd": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].context.platform": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].tool_use_ids": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.prior_turn_context[].tool_use_ids[]": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.restricted": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.cliArg": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.command": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.flagSettings": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.hostCredential": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.localSettings": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.mcpServerPolicy": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.policySettings": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.projectSettings": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.session": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.toolsNarrowing": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rule_roots.userSettings": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rules": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rules.allow": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rules.ask": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.rules.deny": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.additional": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.block_reads_outside_working_directories": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.network": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.primary": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.primary.path": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.primary.resolved": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.trusted_directories.primary.resolved[]": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.user_identity": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].classifier_context.v": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.safeguards[].type": {
+   "kinds": [
+    "type=dangerous_tool_use"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.stream": {
+   "kinds": [
+    "boolean"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[].cache_control": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[].cache_control.ttl": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[].cache_control.type": {
+   "kinds": [
+    "type=ephemeral"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[].text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.system[].type": {
+   "kinds": [
+    "type=text"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.temperature": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.thinking": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.thinking.budget_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.thinking.display": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1"
+   ]
+  },
+  "$.thinking.type": {
+   "kinds": [
+    "type=adaptive",
+    "type=disabled",
+    "type=enabled"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tool_choice": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.tool_choice.name": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.tool_choice.type": {
+   "kinds": [
+    "type=tool"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.tools": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[].description": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[].input_schema": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[].input_schema.<schema>": {
+   "kinds": [
+    "array",
+    "boolean",
+    "number",
+    "object",
+    "string",
+    "type=array",
+    "type=boolean",
+    "type=integer",
+    "type=number",
+    "type=object",
+    "type=string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[].max_uses": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.tools[].name": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.tools[].type": {
+   "kinds": [
+    "type=web_search_20250305"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  }
+ }
+}

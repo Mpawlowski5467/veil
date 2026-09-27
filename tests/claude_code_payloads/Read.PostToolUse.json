@@ -1,0 +1,24 @@
+{
+ "cwd": "/work",
+ "duration_ms": 2,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "file_path": "/work/notes.txt"
+ },
+ "tool_name": "Read",
+ "tool_response": {
+  "file": {
+   "content": "Name: Jan Nowak\nEmail: jane.doe@example.com\nPhone: 555-0100\n",
+   "filePath": "/work/notes.txt",
+   "numLines": 4,
+   "startLine": 1,
+   "totalLines": 4
+  },
+  "type": "text"
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

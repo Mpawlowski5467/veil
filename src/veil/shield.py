@@ -5,14 +5,14 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
 from ._normalize import BUILTIN_NORMALIZERS
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .detectors.regex import PatternLike, RegexDetector
 from .masker import Masker
-from .restorer import Restorer
+from .restorer import Restorer, StreamRestorer
 from .types import MaskResult, RestoreResult, ShieldError, ShieldWarning
 from .vault.base import Vault
 from .vault.memory import MemoryVault
@@ -147,7 +147,7 @@ class Shield:
         """
         return self._masker.mask(text)
 
-    def restore(self, text: str) -> RestoreResult:
+    def restore(self, text: str, *, tolerant: bool | None = None) -> RestoreResult:
         """Replace placeholders in ``text`` with the original values.
 
         Never raises on unknown placeholders: they are left as they are and
@@ -157,12 +157,69 @@ class Shield:
 
         Args:
             text: Text from a model, usually its reply to masked input.
+            tolerant: Override ``tolerant_restore`` for this call. Pass
+                ``False`` for text that will be written or run, such as a
+                tool call's arguments, where only an exact placeholder
+                should become a real value. (`mask` warns about
+                placeholder-like input by the shield's own
+                ``tolerant_restore``, not by this override.)
 
         Returns:
             A `RestoreResult` with the restored text, how many placeholders
             were replaced, and any warnings.
         """
-        return self._restorer.restore(text)
+        return self._restorer.restore(text, tolerant=tolerant)
+
+    def stream_restorer(self, *, tolerant: bool | None = None) -> StreamRestorer:
+        """Start restoring a reply that arrives in pieces, such as a stream.
+
+        Feed each piece to the returned `StreamRestorer` and send on what it
+        returns: the restored text that is final so far. A placeholder split
+        across pieces (``"[EMA"``, ``"IL_1]"``) is held back until it is
+        complete, and nothing else is delayed. Call ``finish()`` at the end.
+
+        Example:
+            >>> shield = Shield()
+            >>> _ = shield.mask("Write to jane.doe@example.com")
+            >>> stream = shield.stream_restorer()
+            >>> stream.feed("Sent to [EMA"), stream.feed("IL_1] today"), stream.finish()
+            ('Sent to ', 'jane.doe@example.com today', '')
+
+        Args:
+            tolerant: Override ``tolerant_restore``, as for `restore`.
+
+        Returns:
+            A `StreamRestorer` using this shield's vault.
+        """
+        return self._restorer.stream(tolerant=tolerant)
+
+    def restore_stream(
+        self, pieces: Iterable[str], *, tolerant: bool | None = None
+    ) -> Iterator[str]:
+        """Restore a reply that arrives in pieces, yielding restored pieces.
+
+        A convenience for `stream_restorer` when the reply is an iterable of
+        strings, such as the text chunks of a streaming model call. Empty
+        pieces are skipped.
+
+        Example:
+            >>> shield = Shield()
+            >>> _ = shield.mask("Mail jane.doe@example.com")
+            >>> "".join(shield.restore_stream(["Mailed [EMAIL", "_1]."]))
+            'Mailed jane.doe@example.com.'
+
+        Args:
+            pieces: The reply's text, in order.
+            tolerant: Override ``tolerant_restore``, as for `restore`.
+
+        Returns:
+            An iterator of the restored text, each part as soon as it is final.
+
+        Raises:
+            TypeError: If ``tolerant`` is not a bool or None (raised at once,
+                not when iteration starts).
+        """
+        return _drain(self.stream_restorer(tolerant=tolerant), pieces)
 
     def wrap(
         self, llm: Callable[[str], str], *, strict: bool = False
@@ -217,6 +274,16 @@ class Shield:
         """
         self._vault.clear()
         self._masker.forget()
+
+
+def _drain(stream: StreamRestorer, pieces: Iterable[str]) -> Iterator[str]:
+    for piece in pieces:
+        restored = stream.feed(piece)
+        if restored:
+            yield restored
+    rest = stream.finish()
+    if rest:
+        yield rest
 
 
 _COPIED_ATTRS = ("__module__", "__name__", "__qualname__", "__doc__")

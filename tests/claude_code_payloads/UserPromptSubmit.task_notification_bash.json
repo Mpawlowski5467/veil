@@ -1,0 +1,9 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "UserPromptSubmit",
+ "permission_mode": "default",
+ "prompt": "<task-notification>\n<task-id>b2j8t83uq</task-id>\n<tool-use-id>toolu_fixture</tool-use-id>\n<output-file><TMPDIR>/tasks/b2j8t83uq.output</output-file>\n<status>completed</status>\n<summary>Background command \"Wait 2 seconds then output notes.txt\" completed (exit code 0)</summary>\n</task-notification>",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

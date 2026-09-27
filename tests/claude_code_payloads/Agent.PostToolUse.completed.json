@@ -1,0 +1,78 @@
+{
+ "cwd": "/work",
+ "duration_ms": 14207,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "description": "read notes",
+  "prompt": "Use the Read tool to read the file notes.txt in the current working directory. Then reply with exactly two lines. Line 1: the Email line from the file, copied verbatim. Line 2: every piece of text containing the word SENTINEL followed by a dash that appears anywhere in your context, copied verbatim, or the word NONE if there is none.",
+  "run_in_background": false,
+  "subagent_type": "general-purpose"
+ },
+ "tool_name": "Agent",
+ "tool_response": {
+  "agentId": "af8439db961941a4c",
+  "agentType": "general-purpose",
+  "content": [
+   {
+    "text": "Email: SUBREADMASK-2P8\nSENTINEL-SUBCTX-4H7",
+    "type": "text"
+   }
+  ],
+  "harnessNoteCount": 0,
+  "harnessSectionHash": "a6f9bc5fc2e7a091",
+  "harnessTailCount": 0,
+  "prompt": "Use the Read tool to read the file notes.txt in the current working directory. Then reply with exactly two lines. Line 1: the Email line from the file, copied verbatim. Line 2: every piece of text containing the word SENTINEL followed by a dash that appears anywhere in your context, copied verbatim, or the word NONE if there is none.",
+  "resolvedModel": "claude-haiku-4-5-20251001",
+  "status": "completed",
+  "toolStats": {
+   "bashCount": 0,
+   "editFileCount": 0,
+   "linesAdded": 0,
+   "linesRemoved": 0,
+   "otherToolCount": 0,
+   "readCount": 1,
+   "searchCount": 0
+  },
+  "totalDurationMs": 14207,
+  "totalTokens": 13299,
+  "totalToolUseCount": 1,
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 981
+   },
+   "cache_creation_input_tokens": 981,
+   "cache_read_input_tokens": 12051,
+   "inference_geo": "not_available",
+   "input_tokens": 8,
+   "iterations": [
+    {
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 981
+     },
+     "cache_creation_input_tokens": 981,
+     "cache_read_input_tokens": 12051,
+     "input_tokens": 8,
+     "output_tokens": 259,
+     "type": "message"
+    }
+   ],
+   "output_tokens": 259,
+   "output_tokens_details": {
+    "thinking_tokens": 231
+   },
+   "server_tool_use": {
+    "web_fetch_requests": 0,
+    "web_search_requests": 0
+   },
+   "service_tier": "standard",
+   "speed": "standard"
+  }
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

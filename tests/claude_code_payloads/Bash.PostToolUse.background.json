@@ -1,0 +1,24 @@
+{
+ "cwd": "/work",
+ "duration_ms": 63,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "command": "sleep 2; cat notes.txt",
+  "description": "Wait 2 seconds then output notes.txt",
+  "run_in_background": true
+ },
+ "tool_name": "Bash",
+ "tool_response": {
+  "backgroundTaskId": "b2j8t83uq",
+  "interrupted": false,
+  "isImage": false,
+  "noOutputExpected": false,
+  "stderr": "",
+  "stdout": ""
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

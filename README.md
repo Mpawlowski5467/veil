@@ -4,7 +4,7 @@
 
 The model never sees the real data. veil is pure Python with no runtime dependencies.
 
-> Status: v0.3, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
+> Status: v0.4, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -63,6 +63,51 @@ The same steps without `wrap()`:
 ```
 
 Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
+
+## Using it with Claude Code
+
+`veil claude` runs [Claude Code](https://claude.com/claude-code) through a masking gateway on your machine. Everything Claude Code sends to the model is masked on the way out, and every reply is restored on the way back. Claude Code and your files work with the real values; the model only ever sees placeholders.
+
+```bash
+pip install .            # from a checkout; this installs the veil command
+veil claude              # instead of claude; any claude arguments work
+```
+
+What happens:
+
+- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through settings that outrank a project's settings and your own, kept in a file only you can read. Those settings also keep hooks on, other providers and Remote Control off. `veil claude` won't start with `--settings`, `--bare`, or `--safe-mode`, or when `ANTHROPIC_BASE_URL` is already set, since each would send requests past the gateway.
+- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A known value is masked even glued to a word (`Jan Nowakem` goes out as `[PERSON_1]em`). A request with a field the gateway doesn't know is refused, never sent as it is. The model's thinking can't be changed (it is signed), so thinking about data it saw before it was masked, such as a name you registered later, is dropped.
+- **Replies are restored as they stream.** Tool calls get the real values back, so an Edit matches the text in your file and a Write puts real values on disk. When Claude Code sends a reply back as history, the model's own words go back exactly as it wrote them.
+- **Real values don't leave through tools.** A hook checks every tool call but plain file reads and edits. A shell command that contains a real value asks you first (in `claude -p`, where nobody can answer, it is refused). A call to any other tool that could send one off the machine, such as a web request, an MCP call, or a remote agent, is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off. If the hooks can't run, `veil claude` doesn't start Claude Code, and before each prompt a hook checks that the gateway is still there.
+- **Placeholders last per session.** They are kept in `~/.veil/vault.db`, one set per Claude Code session, so `--resume` works. Sessions unused for 30 days are deleted.
+
+Settings live in `~/.veil/config.json`, and only there, so a repository you clone can't change them:
+
+```json
+{
+  "entities": {"PERSON": ["Jan Nowak"], "CLIENT": ["Example Corp"]},
+  "patterns": {"ORDER": "#\\d{5}"},
+  "identity": true,
+  "retention_days": 30,
+  "note": true,
+  "allow_mcp_tools": ["mcp__crm__lookup"]
+}
+```
+
+`entities` are names and other values no pattern finds, one line each (with `identity`, your git name and email are added). `patterns` are extra types, as for `custom_patterns`. `note` adds a line to the system prompt telling the model about placeholders. `allow_mcp_tools` lists MCP tools that may receive real values. Every key is optional. An unknown key or a wrong value stops `veil claude` with a message that names the key.
+
+What it doesn't cover:
+
+- **Personal data veil doesn't detect** (see [Limitations](#limitations)), such as names you haven't registered, street addresses, and local numbers without an area code like `555-0100`.
+- **Images and PDFs** are sent as they are.
+- **Tool definitions**, including the descriptions MCP servers give their tools, and the results of Anthropic's server-side web search.
+- **Who you are.** Your login tells Anthropic which account is calling.
+- **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
+- **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.
+
+It was checked against Claude Code 2.1.283. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
+
+Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
 
 ## Usage
 
@@ -195,6 +240,21 @@ Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-
 
 A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. A rewritten form right after a word or a closing bracket, like the code subscript `scores[email1]`, is left alone too. To turn this off, use `Shield(tolerant_restore=False)`.
 
+### Streaming replies
+
+When a reply streams in, a placeholder can be split across chunks (`"[EMA"`, `"IL_1]"`). `restore_stream()` restores the chunks as they arrive, holding back only text that could still turn out to be a placeholder:
+
+```python
+>>> shield = Shield()
+>>> shield.mask("Email jan.n@example.com").text
+'Email [EMAIL_1]'
+>>> chunks = ["I emailed [EMA", "IL_1] and ", "will follow up."]
+>>> list(shield.restore_stream(chunks))
+['I emailed ', 'jan.n@example.com and ', 'will follow up.']
+```
+
+Joined, the pieces are exactly what `restore()` gives for the whole reply, however it was split. Nothing but a possible placeholder is delayed: text from a bracket onward that could still become one, always under 76 characters. A Markdown link or an array index goes straight through. When the chunks come from callbacks rather than an iterable, use `shield.stream_restorer()`: call `feed(chunk)` for each chunk and send on what it returns, then `finish()` at the end, and `result()` for the count, warnings, and repairs.
+
 ### Warnings
 
 veil reports problems instead of raising:
@@ -231,6 +291,24 @@ By default, leak warnings quote the value that leaked. To log them safely, creat
 >>> shield.mask("Call 555-123-4567-2").warnings
 ['Leak check: a known PHONE value ([PHONE_1]) still appears in the masked text.']
 ```
+
+### Text that already looks like a placeholder
+
+A document can contain placeholder-shaped text of its own, like a template with `[EMAIL_1]` in it. Left as it is, it would come back from the model as a real placeholder, and `restore()` would put a real value there. Add a `LiteralPlaceholderDetector` to mask such text too. It gets a placeholder of its own and restores to exactly what was written:
+
+```python
+>>> from veil import LiteralPlaceholderDetector, RegexDetector
+>>> shield = Shield(detectors=[LiteralPlaceholderDetector({"EMAIL"}), RegexDetector()])
+>>> masked = shield.mask("Template: Dear [EMAIL_1]. Sent by jan.n@example.com.").text
+>>> masked
+'Template: Dear [LITERAL_1]. Sent by [EMAIL_1].'
+>>> shield.restore(masked).text
+'Template: Dear [EMAIL_1]. Sent by jan.n@example.com.'
+```
+
+Give it the types that matter, so code like `row[COL_1]` is left alone (or `None` for every type). Keep the set the same for the whole conversation, so the same text always masks the same way.
+
+When the restored text will be written somewhere, not just read, such as a tool call's arguments, restore only exact placeholders: `shield.restore(text, tolerant=False)`. A rewritten form like `[Email 1]` in such text is then left as it is.
 
 ### Plugging in your own parts
 
@@ -272,8 +350,8 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Roadmap
 
-- **Next:** ready-made Claude Code hooks, `veil mask` and `veil restore` commands for copy-and-paste use with any chat app, and streaming restore for placeholders split across chunks.
-- **Later:** a local gateway in front of the model's API (so everything a tool like Claude Code sends is masked), an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
+- **Next:** `veil mask` and `veil restore` commands for copy-and-paste use with any chat app, and Claude Code hooks for the desktop app, which doesn't use a gateway.
+- **Later:** an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
 
 ## Development
 
@@ -282,6 +360,12 @@ uv sync                    # create .venv with pytest and ruff
 uv run pytest              # tests, docstring examples, and this README's examples
 uv run ruff check .
 uv run ruff format --check .
+```
+
+The live tests check the Claude Code behavior the hooks rely on. They are skipped unless you opt in, and they need a logged-in `claude` CLI. Each one makes real, small model calls on the cheapest model:
+
+```bash
+VEIL_LIVE_CLAUDE=1 uv run pytest -m live
 ```
 
 To rename the package:

@@ -1,0 +1,27 @@
+{
+ "background_tasks": [
+  {
+   "agent_type": "general-purpose",
+   "description": "read notes",
+   "id": "a74ba89e7c559392e",
+   "status": "running",
+   "type": "subagent"
+  },
+  {
+   "command": "sleep 2; cat notes.txt",
+   "description": "Wait 2 seconds then output notes.txt",
+   "id": "b2j8t83uq",
+   "status": "running",
+   "type": "shell"
+  }
+ ],
+ "cwd": "/work",
+ "hook_event_name": "Stop",
+ "last_assistant_message": "Both the subagent and background bash command have been launched. Waiting for both to complete...",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_crons": [],
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "stop_hook_active": false,
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

@@ -1,0 +1,19 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "PostToolBatch",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_calls": [
+  {
+   "tool_input": {
+    "command": "cat notes.txt; echo MARK-C; exit 3",
+    "description": "Test command 3 with exit code 3"
+   },
+   "tool_name": "Bash",
+   "tool_response": "Exit code 3\nName: Jan Nowak\nEmail: jane.doe@example.com\nPhone: 555-0100\nMARK-C",
+   "tool_use_id": "toolu_fixture"
+  }
+ ],
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

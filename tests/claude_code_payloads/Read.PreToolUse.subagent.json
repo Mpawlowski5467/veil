@@ -1,0 +1,15 @@
+{
+ "agent_id": "a74ba89e7c559392e",
+ "agent_type": "general-purpose",
+ "cwd": "/work",
+ "hook_event_name": "PreToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "file_path": "/work/notes.txt"
+ },
+ "tool_name": "Read",
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

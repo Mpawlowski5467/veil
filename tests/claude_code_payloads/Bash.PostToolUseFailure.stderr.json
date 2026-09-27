@@ -1,0 +1,17 @@
+{
+ "cwd": "/work",
+ "duration_ms": 12,
+ "error": "Exit code 2\nName: Jan Nowak\nEmail: jane.doe@example.com\nPhone: 555-0100\nMARK-B",
+ "hook_event_name": "PostToolUseFailure",
+ "is_interrupt": false,
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "command": "cat notes.txt; echo MARK-B >&2; exit 2",
+  "description": "Test command 2 with exit code 2"
+ },
+ "tool_name": "Bash",
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

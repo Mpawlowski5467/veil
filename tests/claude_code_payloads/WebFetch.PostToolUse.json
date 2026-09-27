@@ -1,0 +1,23 @@
+{
+ "cwd": "/work",
+ "duration_ms": 783,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "prompt": "Quote the page title and its first sentence verbatim.",
+  "url": "https://example.com"
+ },
+ "tool_name": "WebFetch",
+ "tool_response": {
+  "bytes": 559,
+  "code": 200,
+  "codeText": "OK",
+  "durationMs": 783,
+  "result": "**Page title:** \"Example Domain\"\n\n**First sentence:** \"This domain is for use in documentation examples without needing permission.\"",
+  "url": "https://example.com"
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}
