@@ -4,7 +4,7 @@
 
 The model never sees the real data. veil is pure Python with no runtime dependencies.
 
-> Status: v0.3, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
+> Status: v0.4, alpha. "veil" is a working name. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -63,6 +63,51 @@ The same steps without `wrap()`:
 ```
 
 Placeholders look like `[TYPE_N]`. Numbering is per type and starts at 1.
+
+## Using it with Claude Code
+
+`veil claude` runs [Claude Code](https://claude.com/claude-code) through a masking gateway on your machine. Everything Claude Code sends to the model is masked on the way out, and every reply is restored on the way back. Claude Code and your files work with the real values; the model only ever sees placeholders.
+
+```bash
+pip install .            # from a checkout; this installs the veil command
+veil claude              # instead of claude; any claude arguments work
+```
+
+What happens:
+
+- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through `--settings`, which outrank a project's settings and your environment.
+- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A request with a field the gateway doesn't know is refused, never sent as it is.
+- **Replies are restored as they stream.** Tool calls get the real values back, so an Edit matches the text in your file and a Write puts real values on disk. When Claude Code sends a reply back as history, the model's own words go back exactly as it wrote them.
+- **Real values don't leave through tools.** A shell command that contains one asks you first (in `claude -p`, where nobody can answer, it is refused). A web request or MCP call that contains one is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off.
+- **Placeholders last per session.** They are kept in `~/.veil/vault.db`, one set per Claude Code session, so `--resume` works. Sessions unused for 30 days are deleted.
+
+Settings live in `~/.veil/config.json`, and only there, so a repository you clone can't change them:
+
+```json
+{
+  "entities": {"PERSON": ["Jan Nowak"], "CLIENT": ["Example Corp"]},
+  "patterns": {"ORDER": "#\\d{5}"},
+  "identity": true,
+  "retention_days": 30,
+  "note": true,
+  "allow_mcp_tools": ["mcp__crm__lookup"]
+}
+```
+
+`entities` are names and other values no pattern finds (with `identity`, your git name and email are added). `patterns` are extra types, as for `custom_patterns`. `note` adds a line to the system prompt telling the model about placeholders. `allow_mcp_tools` lists MCP tools that may receive real values. Every key is optional. An unknown key or a wrong value stops `veil claude` with a message that names the key.
+
+What it doesn't cover:
+
+- **Personal data veil doesn't detect** (see [Limitations](#limitations)), such as names you haven't registered, street addresses, and local numbers without an area code like `555-0100`.
+- **Images and PDFs** are sent as they are.
+- **Tool definitions**, including the descriptions MCP servers give their tools, and the results of Anthropic's server-side web search.
+- **Who you are.** Your login tells Anthropic which account is calling.
+- **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
+- **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.
+
+It was checked against Claude Code 2.1.283. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
+
+Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
 
 ## Usage
 
@@ -305,8 +350,8 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Roadmap
 
-- **Next:** a local gateway for Claude Code (`veil claude`), so everything it sends to the model is masked, and `veil mask` and `veil restore` commands for copy-and-paste use with any chat app.
-- **Later:** Claude Code hooks for the desktop app, which doesn't use a gateway, an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
+- **Next:** `veil mask` and `veil restore` commands for copy-and-paste use with any chat app, and Claude Code hooks for the desktop app, which doesn't use a gateway.
+- **Later:** an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
 
 ## Development
 
