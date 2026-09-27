@@ -10,13 +10,16 @@ API's format and never forwarded.
 from __future__ import annotations
 
 import codecs
+import contextlib
 import hmac
 import http.client
 import json
 import secrets
 import threading
 import time
-from collections.abc import Callable
+from collections import OrderedDict
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -46,6 +49,8 @@ _ROUTES = {
     ("GET", "/api/hello"),
 }
 _MASKED_PATHS = {_MESSAGES, _COUNT_TOKENS}
+# The largest request body read (a long conversation with images is a few MB).
+_MAX_BODY = 256 * 1024 * 1024
 
 # Headers about one hop of the connection, or that the gateway sets itself.
 _HOP_HEADERS = frozenset(
@@ -76,6 +81,7 @@ class Session:
     ledger: Ledger
     masker: RequestMasker
     lock: threading.RLock = field(default_factory=threading.RLock)
+    users: int = 0  # requests using it now; kept by `Sessions`
 
     def close(self) -> None:
         """Close the vault and ledger, if they hold open files."""
@@ -88,12 +94,17 @@ class Session:
 class Sessions:
     """Makes and keeps one `Session` per conversation id.
 
+    At most ``max_open`` sessions stay open (each holds open files); the one
+    used longest ago, if no request is using it, is closed to make room, and
+    opened again from disk when it is needed.
+
     Args:
         make_shield: Builds the shield for a new conversation id, with the
             vault that holds that conversation's placeholders. Its ledger is
             a `MemoryLedger`.
         make_session: Builds the whole session instead, for a ledger or
             masker of your own.
+        max_open: How many sessions to keep open.
     """
 
     def __init__(
@@ -101,6 +112,7 @@ class Sessions:
         make_shield: Callable[[str], Shield] | None = None,
         *,
         make_session: Callable[[str], Session] | None = None,
+        max_open: int = 32,
     ) -> None:
         """Create an empty set of sessions."""
         if (make_shield is None) == (make_session is None):
@@ -117,22 +129,49 @@ class Sessions:
                 return Session(shield, ledger, RequestMasker(shield, ledger))
 
             self._make_session = in_memory
-        self._sessions: dict[str, Session] = {}
+        self._max_open = max_open
+        self._sessions: OrderedDict[str, Session] = OrderedDict()
         self._lock = threading.Lock()
 
     def get(self, session_id: str) -> Session:
-        """Return the session for ``session_id``, making it the first time."""
+        """Return the session for ``session_id``, making it if needed."""
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                session = self._make_session(session_id)
-                self._sessions[session_id] = session
-            return session
+            return self._open(session_id)
+
+    @contextmanager
+    def use(self, session_id: str) -> Iterator[Session]:
+        """Use a session for one request; it stays open until the request ends."""
+        with self._lock:
+            session = self._open(session_id)
+            session.users += 1
+        try:
+            yield session
+        finally:
+            with self._lock:
+                session.users -= 1
+                self._close_extra()
+
+    def _open(self, session_id: str) -> Session:
+        session = self._sessions.get(session_id)
+        if session is None:
+            session = self._make_session(session_id)
+            self._sessions[session_id] = session
+        self._sessions.move_to_end(session_id)
+        self._close_extra()
+        return session
+
+    def _close_extra(self) -> None:
+        idle = [key for key, s in self._sessions.items() if s.users == 0]
+        while len(self._sessions) > self._max_open and idle:
+            session = self._sessions.pop(idle.pop(0))
+            with session.lock:
+                session.close()
 
     def close(self) -> None:
         """Close every session's files."""
         with self._lock:
-            sessions, self._sessions = list(self._sessions.values()), {}
+            sessions = list(self._sessions.values())
+            self._sessions = OrderedDict()
         for session in sessions:
             with session.lock:
                 session.close()
@@ -223,11 +262,14 @@ class _QuietServer(ThreadingHTTPServer):
 
 
 class _RefusedError(Exception):
-    def __init__(self, status: int, kind: str, message: str) -> None:
+    def __init__(
+        self, status: int, kind: str, message: str, retry: bool = False
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.kind = kind
         self.message = message
+        self.retry = retry
 
 
 def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
@@ -235,11 +277,15 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         protocol_version = "HTTP/1.1"
         server_version = "gateway"
         sys_version = ""
+        # A socket timeout, so a half-sent request can't hold a thread forever.
+        timeout = 120
 
         def log_message(self, format: str, *args: Any) -> None:
             pass  # no access log: paths and headers stay out of the terminal
 
         def _serve(self) -> None:
+            self._started = False  # whether a response has begun
+            self._chunked = False  # whether it is a chunked stream
             try:
                 self._check_access()
                 path = urlsplit(self.path).path
@@ -253,15 +299,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 else:
                     self._forward(body, None)
             except _RefusedError as refusal:
-                self._error(refusal.status, refusal.kind, refusal.message)
+                self._fail(refusal.status, refusal.kind, refusal.message, refusal.retry)
             except (BrokenPipeError, ConnectionResetError):
-                self.close_connection = True
+                self.close_connection = True  # the client went away
             except Exception:
                 # Never forwarded and never printed: the details may hold data.
-                try:
-                    self._error(500, "api_error", "the gateway failed")
-                except OSError:
-                    self.close_connection = True
+                self._fail(500, "api_error", "the gateway failed", retry=True)
 
         def _check_access(self) -> None:
             port = gateway.port
@@ -294,12 +337,13 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             length = self.headers.get("Content-Length")
             if length is None:
                 return b""
-            try:
-                size = int(length)
-            except ValueError:
+            if not length.isdigit():
+                raise _RefusedError(400, "invalid_request_error", "bad Content-Length")
+            size = int(length)
+            if size > _MAX_BODY:
                 raise _RefusedError(
-                    400, "invalid_request_error", "bad Content-Length"
-                ) from None
+                    413, "request_too_large", "the request is too large"
+                )
             return self.rfile.read(size)
 
         def _masked(self, path: str, body: bytes) -> None:
@@ -314,21 +358,21 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 raise _RefusedError(
                     400, "invalid_request_error", "the body isn't JSON"
                 ) from None
-            try:
-                session = gateway.sessions.get(session_id)
-                with session.lock:
-                    masked = session.masker.mask(request)
-            except UnsupportedRequestError as error:
-                raise _RefusedError(
-                    400, "invalid_request_error", f"the gateway can't mask {error}"
-                ) from None
-            except Exception:
-                raise _RefusedError(
-                    500, "api_error", "the gateway failed to mask"
-                ) from None
-            self._forward(
-                json.dumps(masked).encode(), session if path == _MESSAGES else None
-            )
+            with gateway.sessions.use(session_id) as session:
+                try:
+                    with session.lock:
+                        masked = session.masker.mask(request)
+                except UnsupportedRequestError as error:
+                    raise _RefusedError(
+                        400, "invalid_request_error", f"the gateway can't mask {error}"
+                    ) from None
+                except Exception:
+                    raise _RefusedError(
+                        500, "api_error", "the gateway failed to mask", retry=True
+                    ) from None
+                self._forward(
+                    json.dumps(masked).encode(), session if path == _MESSAGES else None
+                )
 
         def _forward(self, body: bytes, session: Session | None) -> None:
             headers = {
@@ -348,29 +392,44 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     response = upstream.getresponse()
                 except (OSError, http.client.HTTPException):
                     raise _RefusedError(
-                        502, "api_error", "the API couldn't be reached"
+                        502, "api_error", "the API couldn't be reached", retry=True
                     ) from None
                 self._relay(response, session)
             finally:
                 upstream.close()
 
-        def _relay(
-            self, response: http.client.HTTPResponse, session: Session | None
+        def _send_head(
+            self, response: http.client.HTTPResponse, *, chunked: bool, length: int = 0
         ) -> None:
-            content_type = response.getheader("Content-Type") or ""
-            restore = session is not None and response.status == 200
             self.send_response(response.status)
             for name, value in response.getheaders():
                 lowered = name.lower()
                 if lowered in _HOP_HEADERS or lowered.startswith("access-control-"):
                     continue
                 self.send_header(name, value)
-            if "text/event-stream" in content_type:
+            if chunked:
                 self.send_header("Transfer-Encoding", "chunked")
-                self.end_headers()
+            else:
+                self.send_header("Content-Length", str(length))
+            self.end_headers()
+            self._started = True
+            self._chunked = chunked
+
+        def _relay(
+            self, response: http.client.HTTPResponse, session: Session | None
+        ) -> None:
+            content_type = response.getheader("Content-Type") or ""
+            restore = session is not None and response.status == 200
+            if "text/event-stream" in content_type:
+                self._send_head(response, chunked=True)
                 self._stream(response, session if restore else None)
                 return
-            data = response.read()
+            try:
+                data = response.read()
+            except (OSError, http.client.HTTPException):
+                raise _RefusedError(
+                    502, "api_error", "the API connection was lost", retry=True
+                ) from None
             if restore and session is not None and "json" in content_type:
                 try:
                     message = json.loads(data)
@@ -382,8 +441,8 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                             session.shield, session.ledger, message
                         )
                     data = json.dumps(restored).encode()
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
+            # Restored before anything is sent, so a failure is a clean error.
+            self._send_head(response, chunked=False, length=len(data))
             if self.command != "HEAD":
                 self.wfile.write(data)
 
@@ -395,41 +454,73 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 ResponseRestorer(session.shield, session.ledger) if session else None
             )
             last_write = time.monotonic()
-            try:
-                while True:
+            while True:
+                try:
                     chunk = response.read1(65536)
-                    if not chunk:
-                        break
-                    text = decoder.decode(chunk)
-                    if restorer is None or session is None:
-                        out = text
-                    else:
-                        with session.lock:
-                            out = restorer.feed(text)
-                    if not out and time.monotonic() - last_write >= gateway.keepalive:
-                        out = ": keep-alive\n\n"
-                    if out:
-                        self._chunk(out)
-                        last_write = time.monotonic()
-                    if restorer is not None and restorer.failed is not None:
-                        break
-                rest = decoder.decode(b"", final=True)
-                if restorer is not None and session is not None:
+                except (OSError, http.client.HTTPException):
+                    self._end_stream_with_error("the API connection was lost")
+                    return
+                if not chunk:
+                    break
+                text = decoder.decode(chunk)
+                if restorer is None or session is None:
+                    out = text
+                else:
                     with session.lock:
-                        rest = restorer.feed(rest) + restorer.finish()
-                if rest:
-                    self._chunk(rest)
-                self.wfile.write(b"0\r\n\r\n")
-                self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                pass  # the client went away; closing upstream ends the call
+                        out = restorer.feed(text)
+                if not out and time.monotonic() - last_write >= gateway.keepalive:
+                    out = (
+                        restorer.keepalive()
+                        if restorer is not None
+                        else ": keep-alive\n\n"
+                    )
+                if out:
+                    self._chunk(out)
+                    last_write = time.monotonic()
+                if restorer is not None and restorer.failed is not None:
+                    self._end_chunks()
+                    return
+            rest = decoder.decode(b"", final=True)
+            if restorer is not None and session is not None:
+                with session.lock:
+                    rest = restorer.feed(rest) + restorer.finish()
+            if rest:
+                self._chunk(rest)
+            self._end_chunks()
 
         def _chunk(self, text: str) -> None:
             data = text.encode("utf-8")
             self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
             self.wfile.flush()
 
-        def _error(self, status: int, kind: str, message: str) -> None:
+        def _end_chunks(self) -> None:
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+
+        def _end_stream_with_error(self, message: str) -> None:
+            error = {
+                "type": "error",
+                "error": {"type": "api_error", "message": message},
+            }
+            self._chunk(f"event: error\ndata: {json.dumps(error)}\n\n")
+            self._end_chunks()
+            self.close_connection = True
+
+        def _fail(self, status: int, kind: str, message: str, retry: bool) -> None:
+            """Report a failure: as a response, or, once one has begun, ending it."""
+            self.close_connection = True
+            if not self._started:
+                self._error(status, kind, message, retry=retry)
+                return
+            if self._chunked:
+                with contextlib.suppress(OSError):
+                    self._end_stream_with_error(message)
+            # A response with a length already on its way can't be changed:
+            # closing the connection makes the client see it as cut off.
+
+        def _error(
+            self, status: int, kind: str, message: str, *, retry: bool = False
+        ) -> None:
             # The request's body may be unread: never read what follows as a
             # request of its own.
             self.close_connection = True
@@ -439,13 +530,19 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("x-should-retry", "false")
+            if not retry:
+                # Asking again gets the same answer; a failure on the way
+                # (retry=True) is left to the client's usual retries.
+                self.send_header("x-should-retry", "false")
             self.send_header("Connection", "close")
             self.end_headers()
+            self._started = True
             if self.command != "HEAD":
                 self.wfile.write(data)
 
         def do_OPTIONS(self) -> None:
+            self._started = False
+            self._chunked = False
             self._error(405, "invalid_request_error", "method not allowed")
 
         # http.server dispatches on these names.

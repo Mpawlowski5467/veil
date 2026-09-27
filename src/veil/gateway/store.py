@@ -39,9 +39,10 @@ def _digest(value: str) -> str:
 
 def _create_private(path: Path) -> None:
     """Create ``path`` readable and writable by its owner only, if missing."""
-    if path.exists():
-        return
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return  # made already, maybe by another gateway just now
     os.close(fd)
 
 
@@ -62,7 +63,16 @@ class SQLiteLedger:
         self._db = sqlite3.connect(
             self._path, timeout=5.0, isolation_level=None, check_same_thread=False
         )
-        self._db.execute("PRAGMA journal_mode=WAL")
+        for attempt in range(100):
+            # Switching to WAL needs a moment alone with a new file; another
+            # gateway opening it at the same time makes it wait.
+            try:
+                self._db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as error:
+                if "locked" not in str(error) or attempt == 99:
+                    raise
+                time.sleep(0.02)
         self._db.execute("PRAGMA synchronous=NORMAL")
         for statement in _SCHEMA:
             self._db.execute(statement)

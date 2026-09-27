@@ -67,6 +67,7 @@ class ResponseRestorer:
         self._shield = shield
         self._ledger = ledger
         self._buffer = ""
+        self._carry = ""
         self._text: dict[int, _TextBlock] = {}
         self._tools: dict[int, _ToolBlock] = {}
         self.failed: str | None = None
@@ -75,6 +76,11 @@ class ResponseRestorer:
         """Add the next part of the reply; return the events to send on."""
         if self.failed is not None:
             return ""
+        data = self._carry + data
+        # A "\r" at the end may be the first half of a "\r\n".
+        self._carry = "\r" if data.endswith("\r") else ""
+        if self._carry:
+            data = data[:-1]
         self._buffer += data.replace("\r\n", "\n")
         out: list[str] = []
         while "\n\n" in self._buffer:
@@ -97,8 +103,26 @@ class ResponseRestorer:
 
     def finish(self) -> str:
         """End of the reply: pass on anything left, unchanged."""
-        rest, self._buffer = self._buffer, ""
+        rest, self._buffer = self._buffer + self._carry, ""
+        self._carry = ""
         return "" if self.failed is not None else rest
+
+    def keepalive(self) -> str:
+        """Return something to send while a tool call is held back.
+
+        An empty input delta for the held call is a real event, which the
+        client counts as progress; a comment line is not.
+        """
+        for index in self._tools:
+            return _event(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {"type": "input_json_delta", "partial_json": ""},
+                },
+            )
+        return ": keep-alive\n\n"
 
     def _handle(self, raw: str) -> str:
         data = _parse(raw)
@@ -214,7 +238,10 @@ class ResponseRestorer:
             try:
                 masked = json.loads(source)
             except ValueError:
-                raise StreamError("a tool call's input was not valid JSON") from None
+                # Cut off (by max_tokens, say): the client can't run it, so
+                # it goes on as the model wrote it, with the stop reason
+                # that follows, for the client to handle.
+                return self._raw_delta(index, source) + raw
         else:
             masked = tool.block.get("input") or {}
         restored = self._restore_value(masked)
@@ -233,6 +260,16 @@ class ResponseRestorer:
             },
         )
         return delta + raw
+
+    def _raw_delta(self, index: int, partial_json: str) -> str:
+        return _event(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": index,
+                "delta": {"type": "input_json_delta", "partial_json": partial_json},
+            },
+        )
 
     def _restore_value(self, value: Any) -> Any:
         """Restore exact placeholders in every string of a tool call's input."""

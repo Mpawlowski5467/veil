@@ -279,13 +279,13 @@ class TestRoundTrip:
             )
         )
         _, payload = call(gateway, body=REQUEST)
-        assert b": keep-alive\n\n" in payload
         deltas = [
             e["delta"] for e in events(payload) if e["type"] == "content_block_delta"
         ]
-        assert [json.loads(d["partial_json"]) for d in deltas] == [
-            {"command": f"echo {NAME}"}
-        ]
+        # Keep-alives are empty input deltas: real events the client counts.
+        assert {"type": "input_json_delta", "partial_json": ""} in deltas
+        parts = [d["partial_json"] for d in deltas if d["partial_json"]]
+        assert [json.loads(p) for p in parts] == [{"command": f"echo {NAME}"}]
 
     def test_a_reply_that_isnt_streamed_is_restored(self, api, gateway):
         message = {"id": "m", "content": [{"type": "text", "text": "Hi [PERSON_1]"}]}
@@ -459,3 +459,137 @@ def test_the_gateway_listens_on_loopback_only(gateway):
     assert gateway._server.server_address[0] == "127.0.0.1"
     assert gateway.url == f"http://127.0.0.1:{gateway.port}"
     assert len(gateway.secret) >= 40
+
+
+class BrokenAPI:
+    """Sends a stream's first event, then resets the connection."""
+
+    def __init__(self):
+        import socket
+
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen()
+        self.host = f"127.0.0.1:{self.sock.getsockname()[1]}"
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        import struct
+
+        conn, _ = self.sock.accept()
+        self.sock.close()
+        conn.recv(65536)
+        first = sse({"type": "message_start", "message": {"id": "m", "content": []}})
+        conn.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            + f"{len(first):x}\r\n".encode()
+            + first
+            + b"\r\n"
+        )
+        time.sleep(0.2)
+        conn.setsockopt(
+            __import__("socket").SOL_SOCKET,
+            __import__("socket").SO_LINGER,
+            struct.pack("ii", 1, 0),
+        )
+        conn.close()
+
+
+def test_an_api_reset_mid_stream_ends_the_stream_with_an_error():
+    broken = BrokenAPI()
+    with Gateway(Sessions(make_shield), upstream=broken.host, secure=False) as gw:
+        started = time.monotonic()
+        response, payload = call(gw, body=REQUEST)
+        assert time.monotonic() - started < 5
+    assert response.status == 200
+    assert events(payload)[-1] == {
+        "type": "error",
+        "error": {"type": "api_error", "message": "the API connection was lost"},
+    }
+
+
+def test_a_failure_while_restoring_a_stream_ends_it_cleanly(api, gateway, monkeypatch):
+    import veil.gateway.server as server
+
+    def broken_feed(self, text):
+        raise RuntimeError(f"boom {EMAIL}")
+
+    monkeypatch.setattr(server.ResponseRestorer, "feed", broken_feed)
+    api.replies.append(text_reply("hi"))
+    response, payload = call(gateway, body=REQUEST)
+    assert response.status == 200
+    assert b"HTTP/1.1" not in payload  # no second response inside the first
+    assert events(payload)[-1]["type"] == "error"
+    assert EMAIL.encode() not in payload
+
+
+def test_a_failure_while_restoring_a_whole_reply_is_a_clean_500(
+    api, gateway, monkeypatch
+):
+    import veil.gateway.server as server
+
+    monkeypatch.setattr(server, "restore_message", lambda *a: 1 / 0)
+    message = {"id": "m", "content": [{"type": "text", "text": "Hi"}]}
+    api.replies.append((200, "application/json", [json.dumps(message).encode()]))
+    response, payload = call(gateway, body={**REQUEST, "stream": False})
+    assert response.status == 500
+    assert json.loads(payload)["error"]["message"] == "the gateway failed"
+
+
+def test_only_refusals_ask_the_client_not_to_retry(api, gateway):
+    refused, _ = call(gateway, body=REQUEST, headers={SECRET_HEADER: "wrong"})
+    assert refused.getheader("x-should-retry") == "false"
+    gateway.upstream = "127.0.0.1:9"
+    unreachable, _ = call(gateway, body=REQUEST)
+    assert unreachable.status == 502
+    assert unreachable.getheader("x-should-retry") is None
+
+
+@pytest.mark.parametrize(
+    ("length", "status"), [("-1", 400), ("12x", 400), (str(300 * 2**20), 413)]
+)
+def test_bad_lengths_are_refused(api, gateway, length, status):
+    conn = http.client.HTTPConnection(f"127.0.0.1:{gateway.port}", timeout=5)
+    conn.putrequest("POST", "/v1/messages")
+    for name, value in {
+        SECRET_HEADER: gateway.secret,
+        SESSION_HEADER: "s",
+        "Content-Length": length,
+    }.items():
+        conn.putheader(name, value)
+    conn.endheaders()
+    response = conn.getresponse()
+    assert response.status == status
+    conn.close()
+    assert api.received == []
+
+
+class TestSessions:
+    def make(self, max_open):
+        closed = []
+
+        class Vault(MemoryVault):
+            def close(self):
+                closed.append(self)
+
+        def shield(_id):
+            return Shield(vault=Vault())
+
+        return Sessions(shield, max_open=max_open), closed
+
+    def test_the_oldest_idle_session_is_closed(self):
+        sessions, closed = self.make(2)
+        first = sessions.get("a")
+        sessions.get("b")
+        sessions.get("c")
+        assert closed == [first.shield.vault]
+        assert sessions.get("a") is not first  # opened again when needed
+
+    def test_a_session_in_use_is_never_closed(self):
+        sessions, closed = self.make(1)
+        with sessions.use("a") as busy:
+            sessions.get("b")
+            sessions.get("c")
+            assert busy.shield.vault not in closed
+        assert busy.users == 0

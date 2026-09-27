@@ -229,24 +229,56 @@ class TestStreaming:
 
 
 class TestFailures:
-    def test_tool_input_that_isnt_json_ends_the_stream(self):
-        stream = tool_block(0, "toolu_1", ['{"content": "[EMAIL_1]"']) + sse(
-            {"type": "message_stop"}
+    def test_a_tool_call_cut_off_passes_through_as_written(self):
+        # max_tokens ended the call mid-input: the client can't run it, and
+        # handles the stop reason that follows.
+        stream = (
+            tool_block(0, "toolu_1", ['{"content": "[EMAIL_1]', " and more"])
+            + sse({"type": "message_delta", "delta": {"stop_reason": "max_tokens"}})
+            + sse({"type": "message_stop"})
         )
         out, restorer = run(make_shield(), MemoryLedger(), stream)
-        assert restorer.failed == "a tool call's input was not valid JSON"
+        assert restorer.failed is None
         events = parse(out)
-        assert events[-1] == {
-            "type": "error",
-            "error": {
-                "type": "api_error",
-                "message": "a tool call's input was not valid JSON",
-            },
-        }
-        assert all(e["type"] != "message_stop" for e in events)
+        deltas = [e["delta"] for e in events if e["type"] == "content_block_delta"]
+        assert deltas == [
+            {
+                "type": "input_json_delta",
+                "partial_json": '{"content": "[EMAIL_1] and more',
+            }
+        ]
+        assert [e["type"] for e in events][-2:] == ["message_delta", "message_stop"]
         assert EMAIL not in out
-        assert restorer.feed(sse({"type": "ping"})) == ""
-        assert restorer.finish() == ""
+
+    def test_a_crlf_split_across_reads_still_ends_an_event(self):
+        stream = reply().replace("\n", "\r\n")
+        for cut in range(1, len(stream)):
+            if stream[cut - 1] != "\r":
+                continue
+            restorer = ResponseRestorer(make_shield(), MemoryLedger())
+            out = (
+                restorer.feed(stream[:cut])
+                + restorer.feed(stream[cut:])
+                + restorer.finish()
+            )
+            tool = blocks(parse(out))[2]
+            assert json.loads(tool["deltas"][0]["partial_json"])["content"].startswith(
+                f"To {EMAIL}"
+            )
+
+    def test_keepalive_is_an_event_while_a_tool_call_is_held(self):
+        restorer = ResponseRestorer(make_shield(), MemoryLedger())
+        assert restorer.keepalive() == ": keep-alive\n\n"
+        restorer.feed(
+            start(3, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}})
+        )
+        assert parse(restorer.keepalive()) == [
+            {
+                "type": "content_block_delta",
+                "index": 3,
+                "delta": {"type": "input_json_delta", "partial_json": ""},
+            }
+        ]
 
     def test_an_unexpected_part_of_a_tool_call_ends_the_stream(self):
         stream = (

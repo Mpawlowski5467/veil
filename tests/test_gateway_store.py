@@ -193,6 +193,15 @@ class TestLedger:
         assert NAME.encode() not in raw
         assert EMAIL.encode() not in raw
 
+    def test_many_gateways_can_open_a_new_file_at_once(self, tmp_path):
+        import multiprocessing
+
+        path = tmp_path / "ledger.db"
+        context = multiprocessing.get_context("spawn")
+        with context.Pool(8) as pool:
+            results = pool.map(_open_ledger, [(str(path), f"s{i}") for i in range(24)])
+        assert results == ["ok"] * 24
+
     def test_purge_by_age(self, tmp_path, monkeypatch):
         ledger = SQLiteLedger(tmp_path / "ledger.db", "s1")
         ledger.record_text("a", "A")
@@ -292,3 +301,11 @@ class TestSessions:
         monkeypatch.setattr(sqlite_vault.time, "time", lambda: now + 3 * 86400)
         with open_sessions(tmp_path, Settings(retention_days=1), {}) as fresh:
             assert fresh.get("old").shield.restore("[EMAIL_1]").text == "[EMAIL_1]"
+
+
+def _open_ledger(args):
+    path, session = args
+    ledger = SQLiteLedger(path, session)
+    ledger.record_text(session, session.upper())
+    ledger.close()
+    return "ok"
