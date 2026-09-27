@@ -324,3 +324,34 @@ class TestPatternBounds:
         assert shield.restore("[" + " " * 9 + "person 1]").text == (
             "[" + " " * 9 + "person 1]"
         )
+
+
+def test_restore_stream_checks_its_arguments_at_once():
+    shield = make_shield()
+    with pytest.raises(TypeError, match="must be a bool"):
+        shield.restore_stream(["x"], tolerant="yes")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "See [ISBN 9780306406157]",
+        "[ref 20240915123]",
+        "[time 1727308800]",
+        "[a1234567890]",
+        "[ID 1234567890]",
+    ],
+)
+def test_long_bracketed_numbers_are_not_placeholders(text):
+    shield = make_shield()
+    assert shield.mask(text).text == text
+    assert shield.restore(text).text == text
+    assert "".join(shield.restore_stream([text[:7], text[7:]])) == text
+
+
+def test_non_ascii_digits_are_not_placeholder_numbers():
+    shield = Shield(tolerant_restore=False)
+    text = "see [EMAIL_\N{FULLWIDTH DIGIT ONE}] now"
+    assert shield.restore(text).warnings == []
+    _, streamed = stream_all(shield, [text[:12], text[12:]])
+    assert streamed.warnings == []

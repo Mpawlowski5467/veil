@@ -160,7 +160,9 @@ class Shield:
             tolerant: Override ``tolerant_restore`` for this call. Pass
                 ``False`` for text that will be written or run, such as a
                 tool call's arguments, where only an exact placeholder
-                should become a real value.
+                should become a real value. (`mask` warns about
+                placeholder-like input by the shield's own
+                ``tolerant_restore``, not by this override.)
 
         Returns:
             A `RestoreResult` with the restored text, how many placeholders
@@ -210,17 +212,14 @@ class Shield:
             pieces: The reply's text, in order.
             tolerant: Override ``tolerant_restore``, as for `restore`.
 
-        Yields:
-            The restored text, as soon as each part of it is final.
+        Returns:
+            An iterator of the restored text, each part as soon as it is final.
+
+        Raises:
+            TypeError: If ``tolerant`` is not a bool or None (raised at once,
+                not when iteration starts).
         """
-        stream = self.stream_restorer(tolerant=tolerant)
-        for piece in pieces:
-            restored = stream.feed(piece)
-            if restored:
-                yield restored
-        rest = stream.finish()
-        if rest:
-            yield rest
+        return _drain(self.stream_restorer(tolerant=tolerant), pieces)
 
     def wrap(
         self, llm: Callable[[str], str], *, strict: bool = False
@@ -275,6 +274,16 @@ class Shield:
         """
         self._vault.clear()
         self._masker.forget()
+
+
+def _drain(stream: StreamRestorer, pieces: Iterable[str]) -> Iterator[str]:
+    for piece in pieces:
+        restored = stream.feed(piece)
+        if restored:
+            yield restored
+    rest = stream.finish()
+    if rest:
+        yield rest
 
 
 _COPIED_ATTRS = ("__module__", "__name__", "__qualname__", "__doc__")

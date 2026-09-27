@@ -20,7 +20,9 @@ MAX_PLACEHOLDER_NUMBER = 999_999_999
 #: number is the digits after the *last* underscore, so ``[ORDER_ID_12]`` parses
 #: as type ``ORDER_ID``, number ``12``. The closing bracket is part of the match,
 #: which is what keeps ``[PERSON_1]`` from matching inside ``[PERSON_10]``.
-PLACEHOLDER_RE = re.compile(r"\[(?P<type>[A-Z][A-Z0-9_]{0,63})_(?P<number>\d{1,9})\]")
+PLACEHOLDER_RE = re.compile(
+    r"\[(?P<type>[A-Z][A-Z0-9_]{0,63})_(?P<number>[0-9]{1,9})\]"
+)
 
 _LOOSE_BODY = (
     r"[ \t]{{0,8}}(?P<{name}>[A-Za-z][A-Za-z0-9 \t_-]{{0,40}}?[0-9]{{1,6}})[ \t]{{0,8}}"
@@ -146,6 +148,9 @@ def placeholder_candidates(body: str) -> list[str]:
     for split in splits:
         entity_type = normalized[:split].rstrip("_")
         number = int(normalized[split:])
-        if number >= 1 and ENTITY_TYPE_RE.fullmatch(entity_type):
+        # A number too long for a placeholder can't be one (an ISBN, a time).
+        if 1 <= number <= MAX_PLACEHOLDER_NUMBER and ENTITY_TYPE_RE.fullmatch(
+            entity_type
+        ):
             candidates.append(format_placeholder(entity_type, number))
     return candidates

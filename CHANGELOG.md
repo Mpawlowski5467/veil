@@ -21,7 +21,7 @@
 ### Changed
 
 - `mask()` warns about placeholder-like input only when that text is left unmasked. Text that was masked itself (by `LiteralPlaceholderDetector`, or as part of a registered value) restores as written, so it no longer warns.
-- Placeholders have a maximum length: entity types are at most 64 characters (`add_entity` and `custom_patterns` reject longer ones), placeholder numbers at most nine digits, and a rewritten placeholder is only restored with up to eight spaces or tabs of padding inside its brackets.
+- Placeholders have a maximum length: entity types are at most 64 characters (`add_entity` and `custom_patterns` reject longer ones), placeholder numbers at most nine ASCII digits, and a rewritten placeholder is only restored with up to eight spaces or tabs of padding inside its brackets. A vault made by an earlier version with a longer type keeps its values, but their placeholders are no longer recognized, so they aren't restored.
 - A `Shield` can be shared between threads: its `mask()` calls take turns.
 - A pickled `Shield(normalize=True)` no longer holds the values cached by its normalization index; they are rebuilt from the vault.
 - `restore()` only looks at the types in the vault when it meets a rewritten placeholder it can't restore.
