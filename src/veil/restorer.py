@@ -145,6 +145,11 @@ class StreamRestorer:
         self._finished = True
         return out
 
+    @property
+    def held(self) -> int:
+        """How many characters received so far are held back, not yet returned."""
+        return len(self._pending)
+
     def result(self) -> RestoreResult:
         """Summarize the whole stream, like `Restorer.restore` would.
 

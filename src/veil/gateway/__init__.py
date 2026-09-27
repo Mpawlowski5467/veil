@@ -8,6 +8,7 @@ restored before the client sees it.
 
 from .ledger import Ledger, MemoryLedger
 from .request import DEFAULT_NOTE, WITHHELD_LINE, RequestMasker, UnsupportedRequestError
+from .response import ResponseRestorer, StreamError, restore_message
 
 __all__ = [
     "DEFAULT_NOTE",
@@ -15,5 +16,8 @@ __all__ = [
     "Ledger",
     "MemoryLedger",
     "RequestMasker",
+    "ResponseRestorer",
+    "StreamError",
     "UnsupportedRequestError",
+    "restore_message",
 ]

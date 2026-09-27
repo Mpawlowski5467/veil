@@ -195,6 +195,16 @@ def test_the_prefix_patterns_accept_every_start_of_a_match():
                 assert not prefix.fullmatch(opener + "A" * (size - 1))
 
 
+def test_held_counts_what_is_held_back():
+    shield = make_shield()
+    stream = shield.stream_restorer()
+    assert stream.held == 0
+    stream.feed("see [EMA")
+    assert stream.held == len("[EMA")
+    stream.feed("IL_1]")
+    assert stream.held == 0
+
+
 def test_an_unfinished_placeholder_is_flushed_as_is():
     shield = make_shield()
     stream = shield.stream_restorer()
