@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import bisect
-from collections.abc import Iterable, Sequence
+import re
+from collections.abc import Iterable, Mapping, Sequence, Set
 
-from ._text import contains_token
+from ._normalize import KeyIndex, Normalizer
+from ._search import CachedIndex
+from ._text import is_word_char
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .placeholders import (
@@ -16,7 +19,7 @@ from .placeholders import (
     placeholder_type,
 )
 from .types import MaskedEntity, MaskResult, Span
-from .vault.base import Vault
+from .vault.base import Vault, _Remembering
 
 
 def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
@@ -33,6 +36,31 @@ def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
         The kept spans, ordered by ``start``.
     """
     ranked = sorted(spans, key=lambda s: (-len(s), -s.priority, s.start))
+    if len(ranked) < _FEW_SPANS:
+        return _resolve_sparse(ranked)
+    size = max(span.end for span in ranked)
+    if size > _DENSE_LIMIT and size > 8 * sum(map(len, ranked)):
+        return _resolve_sparse(ranked)
+    # One flag per character already covered by a kept span: checking and
+    # marking a span costs its length, so the whole pass is linear.
+    taken = bytearray(size)
+    kept: list[Span] = []
+    for span in ranked:
+        if taken.find(1, span.start, span.end) == -1:
+            taken[span.start : span.end] = b"\x01" * (span.end - span.start)
+            kept.append(span)
+    kept.sort(key=lambda s: s.start)
+    return kept
+
+
+# resolve_overlaps() uses a bisect-and-insert loop, O(spans^2) but fastest for
+# a handful of spans, below this many; and when the spans are spread so thinly
+# (far past _DENSE_LIMIT characters) that a byte per character is wasteful.
+_FEW_SPANS = 64
+_DENSE_LIMIT = 1 << 26
+
+
+def _resolve_sparse(ranked: list[Span]) -> list[Span]:
     kept: list[Span] = []  # sorted by start; never overlapping
     starts: list[int] = []
     for span in ranked:
@@ -46,13 +74,143 @@ def resolve_overlaps(spans: Iterable[Span]) -> list[Span]:
     return kept
 
 
+#: `Span.source` (and `MaskedEntity.source`) of a placeholder that covers
+#: several overlapping matches. Such a value is never normalized.
+MERGED_SOURCE = "merged"
+
+# A run of letters and digits: exactly the characters for which str.isalnum()
+# is true (the two agree on every code point).
+_ALNUM_RUN_RE = re.compile(r"[^\W_]+")
+
+
+def merge_partial_overlaps(
+    text: str, candidates: Sequence[Span], kept: list[Span]
+) -> list[tuple[Span, tuple[Span, ...]]]:
+    """Merge every partly masked span with the kept spans it overlaps.
+
+    A candidate that lost an overlap is *partly masked* when a letter or digit
+    of it lies outside every kept span. Kept spans and partly masked
+    candidates are grouped by overlap, transitively. Each group that contains
+    a partly masked candidate becomes one span covering the whole group, with
+    the type and priority of the group's highest-ranked kept span and source
+    `MERGED_SOURCE`.
+
+    Returns:
+        ``(span, members)`` pairs in text order, never overlapping. For a
+        merged span, ``members`` holds the kept spans it replaces; for a kept
+        span left as it was, ``members`` is empty.
+    """
+    if not kept:
+        return []
+    kept_set = set(kept)
+    ends = [span.end for span in kept]
+    runs: tuple[list[int], list[int]] | None = None
+    partial: list[Span] = []
+    for span in candidates:
+        if span in kept_set:
+            continue
+        i = bisect.bisect_right(ends, span.start)  # first kept span ending after
+        if i < len(kept) and kept[i].start <= span.start and span.end <= ends[i]:
+            continue  # inside one kept span
+        if runs is None:
+            runs = _uncovered_alnum_runs(text, kept)
+        run_starts, run_ends = runs
+        r = bisect.bisect_right(run_ends, span.start)
+        if r < len(run_starts) and run_starts[r] < span.end:
+            partial.append(span)
+    if not partial:
+        return [(span, ()) for span in kept]
+
+    items = sorted(
+        [(span, True) for span in kept] + [(span, False) for span in partial],
+        key=lambda item: item[0].start,
+    )
+    result: list[tuple[Span, tuple[Span, ...]]] = []
+    members: list[Span] = []
+    has_partial = False
+    start = end = 0
+    for index, (span, is_kept) in enumerate(items):
+        if index and span.start >= end:
+            result.append(_group_span(text, start, end, members, has_partial))
+            members, has_partial = [], False
+        if not members and not has_partial:
+            start, end = span.start, span.end
+        end = max(end, span.end)
+        if is_kept:
+            members.append(span)
+        else:
+            has_partial = True
+    result.append(_group_span(text, start, end, members, has_partial))
+    return result
+
+
+def _group_span(
+    text: str, start: int, end: int, members: list[Span], has_partial: bool
+) -> tuple[Span, tuple[Span, ...]]:
+    if not has_partial:
+        return members[0], ()
+    winner = min(members, key=lambda s: (-len(s), -s.priority, s.start))
+    merged = Span(
+        start=start,
+        end=end,
+        value=text[start:end],
+        entity_type=winner.entity_type,
+        source=MERGED_SOURCE,
+        priority=winner.priority,
+    )
+    return merged, tuple(members)
+
+
+def _uncovered_alnum_runs(text: str, kept: list[Span]) -> tuple[list[int], list[int]]:
+    run_starts: list[int] = []
+    run_ends: list[int] = []
+    gap_start = 0
+    for gap_end, next_start in [*((s.start, s.end) for s in kept), (len(text), 0)]:
+        for match in _ALNUM_RUN_RE.finditer(text, gap_start, gap_end):
+            run_starts.append(match.start())
+            run_ends.append(match.end())
+        gap_start = next_start
+    return run_starts, run_ends
+
+
+class _LocalMemory:
+    """Remembered values for a vault that can't keep them itself.
+
+    Each entry also records the value stored under its placeholder, and only
+    counts while the vault still stores that value there, so clearing the
+    vault some other way than `Masker.forget` drops it too.
+    """
+
+    def __init__(self, vault: Vault) -> None:
+        self._vault = vault
+        self._entries: dict[str, tuple[str, str, str]] = {}
+
+    def _remember(self, value: str, entity_type: str, placeholder: str) -> None:
+        stored = self._vault.get_value(placeholder)
+        if stored is not None and self._vault.get_placeholder(value) is None:
+            self._entries.setdefault(value, (entity_type, placeholder, stored))
+
+    def _remembered(self) -> list[tuple[str, str, str]]:
+        live = []
+        for value, (entity_type, placeholder, stored) in list(self._entries.items()):
+            if self._vault.get_value(placeholder) != stored:
+                del self._entries[value]
+            else:
+                live.append((value, entity_type, placeholder))
+        return live
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+
 class Masker:
     """Replaces sensitive spans with placeholders.
 
-    Runs every detector, resolves overlaps with `resolve_overlaps`, asks the
-    vault for each value's placeholder (so a value keeps its placeholder across
-    calls), and then checks the output: it warns when a detected value was only
-    partly replaced, and when any known value still appears in it.
+    Runs every detector, resolves overlaps with `resolve_overlaps`, merges a
+    match that would stay partly visible with the matches it overlaps (see
+    `merge_partial_overlaps`), asks the vault for each value's placeholder (so
+    a value keeps its placeholder across calls), and then warns when any known
+    value still appears in the output.
     """
 
     def __init__(
@@ -62,6 +220,7 @@ class Masker:
         *,
         redact_warnings: bool = False,
         tolerant_restore: bool = True,
+        normalizers: Mapping[str, Normalizer] | None = None,
     ) -> None:
         """Create a masker.
 
@@ -73,11 +232,48 @@ class Masker:
             tolerant_restore: Whether the matching `Restorer` also restores
                 rewritten placeholders (``[person 1]``). Input that it would
                 treat as a placeholder is reported.
+            normalizers: Internal and may change. Maps an entity type to a
+                function giving a value's key (see ``_normalize``); a
+                value whose key matches a stored value of its type shares that
+                value's placeholder.
         """
         self._detectors = tuple(detectors)
         self._vault = vault
         self._redact = redact_warnings
         self._tolerant = tolerant_restore
+        self._keys = KeyIndex(normalizers) if normalizers else None
+        self._memory = _memory_for(vault)
+        self._leak_index = CachedIndex()
+
+    def forget(self) -> None:
+        """Drop what is cached about the conversation so far.
+
+        `Shield.reset` calls this after clearing the vault.
+        """
+        if isinstance(self._memory, _LocalMemory):
+            self._memory.clear()
+        if self._keys is not None:
+            self._keys.clear()
+        self._leak_index.clear()
+
+    def __getstate__(self) -> dict[str, object]:
+        """Pickle without the leak check's index; it is rebuilt on demand."""
+        # Leave out values from before the vault was last cleared.
+        if self._keys is not None:
+            self._keys.forget_stale(self._vault)
+        if isinstance(self._memory, _LocalMemory):
+            self._memory._remembered()  # drops entries the vault no longer backs
+        state = dict(self.__dict__)
+        state.pop("_leak_index", None)
+        return state
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        """Unpickle, including a masker pickled by an older version."""
+        self.__dict__.update(state)
+        self.__dict__.setdefault("_keys", None)
+        if "_memory" not in state:
+            self._memory = _memory_for(self._vault)
+        self._leak_index = CachedIndex()
 
     def mask(self, text: str) -> MaskResult:
         """Mask ``text``.
@@ -111,10 +307,23 @@ class Masker:
                     )
                 candidates.append(span)
 
-        kept = resolve_overlaps(candidates)
+        spans = merge_partial_overlaps(text, candidates, resolve_overlaps(candidates))
+        vault, keys, memory = self._vault, self._keys, self._memory
         entities: list[MaskedEntity] = []
-        for span in kept:
-            placeholder = self._vault.get_or_create(span.value, span.entity_type)
+        for span, members in spans:
+            if keys is None:
+                placeholder = vault.get_or_create(span.value, span.entity_type)
+            elif members:
+                # A merged value is not one value of its type: never normalize
+                # it, and never let a later spelling merge into it.
+                placeholder = keys.create(vault, span, None)
+            else:
+                placeholder = keys.placeholder_for(vault, span)
+                if vault.get_value(placeholder) != span.value:
+                    # A variant spelling: not in the vault, so remember it.
+                    memory._remember(
+                        span.value, placeholder_type(placeholder) or "?", placeholder
+                    )
             # A value keeps the type it was first stored with, which may differ
             # from what this detector called it; report the type actually used.
             match = PLACEHOLDER_RE.fullmatch(placeholder)
@@ -128,6 +337,11 @@ class Masker:
                     source=span.source,
                 )
             )
+        # What a merged span replaced is remembered for later leak checks,
+        # without a placeholder of its own (so restore never produces it).
+        for (_, members), entity in zip(spans, entities, strict=True):
+            for member in members:
+                memory._remember(member.value, member.entity_type, entity.placeholder)
 
         pieces: list[str] = []
         unmasked: list[str] = []  # the original text left between placeholders
@@ -142,8 +356,7 @@ class Masker:
         masked = "".join(reversed(pieces))
 
         warnings = self._placeholder_like_input(text)
-        warnings.extend(_partial_masks(text, candidates, kept, redact=self._redact))
-        warnings.extend(self._leaks(list(reversed(unmasked)), candidates))
+        warnings.extend(self._leaks(text, spans, list(reversed(unmasked)), candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
     def _placeholder_like_input(self, text: str) -> list[str]:
@@ -152,14 +365,19 @@ class Masker:
         That is every exact placeholder, and, with tolerant restore, every
         rewritten form (``[Person 1]``) of a type this vault uses.
         """
-        known_types = {placeholder_type(stored) for stored, _ in self._vault.items()}
+        known_types: set[str | None] | None = None  # built only if needed
         tokens: dict[str, None] = {}
         if self._tolerant:
             for match in LOOSE_PLACEHOLDER_RE.finditer(text):
+                if match["exact"] is not None:
+                    tokens[match.group(0)] = None
+                    continue
+                if known_types is None:
+                    known_types = {
+                        placeholder_type(stored) for stored, _ in self._vault.items()
+                    }
                 candidates = placeholder_candidates(loose_match_body(match))
-                if match["exact"] is not None or any(
-                    placeholder_type(c) in known_types for c in candidates
-                ):
+                if any(placeholder_type(c) in known_types for c in candidates):
                     tokens[match.group(0)] = None
         else:
             tokens.update(
@@ -174,20 +392,33 @@ class Masker:
             )
         return warnings
 
-    def _leaks(self, unmasked: list[str], candidates: Iterable[Span]) -> list[str]:
+    def _leaks(
+        self,
+        text: str,
+        spans: list[tuple[Span, tuple[Span, ...]]],
+        unmasked: list[str],
+        candidates: Iterable[Span],
+    ) -> list[str]:
         """Warn about every known value that still appears between placeholders.
 
         Known values are everything in the vault (from this call and earlier
-        ones) plus anything detected in this call, including spans that lost
-        an overlap. Registered manual entities are matched with the same
-        whole-token rule used to detect them (so "Jan" isn't reported inside
-        "January"); every other value is matched as a plain substring, because
-        a phone number glued to letters is still a phone number.
+        ones), the values remembered with it (spellings that have no
+        placeholder of their own), and anything detected in this call,
+        including spans that lost an overlap. Registered manual entities are
+        matched with the same whole-token rule used to detect them (so "Jan"
+        isn't reported inside "January"); every other value is matched as a
+        plain substring, because a phone number glued to letters is still a
+        phone number. All of them are searched for together, with an index
+        kept between calls (see `CachedIndex`).
         """
-        known: dict[str, str] = {}  # value -> entity type
-        for stored, value in self._vault.items():
-            match = PLACEHOLDER_RE.fullmatch(stored)
-            known[value] = match["type"] if match else "?"
+        # value -> entity type; None for a vault value, whose type is read from
+        # its placeholder only if it is reported.
+        known: dict[str, str | None] = dict.fromkeys(v for _, v in self._vault.items())
+        masked_as: dict[str, str] = {}  # remembered value -> its placeholder
+        for value, entity_type, masked in self._memory._remembered():
+            if value not in known:
+                known[value] = entity_type
+                masked_as[value] = masked
         for span in candidates:
             known.setdefault(span.value, span.entity_type)
         manual: set[str] = set()
@@ -201,15 +432,18 @@ class Masker:
         separator = _unused_char(unmasked, known)
         haystacks = unmasked if separator is None else [separator.join(unmasked)]
 
+        found = self._leak_index.present(haystacks, known.keys(), manual)
+        if any(members for _, members in spans):
+            found |= self._cut_leaks(text, spans, known.keys(), manual, found)
+
         warnings = []
-        for value, entity_type in known.items():
-            if value in manual:
-                found = any(contains_token(piece, value) for piece in haystacks)
-            else:
-                found = any(value in piece for piece in haystacks)
-            if not found:
+        for value, known_type in known.items():
+            if value not in found:
                 continue
-            placeholder = self._vault.get_placeholder(value)
+            placeholder = self._vault.get_placeholder(value) or masked_as.get(value)
+            entity_type = (
+                known_type or (placeholder and placeholder_type(placeholder)) or "?"
+            )
             if self._redact:
                 where = f" ({placeholder})" if placeholder else ""
                 label = f"a known {entity_type} value{where}"
@@ -219,50 +453,121 @@ class Masker:
             warnings.append(f"Leak check: {label} still appears in the masked text.")
         return warnings
 
+    def _cut_leaks(
+        self,
+        text: str,
+        spans: list[tuple[Span, tuple[Span, ...]]],
+        known: Set[str],
+        manual: Set[str],
+        found: Set[str],
+    ) -> set[str]:
+        """Known values that a merged placeholder hides only part of.
 
-def _partial_masks(
-    text: str, candidates: Iterable[Span], kept: list[Span], *, redact: bool
-) -> list[str]:
-    """Warn about dropped spans that only partly overlapped a kept span.
+        Without merging, the leak check would have seen these between the
+        kept spans. A merged span can swallow the start or end of such an
+        occurrence, so the part left over no longer matches. Only the gaps
+        between kept spans that a merged span reaches into can hold one.
+        """
+        merged = [span for span, members in spans if members]
+        merged_starts = [span.start for span in merged]
+        kept: list[Span] = []
+        for span, members in spans:
+            kept.extend(members or (span,))
+        gaps: list[tuple[int, int]] = []
+        cursor = 0
+        for start, end in [*((k.start, k.end) for k in kept), (len(text), len(text))]:
+            if cursor < start:
+                i = bisect.bisect_right(merged_starts, start - 1) - 1
+                if i >= 0 and merged[i].end > cursor:
+                    gaps.append((cursor, start))
+            cursor = end
+        if not gaps:
+            return set()
+        pieces = [text[a:b] for a, b in gaps]
+        separator = _unused_char(pieces, known)
+        haystacks = pieces if separator is None else [separator.join(pieces)]
+        maybe = self._leak_index.present(haystacks, known, manual, update=False)
+        maybe -= found
+        if not maybe:
+            return set()
+        search = _GapSearch(text, gaps, merged, haystacks)
+        return {value for value in maybe if search.visible(value, value in manual)}
 
-    The longest span wins an overlap, but when the loser sticks out past the
-    winner, the part outside it stays in the masked text. That part may be
-    sensitive (the tail of a phone number, a first name), so it is reported.
-    """
-    kept_set = set(kept)
-    starts = [span.start for span in kept]
-    warnings: dict[str, None] = {}
-    for span in candidates:
-        if span in kept_set:
-            continue
-        leftovers = []
-        pos = span.start
-        i = max(bisect.bisect_right(starts, span.start) - 1, 0)
-        while i < len(kept) and kept[i].start < span.end:
-            if kept[i].end > pos:
-                if kept[i].start > pos:
-                    leftovers.append(text[pos : kept[i].start])
-                pos = kept[i].end
-            i += 1
-        if pos < span.end:
-            leftovers.append(text[pos : span.end])
-        if any(ch.isalnum() for piece in leftovers for ch in piece):
-            if redact:
-                size = sum(len(piece) for piece in leftovers)
-                message = (
-                    f"Partial mask: a detected {span.entity_type} value "
-                    f"({len(span.value)} characters) overlapped a match that was "
-                    f"kept, so {size} of its characters are still in the masked text."
-                )
+
+class _GapSearch:
+    """Finds where values occur in the gaps that merged spans reach into."""
+
+    def __init__(
+        self,
+        text: str,
+        gaps: list[tuple[int, int]],
+        merged: list[Span],
+        haystacks: list[str],
+    ) -> None:
+        self._text = text
+        # Each haystack with the offset in it where each of its gaps starts,
+        # and those gaps' bounds in the text.
+        self._haystacks: list[tuple[str, list[int], list[tuple[int, int]]]] = []
+        if len(haystacks) == len(gaps):
+            for haystack, gap in zip(haystacks, gaps, strict=True):
+                self._haystacks.append((haystack, [0], [gap]))
+        else:  # one haystack, the gaps joined by a one-character separator
+            offsets, cursor = [], 0
+            for start, end in gaps:
+                offsets.append(cursor)
+                cursor += end - start + 1
+            self._haystacks.append((haystacks[0], offsets, gaps))
+        # Merged spans that touch hide an occurrence together.
+        self._hidden_starts: list[int] = []
+        self._hidden_ends: list[int] = []
+        for span in merged:
+            if self._hidden_ends and self._hidden_ends[-1] == span.start:
+                self._hidden_ends[-1] = span.end
             else:
-                shown = ", ".join(repr(piece) for piece in leftovers)
-                message = (
-                    f"Partial mask: detected {span.entity_type} value "
-                    f"{span.value!r} overlapped a match that was kept, so {shown} "
-                    "is still in the masked text."
-                )
-            warnings[message] = None
-    return list(warnings)
+                self._hidden_starts.append(span.start)
+                self._hidden_ends.append(span.end)
+
+    def visible(self, value: str, token: bool) -> bool:
+        """Whether ``value`` occurs in a gap and not entirely inside merged spans.
+
+        The ends of a gap count as word boundaries, as the leak check's
+        separator does. With ``token``, only whole-token occurrences count.
+        """
+        text, size = self._text, len(value)
+        for haystack, offsets, bounds in self._haystacks:
+            found = haystack.find(value)
+            while found != -1:
+                k = bisect.bisect_right(offsets, found) - 1
+                gap_start, gap_end = bounds[k]
+                start = gap_start + found - offsets[k]
+                end = start + size
+                if token and (
+                    (
+                        start > gap_start
+                        and is_word_char(text[start])
+                        and is_word_char(text[start - 1])
+                    )
+                    or (
+                        end < gap_end
+                        and is_word_char(text[end - 1])
+                        and is_word_char(text[end])
+                    )
+                ):
+                    found = haystack.find(value, found + 1)
+                    continue
+                i = bisect.bisect_right(self._hidden_starts, start) - 1
+                if i < 0 or end > self._hidden_ends[i]:
+                    return True
+                # Hidden, and so is every later start up to the end of the
+                # hidden stretch, less the value's length.
+                skip = min(max(start + 1, self._hidden_ends[i] - size + 1), gap_end)
+                found = haystack.find(value, found + skip - start)
+        return False
+
+
+def _memory_for(vault: Vault) -> _Remembering | _LocalMemory:
+    """Where to remember values: the vault itself if it can, else the masker."""
+    return vault if isinstance(vault, _Remembering) else _LocalMemory(vault)
 
 
 def _unused_char(pieces: list[str], values: Iterable[str]) -> str | None:

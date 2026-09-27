@@ -47,3 +47,25 @@ class Vault(Protocol):
     def __len__(self) -> int:
         """Return the number of stored values."""
         ...
+
+
+@runtime_checkable
+class _Remembering(Protocol):
+    """A vault that also keeps values the leak check should know.
+
+    Private for now. These are spellings with no placeholder of their own: a
+    variant spelling merged by ``Shield(normalize=True)``, and a match hidden
+    inside a merged placeholder. Each is remembered with the placeholder it
+    was masked as. They are not part of `Vault.items`, ``len()``,
+    `Vault.get_placeholder` or `Vault.get_value`, so they never affect
+    numbering or restoring, and `Vault.clear` forgets them. A vault without
+    this capability gets a per-masker memory instead (see `Masker`).
+    """
+
+    def _remember(self, value: str, entity_type: str, placeholder: str) -> None:
+        """Remember ``value``, masked as ``placeholder``, for the leak check."""
+        ...
+
+    def _remembered(self) -> list[tuple[str, str, str]]:
+        """Return every ``(value, entity_type, placeholder)``, oldest first."""
+        ...

@@ -11,7 +11,7 @@ import unicodedata
 
 import pytest
 
-from veil import Shield
+from veil import ManualDetector, RegexDetector, Shield
 from veil.placeholders import PLACEHOLDER_RE
 
 EMAILS = [
@@ -126,8 +126,19 @@ def generate(rng):
     return text, seeded
 
 
+CUSTOM = {"ORDER": r"#\d{5}\b", "TICKET": r"\bTKT-\d+\b"}
+
+
+def detected(text):
+    """Every span the fuzz shield's detectors find, before overlaps are resolved."""
+    manual = ManualDetector()
+    for name in NAMES:
+        manual.add(name, "PERSON")
+    return manual.detect(text) + RegexDetector(CUSTOM).detect(text)
+
+
 def new_shield():
-    shield = Shield(custom_patterns={"ORDER": r"#\d{5}\b", "TICKET": r"\bTKT-\d+\b"})
+    shield = Shield(custom_patterns=CUSTOM)
     for name in NAMES:
         shield.add_entity(name, "PERSON")
     return shield
@@ -161,3 +172,8 @@ def test_no_silent_leaks(seed):
                 if not covered[i] and text[i].isalnum()
             ]
             assert not visible or masked.warnings, f"{context} leaked {value!r}"
+        for found in detected(text):  # overlaps never leave part of a match visible
+            assert not any(
+                text[i].isalnum() and not covered[i]
+                for i in range(found.start, found.end)
+            ), f"{context} partly masked {found.value!r}"

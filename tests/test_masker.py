@@ -1,9 +1,11 @@
+import random
 import time
 
 import pytest
 
+from vaults import DictVault
 from veil.detectors import ManualDetector, RegexDetector
-from veil.masker import Masker, resolve_overlaps
+from veil.masker import Masker, _LocalMemory, _resolve_sparse, resolve_overlaps
 from veil.types import MaskedEntity, Span
 from veil.vault import MemoryVault
 
@@ -97,6 +99,30 @@ class TestResolveOverlaps:
     def test_identical_spans_collapse(self):
         a = Span(0, 3, "aaa", "X")
         assert resolve_overlaps([a, a]) == [a]
+
+    @pytest.mark.parametrize("seed", range(200))
+    def test_many_spans_resolve_like_the_insert_loop(self, seed):
+        # From 64 spans on, a per-character bitmap replaces the insert loop.
+        r = random.Random(seed)
+        spans = []
+        for _ in range(r.randint(0, 150)):
+            start = r.randrange(300)
+            size = r.randint(1, 12)
+            spans.append(
+                Span(start, start + size, "x" * size, "A", "t", r.choice([0, 100]))
+            )
+        ranked = sorted(spans, key=lambda s: (-len(s), -s.priority, s.start))
+        assert resolve_overlaps(spans) == _resolve_sparse(ranked)
+
+    def test_linear_time(self):
+        r = random.Random(1)
+        spans = []
+        for i in range(200_000):
+            size = r.randint(1, 9)
+            spans.append(Span(i * 10, i * 10 + size, "x" * size, "A"))
+        start = time.perf_counter()
+        assert len(resolve_overlaps(spans)) == 200_000
+        assert time.perf_counter() - start < 2.0
 
 
 class TestMask:
@@ -245,20 +271,20 @@ class TestWarnings:
             "in the masked text."
         ]
 
-    def test_partial_overlap_reports_the_part_left_in_text(self, vault):
-        # The longer span wins, and the part of the shorter one outside it
-        # stays in the text.
+    def test_partial_overlap_is_masked_as_one_placeholder(self, vault):
+        # The longer span wins, and the shorter one sticks out of it, so the
+        # two are masked together with the winner's type.
         text = "Jan Nowak Street"
         detector = FixedDetector(
             span(text, "Jan Nowak", "PERSON", source="manual", priority=100),
             span(text, "Nowak Street", "ADDRESS", source="manual", priority=100),
         )
         result = Masker([detector], vault).mask(text)
-        assert result.text == "Jan [ADDRESS_1]"
-        assert result.warnings == [
-            "Partial mask: detected PERSON value 'Jan Nowak' overlapped a match "
-            "that was kept, so 'Jan ' is still in the masked text."
+        assert result.text == "[ADDRESS_1]"
+        assert result.entities == [
+            MaskedEntity("[ADDRESS_1]", "Jan Nowak Street", "ADDRESS", 0, 16, "merged")
         ]
+        assert result.warnings == []
 
     def test_partial_overlap_on_both_sides(self, vault):
         text = "aa BBBB cc DDDD ee"
@@ -272,9 +298,9 @@ class TestWarnings:
         assert result.text == "a[Y_1]e"
         assert result.warnings == []
 
-    def test_partial_overlap_with_two_winners_reports_the_gap(self, vault):
+    def test_partial_overlap_bridging_two_winners_merges_all_three(self, vault):
         # The loser is shorter than both winners but bridges the gap between
-        # them, so only the gap is left over.
+        # them, so all three become one placeholder.
         text = "AAAAAAAAAA" + "mi" + "BBBBBBBBBB"
         detector = FixedDetector(
             Span(0, 10, "A" * 10, "X"),
@@ -282,11 +308,8 @@ class TestWarnings:
             Span(8, 14, "AAmiBB", "Z"),
         )
         result = Masker([detector], vault).mask(text)
-        assert result.text == "[X_1]mi[X_2]"
-        assert result.warnings == [
-            "Partial mask: detected Z value 'AAmiBB' overlapped a match that was "
-            "kept, so 'mi' is still in the masked text."
-        ]
+        assert result.text == "[X_1]"
+        assert result.warnings == []
 
     def test_contained_loser_is_not_a_partial_mask(self, vault):
         text = "id 555-123-4567"
@@ -318,6 +341,19 @@ class TestWarnings:
         assert result.text == text
         assert len(result.warnings) == 1
         assert result.warnings[0].startswith("Leak check: known value")
+
+    def test_registered_value_next_to_a_placeholder_is_reported(self, vault, manual):
+        # The pieces between placeholders are joined with a non-word
+        # character, so "Jon" glued to a masked ticket number is a whole token.
+        masker = Masker([manual, RegexDetector({"TICKET": r"TKT-\d{4}"})], vault)
+        manual.add("Jon", "PERSON")
+        masker.mask("Hi Jon .")
+        result = masker.mask("JonTKT-1234")
+        assert result.text == "Jon[TICKET_1]"
+        assert result.warnings == [
+            "Leak check: known value 'Jon' ([PERSON_1]) still appears in the "
+            "masked text."
+        ]
 
     def test_leak_check_separator_never_matches_across_placeholders(self, vault):
         # A value containing NUL must not be "found" where NUL once stood in
@@ -453,3 +489,78 @@ class TestPlaceholderLikeInput:
             "restore() will treat it as a placeholder."
         ]
         assert all("48213" not in w for w in result.warnings)
+
+
+class TestRememberedValues:
+    """Values with no placeholder of their own still count for the leak check."""
+
+    @pytest.mark.parametrize("vault", [MemoryVault(), DictVault()], ids=type)
+    @pytest.mark.parametrize("redact", [False, True])
+    def test_leak_check_reports_them_with_the_placeholder_used(self, vault, redact):
+        masker = Masker([RegexDetector()], vault, redact_warnings=redact)
+        masker.mask("Call 555-555-0123")
+        masker._memory._remember("(555) 555-0123", "PHONE", "[PHONE_1]")
+        [warning] = masker.mask("Old note: x(555) 555-01234").warnings
+        if redact:
+            assert warning == (
+                "Leak check: a known PHONE value ([PHONE_1]) still appears in the "
+                "masked text."
+            )
+        else:
+            assert warning == (
+                "Leak check: known value '(555) 555-0123' ([PHONE_1]) still "
+                "appears in the masked text."
+            )
+
+    def test_label_uses_the_type_of_the_value_stored_later(self, vault):
+        # "foo" is remembered as part of a merged [A_1], then stored as [B_1].
+        patterns = {
+            "A": r"(?<=A:)[a-z]{3}",
+            "L": r"[a-z]{2}\d",
+            "B": r"(?<=B:)[a-z]{3}",
+        }
+        masker = Masker([RegexDetector(patterns)], vault, redact_warnings=True)
+        masker.mask("A:foo1 .")
+        masker.mask("B:foo .")
+        assert masker.mask("xfoox").warnings == [
+            "Leak check: a known B value ([B_1]) still appears in the masked text."
+        ]
+
+    def test_a_vault_that_cant_remember_gets_a_local_memory(self):
+        vault = DictVault()
+        masker = Masker([RegexDetector()], vault)
+        assert isinstance(masker._memory, _LocalMemory)
+        assert isinstance(Masker([], MemoryVault())._memory, MemoryVault)
+
+    def test_local_memory_drops_entries_once_their_placeholder_changes(self):
+        vault = DictVault()
+        memory = _LocalMemory(vault)
+        placeholder = vault.get_or_create("555-555-0123", "PHONE")
+        memory._remember("(555) 555-0123", "PHONE", placeholder)
+        assert memory._remembered() == [("(555) 555-0123", "PHONE", "[PHONE_1]")]
+        vault.clear()
+        vault.get_or_create("555-555-0199", "PHONE")  # [PHONE_1] holds another
+        assert memory._remembered() == []
+
+    def test_local_memory_ignores_stored_values_and_unknown_placeholders(self):
+        vault = DictVault()
+        memory = _LocalMemory(vault)
+        placeholder = vault.get_or_create("555-555-0123", "PHONE")
+        memory._remember("555-555-0123", "PHONE", placeholder)
+        memory._remember("(555) 555-0123", "PHONE", "[PHONE_7]")
+        assert memory._remembered() == []
+
+    def test_forget_clears_the_local_memory(self):
+        vault = DictVault()
+        masker = Masker([RegexDetector()], vault)
+        masker.mask("Call 555-555-0123")
+        masker._memory._remember("(555) 555-0123", "PHONE", "[PHONE_1]")
+        masker.forget()
+        assert masker._memory._remembered() == []
+
+    def test_state_from_before_remembered_values(self, vault):
+        masker = Masker([RegexDetector()], vault)
+        state = {k: v for k, v in masker.__dict__.items() if k != "_memory"}
+        clone = Masker.__new__(Masker)
+        clone.__setstate__(state)
+        assert clone._memory is vault

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- `Shield(normalize=True)` gives one placeholder to every spelling of the same value: email addresses that differ only in case; phone numbers written with different separators, with or without `+1`, or with a `(0)` trunk prefix (extensions are kept apart); IPv6 addresses in any form; and card numbers and IBANs with or without spaces. `restore()` writes each value as it was first seen. Values of different types never merge, and names, IPv4 addresses, and custom types stay exact, as does anything that isn't one whole value (`Tel: ...`, `ADMIN_EMAIL=...`). The leak check still knows every spelling it has masked until `reset()` (with a vault other than `MemoryVault`, each `Shield` knows only the spellings it masked itself). Off by default.
+
+### Changed
+
+- Overlapping matches no longer leave part of a value visible. When the match that lost an overlap sticks out past the winner with a letter or digit, the two are masked together as one placeholder of the winner's type, and the entity's `source` is `"merged"`. This replaces the "Partial mask" warning, so `wrap(strict=True)` no longer raises for such input. The matches inside a merged placeholder get no placeholder of their own, but the leak check keeps knowing them (with a vault other than `MemoryVault`, only in the `Shield` that masked them).
+- The end of an IP address is no longer read as a US phone number. A number without a country code may not start inside an IPv4 address (`100.123 2222` in `ssh 198.51.100.123 2222`, `123 443 1024` in `198.51.100.123 443 1024`), and the `1` ending an IPv6 address is no longer taken as a country code (`2001:db8::1 555-123-4567`). After `::` or a hex group between colons (`id:42:1 212 200 0123`), that `1` now stays visible while the rest of the number is masked.
+
+### Performance
+
+- Resolving overlapping matches takes linear time. 200,000 detected values used to take about 3.5 s.
+- The leak check searches for every known value in about one pass, with an index kept from call to call, instead of scanning the text once per value. Masking 1.3 MB with 48,000 values went from 4.5 s to 0.4 s.
+- A large vault costs less per call: with 100,000 stored values, masking a short prompt went from 70 ms to 10 ms.
+- Registered values are found in about one pass over the text, however many there are (from 8 on). Detecting 5,000 registered names in 1.2 MB went from 2.2 s to 0.05 s.
+
 ## 0.2.0
 
 ### Added

@@ -48,7 +48,8 @@ class Span:
         entity_type: Entity type such as ``"EMAIL"``; becomes the placeholder's
             prefix.
         source: Short name of what produced the span, e.g. ``"regex"`` or
-            ``"manual"``. Informational only.
+            ``"manual"``, or ``"merged"`` for overlapping matches masked
+            together. Informational only.
         priority: Breaks ties between overlapping spans of equal length. Higher
             wins. Manual entities use the highest built-in priority.
     """
@@ -88,7 +89,12 @@ class MaskedEntity:
         entity_type: The entity type of the placeholder.
         start: Start offset of the value in the *original* text.
         end: End offset of the value in the *original* text.
-        source: Which detector found it (see `Span.source`).
+        source: Which detector found it, or ``"merged"`` when it covers
+            several overlapping matches (see `Span.source`).
+
+    With ``Shield(normalize=True)``, several entities can share a placeholder
+    while their ``value`` differs (``(555) 555-0123`` and ``555.555.0123``);
+    restoring writes the vault's value for that placeholder.
     """
 
     placeholder: str
