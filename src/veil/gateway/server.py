@@ -77,24 +77,46 @@ class Session:
     masker: RequestMasker
     lock: threading.RLock = field(default_factory=threading.RLock)
 
+    def close(self) -> None:
+        """Close the vault and ledger, if they hold open files."""
+        for part in (self.ledger, self.shield.vault):
+            close = getattr(part, "close", None)
+            if callable(close):
+                close()
+
 
 class Sessions:
     """Makes and keeps one `Session` per conversation id.
 
     Args:
         make_shield: Builds the shield for a new conversation id, with the
-            vault that holds that conversation's placeholders.
-        make_ledger: Builds its ledger; a `MemoryLedger` by default.
+            vault that holds that conversation's placeholders. Its ledger is
+            a `MemoryLedger`.
+        make_session: Builds the whole session instead, for a ledger or
+            masker of your own.
     """
 
     def __init__(
         self,
-        make_shield: Callable[[str], Shield],
-        make_ledger: Callable[[str], Ledger] | None = None,
+        make_shield: Callable[[str], Shield] | None = None,
+        *,
+        make_session: Callable[[str], Session] | None = None,
     ) -> None:
         """Create an empty set of sessions."""
-        self._make_shield = make_shield
-        self._make_ledger = make_ledger or (lambda _id: MemoryLedger())
+        if (make_shield is None) == (make_session is None):
+            raise TypeError("pass exactly one of make_shield and make_session")
+        if make_session is not None:
+            self._make_session = make_session
+        else:
+            assert make_shield is not None
+            shield_for = make_shield
+
+            def in_memory(session_id: str) -> Session:
+                shield = shield_for(session_id)
+                ledger = MemoryLedger()
+                return Session(shield, ledger, RequestMasker(shield, ledger))
+
+            self._make_session = in_memory
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
 
@@ -103,11 +125,25 @@ class Sessions:
         with self._lock:
             session = self._sessions.get(session_id)
             if session is None:
-                shield = self._make_shield(session_id)
-                ledger = self._make_ledger(session_id)
-                session = Session(shield, ledger, RequestMasker(shield, ledger))
+                session = self._make_session(session_id)
                 self._sessions[session_id] = session
             return session
+
+    def close(self) -> None:
+        """Close every session's files."""
+        with self._lock:
+            sessions, self._sessions = list(self._sessions.values()), {}
+        for session in sessions:
+            with session.lock:
+                session.close()
+
+    def __enter__(self) -> Sessions:
+        """Return the sessions."""
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        """Close every session's files."""
+        self.close()
 
 
 class Gateway:
@@ -162,9 +198,10 @@ class Gateway:
         return f"http://127.0.0.1:{self.port}"
 
     def close(self) -> None:
-        """Stop serving."""
+        """Stop serving, and close the sessions' files."""
         self._server.shutdown()
         self._server.server_close()
+        self.sessions.close()
 
     def __enter__(self) -> Gateway:
         """Return the running gateway."""
