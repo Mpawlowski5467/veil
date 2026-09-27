@@ -6,8 +6,11 @@
 
 - `SQLiteVault(path, session=...)` keeps mappings in an SQLite file (standard library only), so they survive the process and can be shared between processes and threads. One file holds many sessions; `clear()` empties only its own, and `purge(older_than)` deletes sessions unused for that long. Writes take the database's write lock, so concurrent processes never give one value two placeholders or hand out a number twice. Each vault keeps a cache that it refreshes only when another connection has changed the file, and a `mask()` or `restore()` call checks the file once and writes in one transaction, so masking against it is about as fast as against a `MemoryVault`. The spellings and merged matches the leak check remembers are stored too, and so is which placeholders are merged, so a new `Shield` never normalizes them. A vault inherited across `fork()` opens its own connection in the child. The file is created owner-only, holds the real values in plain text, and overwrites deleted values.
 
+- `Shield.restore_stream(chunks)` restores a reply that arrives in pieces, and `Shield.stream_restorer()` returns a `StreamRestorer` to feed pieces one at a time (`feed()`, `finish()`, `result()`). A placeholder split across pieces is held back until it is complete, and nothing else is delayed; joined, the pieces are exactly what `restore()` gives for the whole text.
+
 ### Changed
 
+- Placeholders have a maximum length, so a stream never holds back more than 76 characters: entity types are at most 64 characters (`add_entity` and `custom_patterns` reject longer ones), placeholder numbers at most nine digits, and a rewritten placeholder is only restored with up to eight spaces or tabs of padding inside its brackets.
 - A `Shield` can be shared between threads: its `mask()` calls take turns.
 - A pickled `Shield(normalize=True)` no longer holds the values cached by its normalization index; they are rebuilt from the vault.
 - `restore()` only looks at the types in the vault when it meets a rewritten placeholder it can't restore.

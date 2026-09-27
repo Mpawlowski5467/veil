@@ -195,6 +195,21 @@ Models sometimes change a placeholder's case or spacing, or use CJK or Markdown-
 
 A rewritten form is only restored if it is in brackets and its normalized form (`[PERSON_1]`) is in the vault, so bracketed text like `[Figure 2]` is left alone. A rewritten form right after a word or a closing bracket, like the code subscript `scores[email1]`, is left alone too. To turn this off, use `Shield(tolerant_restore=False)`.
 
+### Streaming replies
+
+When a reply streams in, a placeholder can be split across chunks (`"[EMA"`, `"IL_1]"`). `restore_stream()` restores the chunks as they arrive, holding back only text that could still turn out to be a placeholder:
+
+```python
+>>> shield = Shield()
+>>> shield.mask("Email jan.n@example.com").text
+'Email [EMAIL_1]'
+>>> chunks = ["I emailed [EMA", "IL_1] and ", "will follow up."]
+>>> list(shield.restore_stream(chunks))
+['I emailed ', 'jan.n@example.com and ', 'will follow up.']
+```
+
+Joined, the pieces are exactly what `restore()` gives for the whole reply, however it was split. Nothing but a possible placeholder is delayed: text from a bracket onward, at most 76 characters. When the chunks come from callbacks rather than an iterable, use `shield.stream_restorer()`: call `feed(chunk)` for each chunk and send on what it returns, then `finish()` at the end, and `result()` for the count, warnings, and repairs.
+
 ### Warnings
 
 veil reports problems instead of raising:
@@ -272,8 +287,8 @@ Registered entities (`add_entity`) are always detected, whichever detectors you 
 
 ## Roadmap
 
-- **Next:** ready-made Claude Code hooks, `veil mask` and `veil restore` commands for copy-and-paste use with any chat app, and streaming restore for placeholders split across chunks.
-- **Later:** a local gateway in front of the model's API (so everything a tool like Claude Code sends is masked), an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
+- **Next:** a local gateway for Claude Code (`veil claude`), so everything it sends to the model is masked, and `veil mask` and `veil restore` commands for copy-and-paste use with any chat app.
+- **Later:** Claude Code hooks for the desktop app, which doesn't use a gateway, an optional Presidio/spaCy detector for names, and normalizers for your own entity types.
 
 ## Development
 

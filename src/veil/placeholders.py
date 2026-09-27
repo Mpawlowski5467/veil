@@ -8,17 +8,23 @@ from __future__ import annotations
 
 import re
 
-#: Entity types are upper-case ASCII letters, digits, and underscores, and start
-#: with a letter: ``EMAIL``, ``IPV4``, ``ORDER_ID``.
-ENTITY_TYPE_RE = re.compile(r"[A-Z][A-Z0-9_]*")
+#: Entity types are upper-case ASCII letters, digits, and underscores, start
+#: with a letter, and are at most 64 characters: ``EMAIL``, ``IPV4``,
+#: ``ORDER_ID``.
+ENTITY_TYPE_RE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+
+#: The largest placeholder number: numbers have at most nine digits.
+MAX_PLACEHOLDER_NUMBER = 999_999_999
 
 #: Matches anything shaped like a placeholder. The type group is greedy and the
 #: number is the digits after the *last* underscore, so ``[ORDER_ID_12]`` parses
 #: as type ``ORDER_ID``, number ``12``. The closing bracket is part of the match,
 #: which is what keeps ``[PERSON_1]`` from matching inside ``[PERSON_10]``.
-PLACEHOLDER_RE = re.compile(r"\[(?P<type>[A-Z][A-Z0-9_]*)_(?P<number>\d+)\]")
+PLACEHOLDER_RE = re.compile(r"\[(?P<type>[A-Z][A-Z0-9_]{0,63})_(?P<number>\d{1,9})\]")
 
-_LOOSE_BODY = r"[ \t]*(?P<{name}>[A-Za-z][A-Za-z0-9 \t_-]{{0,40}}?[0-9]{{1,6}})[ \t]*"
+_LOOSE_BODY = (
+    r"[ \t]{{0,8}}(?P<{name}>[A-Za-z][A-Za-z0-9 \t_-]{{0,40}}?[0-9]{{1,6}})[ \t]{{0,8}}"
+)
 
 #: An exact placeholder, or bracketed text that may be one the model rewrote:
 #: any case, spaces or dashes in place of the underscore, padding inside the
@@ -29,13 +35,23 @@ _LOOSE_BODY = r"[ \t]*(?P<{name}>[A-Za-z][A-Za-z0-9 \t_-]{{0,40}}?[0-9]{{1,6}})[
 #: subscript like "scores[email1]" is left alone. The body can't contain
 #: brackets, so an exact placeholder is never hidden inside a longer match.
 LOOSE_PLACEHOLDER_RE = re.compile(
-    r"(?P<exact>\[[A-Z][A-Z0-9_]*_[0-9]+\])"
+    r"(?P<exact>\[[A-Z][A-Z0-9_]{0,63}_[0-9]{1,9}\])"
     r"|(?<![A-Za-z0-9_)\]])(?:"
     r"\x5c\[" + _LOOSE_BODY.format(name="escaped") + r"\x5c\]"
     r"|[\[\N{FULLWIDTH LEFT SQUARE BRACKET}\N{LEFT BLACK LENTICULAR BRACKET}]"
     + _LOOSE_BODY.format(name="body")
     + r"[\]\N{FULLWIDTH RIGHT SQUARE BRACKET}\N{RIGHT BLACK LENTICULAR BRACKET}]"
     r")"
+)
+
+#: No match of `PLACEHOLDER_RE` or `LOOSE_PLACEHOLDER_RE` is longer than this:
+#: the longest is an exact placeholder with a 64-character type and a
+#: nine-digit number. Text streamed in pieces is held back at most this long.
+MAX_PLACEHOLDER_LENGTH = 1 + 64 + 1 + 9 + 1
+
+#: Every match of those patterns starts with one of these characters.
+PLACEHOLDER_OPENERS = (
+    "[\x5c\N{FULLWIDTH LEFT SQUARE BRACKET}\N{LEFT BLACK LENTICULAR BRACKET}"
 )
 
 
@@ -66,12 +82,13 @@ def validate_entity_type(entity_type: str) -> str:
 
     Raises:
         ValueError: If the name is not upper-case letters, digits, and
-            underscores starting with a letter.
+            underscores starting with a letter, or is over 64 characters.
     """
     if not isinstance(entity_type, str) or not ENTITY_TYPE_RE.fullmatch(entity_type):
         raise ValueError(
-            f"Invalid entity type {entity_type!r}: use upper-case letters, digits, "
-            "and underscores, starting with a letter (e.g. 'PERSON', 'ORDER_ID')."
+            f"Invalid entity type {entity_type!r}: use up to 64 upper-case letters, "
+            "digits, and underscores, starting with a letter (e.g. 'PERSON', "
+            "'ORDER_ID')."
         )
     return entity_type
 
@@ -90,8 +107,15 @@ def format_placeholder(entity_type: str, number: int) -> str:
         ValueError: If the type is invalid or ``number`` is less than 1.
     """
     validate_entity_type(entity_type)
-    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
-        raise ValueError(f"Placeholder number must be an int >= 1, got {number!r}")
+    if (
+        isinstance(number, bool)
+        or not isinstance(number, int)
+        or not 1 <= number <= MAX_PLACEHOLDER_NUMBER
+    ):
+        raise ValueError(
+            f"Placeholder number must be an int from 1 to {MAX_PLACEHOLDER_NUMBER}, "
+            f"got {number!r}"
+        )
     return f"[{entity_type}_{number}]"
 
 

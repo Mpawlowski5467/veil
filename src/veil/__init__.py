@@ -11,6 +11,7 @@ Example:
 """
 
 from .detectors import Detector, ManualDetector, RegexDetector
+from .restorer import StreamRestorer
 from .shield import Shield
 from .types import (
     MaskedEntity,
@@ -39,6 +40,7 @@ __all__ = [
     "ShieldError",
     "ShieldWarning",
     "Span",
+    "StreamRestorer",
     "Vault",
     "__version__",
 ]

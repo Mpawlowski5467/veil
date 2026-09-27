@@ -5,14 +5,14 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
 from ._normalize import BUILTIN_NORMALIZERS
 from .detectors.base import Detector
 from .detectors.manual import ManualDetector
 from .detectors.regex import PatternLike, RegexDetector
 from .masker import Masker
-from .restorer import Restorer
+from .restorer import Restorer, StreamRestorer
 from .types import MaskResult, RestoreResult, ShieldError, ShieldWarning
 from .vault.base import Vault
 from .vault.memory import MemoryVault
@@ -163,6 +163,54 @@ class Shield:
             were replaced, and any warnings.
         """
         return self._restorer.restore(text)
+
+    def stream_restorer(self) -> StreamRestorer:
+        """Start restoring a reply that arrives in pieces, such as a stream.
+
+        Feed each piece to the returned `StreamRestorer` and send on what it
+        returns: the restored text that is final so far. A placeholder split
+        across pieces (``"[EMA"``, ``"IL_1]"``) is held back until it is
+        complete, and nothing else is delayed. Call ``finish()`` at the end.
+
+        Example:
+            >>> shield = Shield()
+            >>> _ = shield.mask("Write to jane.doe@example.com")
+            >>> stream = shield.stream_restorer()
+            >>> stream.feed("Sent to [EMA"), stream.feed("IL_1] today"), stream.finish()
+            ('Sent to ', 'jane.doe@example.com today', '')
+
+        Returns:
+            A `StreamRestorer` using this shield's vault and restore settings.
+        """
+        return self._restorer.stream()
+
+    def restore_stream(self, pieces: Iterable[str]) -> Iterator[str]:
+        """Restore a reply that arrives in pieces, yielding restored pieces.
+
+        A convenience for `stream_restorer` when the reply is an iterable of
+        strings, such as the text chunks of a streaming model call. Empty
+        pieces are skipped.
+
+        Example:
+            >>> shield = Shield()
+            >>> _ = shield.mask("Mail jane.doe@example.com")
+            >>> "".join(shield.restore_stream(["Mailed [EMAIL", "_1]."]))
+            'Mailed jane.doe@example.com.'
+
+        Args:
+            pieces: The reply's text, in order.
+
+        Yields:
+            The restored text, as soon as each part of it is final.
+        """
+        stream = self.stream_restorer()
+        for piece in pieces:
+            restored = stream.feed(piece)
+            if restored:
+                yield restored
+        rest = stream.finish()
+        if rest:
+            yield rest
 
     def wrap(
         self, llm: Callable[[str], str], *, strict: bool = False
