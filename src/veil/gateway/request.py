@@ -38,11 +38,12 @@ WITHHELD_LINE = "[withheld: this line holds personal data that could not be mask
 
 #: Told to the model once, in the system prompt.
 DEFAULT_NOTE = (
-    "Personal data in this conversation has been replaced with placeholders "
-    "such as [EMAIL_1] or [PERSON_2]; the real values are put back on the "
-    "user's computer. Write placeholders exactly as they appear, including in "
-    "tool calls, and never guess the values behind them. [LITERAL_n] stands "
-    "for text that itself looks like a placeholder: copy it unchanged."
+    "Personal data in this conversation has been replaced with placeholders: "
+    "a type and a number in square brackets, in the form [TYPE_N]. The real "
+    "values are put back on the user's computer, including in tool calls, so "
+    "write each placeholder exactly as it appears and never guess the value "
+    "behind it. [LITERAL_n] stands for text that itself looks like a "
+    "placeholder: copy it unchanged."
 )
 
 # The client's billing header, which the API recognizes only if unchanged.

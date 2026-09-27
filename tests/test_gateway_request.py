@@ -216,6 +216,11 @@ class TestMasking:
         again = RequestMasker(shield, MemoryLedger()).mask(claude_code_body())
         assert again == first
 
+    def test_the_note_names_no_placeholder_that_could_exist(self):
+        from veil.placeholders import LOOSE_PLACEHOLDER_RE
+
+        assert LOOSE_PLACEHOLDER_RE.search(DEFAULT_NOTE) is None
+
     def test_the_note_is_the_last_system_block(self):
         masker, _, _ = make_masker()
         system = masker.mask(claude_code_body())["system"]

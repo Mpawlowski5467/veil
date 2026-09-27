@@ -9,14 +9,20 @@ restored before the client sees it.
 from .ledger import Ledger, MemoryLedger
 from .request import DEFAULT_NOTE, WITHHELD_LINE, RequestMasker, UnsupportedRequestError
 from .response import ResponseRestorer, StreamError, restore_message
+from .server import SECRET_HEADER, SESSION_HEADER, Gateway, Session, Sessions
 
 __all__ = [
     "DEFAULT_NOTE",
+    "SECRET_HEADER",
+    "SESSION_HEADER",
     "WITHHELD_LINE",
+    "Gateway",
     "Ledger",
     "MemoryLedger",
     "RequestMasker",
     "ResponseRestorer",
+    "Session",
+    "Sessions",
     "StreamError",
     "UnsupportedRequestError",
     "restore_message",
