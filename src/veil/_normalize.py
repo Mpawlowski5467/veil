@@ -18,7 +18,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Mapping
 from types import MappingProxyType
-from typing import TypeAlias
+from typing import Protocol, TypeAlias
 
 from .detectors.regex import (
     _CARD_SEPARATORS,
@@ -171,6 +171,12 @@ BUILTIN_NORMALIZERS: Mapping[str, Normalizer] = MappingProxyType(
 TypeKey: TypeAlias = tuple[str, str]
 
 
+class _Merged(Protocol):
+    """Where the placeholders covering merged matches are recorded."""
+
+    def _merged(self) -> set[str]: ...
+
+
 class KeyIndex:
     """Finds the stored value a new spelling should share a placeholder with.
 
@@ -181,9 +187,30 @@ class KeyIndex:
     (giving a new placeholder), never make a wrong one.
     """
 
-    def __init__(self, normalizers: Mapping[str, Normalizer]) -> None:
-        """Create an index for the given normalizers, by entity type."""
+    def __init__(
+        self, normalizers: Mapping[str, Normalizer], memory: _Merged | None = None
+    ) -> None:
+        """Create an index for the given normalizers, by entity type.
+
+        ``memory`` records which placeholders cover merged matches (see
+        `Masker`); their values are never indexed.
+        """
         self._normalizers = dict(normalizers)
+        self._memory = memory
+        self.clear()
+
+    def use_memory(self, memory: _Merged) -> None:
+        """Set where merged placeholders are recorded (after unpickling)."""
+        self._memory = memory
+
+    def __getstate__(self) -> dict[str, object]:
+        """Pickle the settings only: the cached values are rebuilt on demand."""
+        return {"_normalizers": self._normalizers, "_memory": self._memory}
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        """Unpickle with an empty cache."""
+        self.__dict__.update(state)
+        self.__dict__.setdefault("_memory", None)
         self.clear()
 
     def clear(self) -> None:
@@ -286,12 +313,15 @@ class KeyIndex:
 
     def _rebuild(self, vault: Vault) -> dict[TypeKey, str]:
         cached = self._keys
+        merged = self._memory._merged() if self._memory is not None else set()
         keys: dict[str, tuple[str, TypeKey | None]] = {}
         index: dict[TypeKey, str] = {}
         items = vault.items()
         for placeholder, value in items:
             entry = cached.get(placeholder)
-            if entry is None or entry[0] != value:
+            if placeholder in merged:
+                entry = (value, None)  # merged by any Shield on this vault
+            elif entry is None or entry[0] != value:
                 entity_type = placeholder_type(placeholder)
                 type_key = self.type_key(entity_type, value) if entity_type else None
                 entry = (value, type_key)

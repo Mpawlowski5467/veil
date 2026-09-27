@@ -22,6 +22,7 @@ class MemoryVault:
         self._counters: dict[str, int] = {}
         # value -> (entity type, placeholder it was masked as); see _remember.
         self._remembered_values: dict[str, tuple[str, str]] = {}
+        self._merged_placeholders: set[str] = set()  # see _mark_merged
 
     def get_or_create(self, value: str, entity_type: str) -> str:
         """Return the placeholder for ``value``, creating one if it is new.
@@ -78,9 +79,19 @@ class MemoryVault:
         """Return every remembered ``(value, entity_type, placeholder)``."""
         return [(v, t, p) for v, (t, p) in self._remembered_values.items()]
 
+    def _mark_merged(self, placeholder: str) -> None:
+        """Record that ``placeholder`` covers several overlapping matches."""
+        if placeholder in self._value_by_placeholder:
+            self._merged_placeholders.add(placeholder)
+
+    def _merged(self) -> set[str]:
+        """Return the placeholders recorded with `_mark_merged`."""
+        return set(self._merged_placeholders)
+
     def clear(self) -> None:
         """Forget every mapping and restart numbering at 1 for every type."""
         self._remembered_values.clear()
+        self._merged_placeholders.clear()
         self._placeholder_by_value.clear()
         self._value_by_placeholder.clear()
         self._counters.clear()
@@ -93,6 +104,7 @@ class MemoryVault:
         """Unpickle, including a vault pickled before remembered values existed."""
         self.__dict__.update(state)
         self.__dict__.setdefault("_remembered_values", {})
+        self.__dict__.setdefault("_merged_placeholders", set())
 
     def __repr__(self) -> str:
         """Summarize the vault without revealing any stored values."""

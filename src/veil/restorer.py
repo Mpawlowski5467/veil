@@ -12,7 +12,7 @@ from .placeholders import (
     placeholder_type,
 )
 from .types import RepairedPlaceholder, RestoreResult
-from .vault.base import Vault
+from .vault.base import Vault, _batch
 
 
 class Restorer:
@@ -64,14 +64,10 @@ class Restorer:
         restored_count = 0
         unknown: dict[str, None] = {}
         repaired: list[RepairedPlaceholder] = []
-        known_types: set[str | None] = set()
-        if self._tolerant:
-            known_types = {
-                placeholder_type(stored) for stored, _ in self._vault.items()
-            }
+        known_types: set[str | None] | None = None  # built only if needed
 
         def replace(match: re.Match[str]) -> str:
-            nonlocal restored_count
+            nonlocal restored_count, known_types
             written = match.group(0)
             value = self._vault.get_value(written)
             if value is not None:
@@ -91,14 +87,20 @@ class Restorer:
             # Report exact placeholders, and rewritten ones of a type this
             # vault uses ("[person 3]" when only PERSON_1 and _2 exist), but
             # not ordinary bracketed text like "[Figure 2]".
-            if PLACEHOLDER_RE.fullmatch(written) or any(
-                placeholder_type(candidate) in known_types for candidate in candidates
-            ):
+            if PLACEHOLDER_RE.fullmatch(written):
                 unknown[written] = None
+            elif candidates:
+                if known_types is None:
+                    known_types = {
+                        placeholder_type(stored) for stored, _ in self._vault.items()
+                    }
+                if any(placeholder_type(c) in known_types for c in candidates):
+                    unknown[written] = None
             return written
 
         pattern = LOOSE_PLACEHOLDER_RE if self._tolerant else PLACEHOLDER_RE
-        restored = pattern.sub(replace, text)
+        with _batch(self._vault):  # one check of a shared vault for all lookups
+            restored = pattern.sub(replace, text)
         warnings = [
             f"Unknown placeholder {placeholder} was left unchanged."
             for placeholder in unknown
