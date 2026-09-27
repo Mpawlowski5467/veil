@@ -50,6 +50,10 @@ BAD_SETTINGS = [
     ({"patterns": {"ORDER": "(unclosed"}}, "patterns.ORDER: isn't a valid regex"),
     ({"patterns": {"ORDER": ""}}, "patterns.ORDER: must be a non-empty string"),
     ({"identity": "yes"}, "identity: must be true or false"),
+    (
+        {"entities": {"ADDRESS": ["line one\nline two"]}},
+        "entities.ADDRESS: values must be on one line",
+    ),
     ({"retention_days": 0}, "retention_days: must be from 1 to 3650"),
     ({"retention_days": True}, "retention_days: must be a whole number"),
     (
@@ -97,6 +101,12 @@ class TestSettings:
             load_settings(path)
         assert str(info.value).startswith(f"{path}: ")
         assert problem in str(info.value)
+
+    def test_a_file_that_isnt_utf8(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_bytes(b'{"entities": {"PERSON": ["\xff"]}}')
+        with pytest.raises(SettingsError, match="not UTF-8"):
+            load_settings(path)
 
     def test_problems_never_quote_a_value(self, tmp_path):
         path = write(tmp_path, {"entities": {"PERSON": [NAME, 5]}})
@@ -237,6 +247,14 @@ class TestSessions:
         with open_sessions(tmp_path, self.settings(), {}) as later:
             masked = later.get("conv-1").ledger.masked_text(f"Hi {NAME}")
         assert masked == "Hi [PERSON_1]em"
+
+    def test_a_local_git_email_is_masked_too(self, tmp_path):
+        identity = {"Ada Quill": "PERSON", "aquill@corp": "EMAIL"}
+        with open_sessions(tmp_path, Settings(), identity) as sessions:
+            masked = (
+                sessions.get("c").shield.mask("Author: Ada Quill <aquill@corp>").text
+            )
+        assert masked == "Author: [PERSON_1] <[EMAIL_1]>"
 
     def test_the_git_identity_is_masked(self, tmp_path):
         identity = {"Ada Quill": "PERSON", "ada.q@example.com": "EMAIL"}

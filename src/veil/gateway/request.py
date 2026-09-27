@@ -283,6 +283,7 @@ class RequestMasker:
         for i, block in enumerate(blocks):
             path = f"system[{i}]"
             _check_block(block, path, allowed={"text"})
+            _no_citations(block, path)
             text = block["text"]
             if _BILLING_HEADER.fullmatch(text):
                 out.append(block)
@@ -461,11 +462,10 @@ def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
     masked = known.mask(shield.mask(text).text)
     if not known.found_in(masked):
         return masked
-    out = []
-    for line in text.split("\n"):
-        line_masked = known.mask(shield.mask(line).text)
-        out.append(WITHHELD_LINE if known.found_in(line_masked) else line_masked)
-    return "\n".join(out)
+    # Withhold, from the masked text, each line where a known value remains
+    # (never mask lines alone: a value may span a line break).
+    lines = masked.split("\n")
+    return "\n".join(WITHHELD_LINE if known.found_in(line) else line for line in lines)
 
 
 # --- checking shapes -----------------------------------------------------------

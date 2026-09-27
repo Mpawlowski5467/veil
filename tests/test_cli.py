@@ -17,7 +17,9 @@ FAKE_CLAUDE = """#!{python}
 import http.client, json, os, sys
 from urllib.parse import urlsplit
 args = sys.argv[1:]
-settings = json.loads(args[args.index("--settings") + 1])
+settings_path = args[args.index("--settings") + 1]
+settings = json.load(open(settings_path))
+mode = os.stat(settings_path).st_mode & 0o777
 env = settings["env"]
 host = urlsplit(env["ANTHROPIC_BASE_URL"]).netloc
 name, _, secret = env["ANTHROPIC_CUSTOM_HEADERS"].splitlines()[-1].partition(": ")
@@ -36,9 +38,14 @@ report = {{
     "with_secret": status({{name: secret}}),
     "without_secret": status({{}}),
     "cwd": os.getcwd(),
+    "settings_mode": mode,
+    "secret_in_argv": secret in " ".join(sys.argv),
 }}
+report["pid"] = os.getpid()
 with open(os.environ["FAKE_CLAUDE_REPORT"], "w") as f:
     json.dump(report, f)
+import time
+time.sleep(float(os.environ.get("FAKE_CLAUDE_SLEEP", "0")))
 sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
 """
 
@@ -53,6 +60,10 @@ def fake_claude(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_CLAUDE_REPORT", str(report))
     monkeypatch.setenv("PATH", f"{path.parent}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
+    # Not this machine's own settings: a Claude Code session running these
+    # tests may have set these.
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     return path, report
 
 
@@ -72,6 +83,11 @@ class TestClaude:
         assert code == 0
         report = json.loads(report_file.read_text())
         assert report["args"][2:] == ["--resume", "abc", "-p", "hi"]
+        # The secret is in an owner-only file, never on the command line
+        # (other users can read command lines with ps).
+        assert report["secret_in_argv"] is False
+        assert report["settings_mode"] == 0o600
+        assert not list(data_dir.glob("claude-settings-*.json"))  # removed after
         # The gateway was up, and let in only requests with its secret.
         assert report["with_secret"] == 404
         assert report["without_secret"] == 401
@@ -79,7 +95,9 @@ class TestClaude:
         assert env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
         assert env["ANTHROPIC_CUSTOM_HEADERS"].startswith(f"{SECRET_HEADER}: ")
         assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
-        assert report["process_env"] == env
+        assert report["process_env"] == {k: v or None for k, v in env.items()}
+        assert report["settings"]["disableAllHooks"] is False
+        assert env["CLAUDE_CODE_USE_BEDROCK"] == ""
         assert set(cli.DENIED_TOOLS) == set(report["settings"]["permissions"]["deny"])
         hook_events = report["settings"]["hooks"]
         assert set(hook_events) == {"PreToolUse", "UserPromptSubmit"}
@@ -134,6 +152,94 @@ class TestClaude:
         assert stat.S_IMODE(os.stat(data_dir).st_mode) == 0o700
 
 
+def test_a_sigterm_is_passed_on_to_claude(fake_claude, data_dir, monkeypatch):
+    import signal
+    import subprocess
+
+    _, report_file = fake_claude
+    monkeypatch.setenv("FAKE_CLAUDE_SLEEP", "30")
+    veil = subprocess.Popen(
+        [sys.executable, "-m", "veil", "--data-dir", str(data_dir), "claude"],
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.time() + 20
+    while not report_file.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.2)
+    child = json.loads(report_file.read_text())["pid"]
+    veil.send_signal(signal.SIGTERM)
+    veil.wait(10)
+    # Claude Code never outlives its gateway.
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("claude is still running after veil got SIGTERM")
+
+
+class TestRefusals:
+    @pytest.mark.parametrize(
+        "option", ["--settings", "--settings=x.json", "--bare", "--safe-mode"]
+    )
+    def test_options_that_drop_the_masking_settings(
+        self, fake_claude, data_dir, option, capsys
+    ):
+        _, report_file = fake_claude
+        assert cli.main(["--data-dir", str(data_dir), "claude", option]) == 2
+        assert "would drop the masking settings" in capsys.readouterr().err
+        assert not report_file.exists()
+
+    def test_a_base_url_of_the_users_own(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        _, report_file = fake_claude
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://llm-proxy.example.com")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 2
+        assert (
+            "ANTHROPIC_BASE_URL is set in your environment" in capsys.readouterr().err
+        )
+        assert not report_file.exists()
+
+    def test_a_base_url_in_the_users_claude_settings(
+        self, fake_claude, data_dir, tmp_path, capsys
+    ):
+        settings = tmp_path / "home" / ".claude" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(
+            json.dumps({"env": {"ANTHROPIC_BASE_URL": "https://p.example.com"}})
+        )
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 2
+        assert "~/.claude/settings.json" in capsys.readouterr().err
+
+    def test_hooks_that_cant_run_stop_it(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        _, report_file = fake_claude
+        monkeypatch.setattr(
+            cli,
+            "hook_command",
+            lambda _dir: [sys.executable, "-c", "raise SystemExit(1)"],
+        )
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 1
+        assert "hook didn't work" in capsys.readouterr().err
+        assert not report_file.exists()
+
+    def test_variables_that_turn_hooks_off_are_unset(
+        self, fake_claude, data_dir, monkeypatch
+    ):
+        _, report_file = fake_claude
+        monkeypatch.setenv("CLAUDE_CODE_SAFE_MODE", "1")
+        monkeypatch.setenv("CLAUDE_CODE_USE_MANTLE", "1")
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        report = json.loads(report_file.read_text())
+        assert report["process_env"]["CLAUDE_CODE_SAFE_MODE"] is None
+        assert report["process_env"]["CLAUDE_CODE_USE_MANTLE"] is None
+
+
 class TestGateway:
     def test_prints_the_settings_and_keeps_its_secret(self, data_dir, capsys):
         data_dir.mkdir(mode=0o700)
@@ -152,11 +258,31 @@ class TestGateway:
         assert stat.S_IMODE(os.stat(data_dir / "gateway-secret").st_mode) == 0o600
         assert cli.gateway_secret(data_dir) == secret  # created once
 
+    def test_the_printed_settings_include_the_hooks(self, data_dir, capsys):
+        data_dir.mkdir(mode=0o700)
+        done = threading.Event()
+        thread = threading.Thread(
+            target=cli.run_gateway,
+            kwargs={"data_dir": data_dir, "port": 0, "stop": done.is_set},
+        )
+        thread.start()
+        deadline = time.time() + 5
+        out = ""
+        while "keep that file" not in out and time.time() < deadline:
+            out += capsys.readouterr().out
+            time.sleep(0.05)
+        done.set()
+        thread.join(5)
+        printed = json.loads(out[out.index("{") : out.rindex("}") + 1])
+        assert set(printed["hooks"]) == {"PreToolUse", "UserPromptSubmit"}
+        assert "PushNotification" in printed["permissions"]["deny"]
+        assert printed["disableAllHooks"] is False
+
     def test_main_runs_it(self, data_dir, monkeypatch):
         calls = []
         monkeypatch.setattr(cli, "run_gateway", lambda **kw: calls.append(kw) or 0)
         assert cli.main(["--data-dir", str(data_dir), "gateway", "--port", "0"]) == 0
-        assert calls == [{"data_dir": data_dir, "port": 0}]
+        assert calls == [{"data_dir": data_dir.absolute(), "port": 0}]
 
 
 class TestForget:

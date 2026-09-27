@@ -80,6 +80,8 @@ def load_settings(path: Path) -> Settings:
         return Settings()
     except OSError as error:
         raise SettingsError(f"{path}: can't be read ({error.strerror})") from None
+    except UnicodeDecodeError:
+        raise SettingsError(f"{path}: not UTF-8 text") from None
     try:
         raw = json.loads(text)
     except ValueError:
@@ -103,6 +105,10 @@ def load_settings(path: Path) -> Settings:
             isinstance(v, str) and v.strip() for v in values
         ):
             raise fail(f"entities.{entity_type}", "must be a list of non-blank strings")
+        if any("\n" in v or "\r" in v for v in values):
+            # A file listing numbers its lines, so a value split over lines
+            # would never be found there.
+            raise fail(f"entities.{entity_type}", "values must be on one line")
         entities[entity_type] = tuple(values)
     patterns: dict[str, str] = {}
     for entity_type, pattern in _mapping(raw, "patterns", fail).items():

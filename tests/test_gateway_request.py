@@ -297,6 +297,22 @@ class TestMasking:
         out = masker.mask(body)["messages"][0]["content"]
         assert out == "Keep\nCall [PHONE_1]-2\nok"
 
+    def test_a_value_across_a_line_break_is_masked(self):
+        shield = make_shield()
+        address = "ul. Fikcyjna 1\n00-950 Nibylandia"
+        shield.add_entity(address, "ADDRESS")
+        masker = RequestMasker(
+            shield, MemoryLedger(), note=None, registered={address: "ADDRESS"}
+        )
+        body = {
+            "messages": [
+                {"role": "user", "content": f"Ship to {address}\nhost=a192.0.2.1"}
+            ]
+        }
+        out = masker.mask(body)["messages"][0]["content"]
+        assert "Fikcyjna" not in out
+        assert "Nibylandia" not in out
+
     def test_a_line_that_still_leaks_is_withheld(self, monkeypatch):
         masker, shield, _ = make_masker(note=None)
         shield.mask("Call 555-123-4567")
@@ -521,6 +537,15 @@ class TestLedger:
 
 
 BAD_BODIES = [
+    (
+        {
+            "system": [
+                {"type": "text", "text": "x", "citations": [{"cited_text": "y"}]}
+            ],
+            "messages": [],
+        },
+        "system[0].citations: citations aren't supported",
+    ),
     ({"messages": [], "prompt": "x"}, "prompt: unknown field"),
     ({"messages": [], "a b": "x"}, "<key>: unknown field"),
     ("not an object", "$: the body is not a JSON object"),

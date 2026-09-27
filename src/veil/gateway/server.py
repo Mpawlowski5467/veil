@@ -14,6 +14,7 @@ import contextlib
 import hmac
 import http.client
 import json
+import re
 import secrets
 import threading
 import time
@@ -23,9 +24,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
+from .hooks import PROOF_PATH, proof
 from .ledger import Ledger, MemoryLedger
 from .request import RequestMasker, UnsupportedRequestError
 from .response import ResponseRestorer, restore_message
@@ -287,8 +289,13 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self._started = False  # whether a response has begun
             self._chunked = False  # whether it is a chunked stream
             try:
+                address = urlsplit(self.path)
+                path = address.path
+                if self.command == "GET" and path == PROOF_PATH:
+                    self._check_access(secret=False)
+                    self._prove(address.query)
+                    return
                 self._check_access()
-                path = urlsplit(self.path).path
                 if (self.command, path) not in _ROUTES:
                     raise _RefusedError(
                         404, "not_found_error", "not served by the gateway"
@@ -306,7 +313,25 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 # Never forwarded and never printed: the details may hold data.
                 self._fail(500, "api_error", "the gateway failed", retry=True)
 
-        def _check_access(self) -> None:
+        def _prove(self, query: str) -> None:
+            """Answer the hooks' check that this is the right gateway.
+
+            The secret isn't needed here: the answer is a keyed hash of the
+            caller's nonce, which only a holder of the secret can give, so a
+            process that took this port can't pass for the gateway.
+            """
+            nonce = parse_qs(query).get("nonce", [""])[0]
+            if not re.fullmatch(r"[0-9a-f]{16,64}", nonce):
+                raise _RefusedError(400, "invalid_request_error", "bad nonce")
+            data = json.dumps({"proof": proof(gateway.secret, nonce)}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self._started = True
+            self.wfile.write(data)
+
+        def _check_access(self, *, secret: bool = True) -> None:
             port = gateway.port
             if self.headers.get("Host", "") not in (
                 f"127.0.0.1:{port}",
@@ -320,7 +345,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     403, "permission_error", "browser requests are refused"
                 )
             sent = self.headers.get(SECRET_HEADER, "")
-            if not hmac.compare_digest(sent.encode(), gateway.secret.encode()):
+            if secret and not hmac.compare_digest(
+                sent.encode(), gateway.secret.encode()
+            ):
                 raise _RefusedError(
                     401, "authentication_error", "missing or wrong secret"
                 )

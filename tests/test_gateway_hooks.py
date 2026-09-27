@@ -100,8 +100,51 @@ class TestPreToolUse:
 
 class TestUserPromptSubmit:
     def test_routed_through_the_gateway(self, monkeypatch):
-        monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:5555")
-        assert hooks.user_prompt_submit({}, "http://127.0.0.1:5555") is None
+        from veil import MemoryVault
+        from veil.gateway import SECRET_HEADER, Gateway, Sessions
+
+        with Gateway(Sessions(lambda _id: Shield(vault=MemoryVault()))) as gateway:
+            monkeypatch.setenv("ANTHROPIC_BASE_URL", gateway.url)
+            header = f"{SECRET_HEADER}: {gateway.secret}"
+            monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", header)
+            assert hooks.user_prompt_submit({}, gateway.url) is None
+            # Something that doesn't hold the secret can't pass for it.
+            monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", f"{SECRET_HEADER}: guess")
+            answer = hooks.user_prompt_submit({}, gateway.url)
+            assert answer["decision"] == "block"
+            assert "isn't running" in answer["reason"]
+
+    def test_a_squatter_on_the_port_is_caught(self, monkeypatch):
+        import http.server
+        import threading
+
+        class Squatter(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # answers anything, but can't know the proof
+                data = b'{"proof": "0000"}'
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Squatter)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        try:
+            monkeypatch.setenv("ANTHROPIC_BASE_URL", url)
+            monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "x-gateway-secret: s3cret")
+            assert hooks.user_prompt_submit({}, url)["decision"] == "block"
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_nothing_listening_holds_the_prompt_back(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:9")
+        monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "x-gateway-secret: s")
+        answer = hooks.user_prompt_submit({}, "http://127.0.0.1:9")
+        assert answer["decision"] == "block"
 
     @pytest.mark.parametrize(
         "env",
@@ -111,6 +154,14 @@ class TestUserPromptSubmit:
             {
                 "ANTHROPIC_BASE_URL": "http://127.0.0.1:5555",
                 "CLAUDE_CODE_USE_BEDROCK": "1",
+            },
+            {
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:5555",
+                "CLAUDE_CODE_USE_MANTLE": "1",
+            },
+            {
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:5555",
+                "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD": "1",
             },
         ],
     )
@@ -179,13 +230,27 @@ class TestSettings:
             "hook user-prompt-submit --expect-url http://127.0.0.1:5555"
         )
 
-    def test_the_matcher_covers_the_outbound_tools(self):
+    def test_the_matcher_covers_every_tool_but_the_file_tools(self):
         import re
 
-        for tool in ("Bash", "WebFetch", "WebSearch", "mcp__crm__lookup"):
-            assert re.fullmatch(hooks.MATCHER, tool)
-        for tool in ("Read", "Write", "Edit", "Grep", "Agent"):
-            assert not re.fullmatch(hooks.MATCHER, tool)
+        # Claude Code tests the matcher as a regex (JavaScript's test()).
+        others = (
+            "Bash",
+            "PowerShell",
+            "Monitor",
+            "WebFetch",
+            "WebSearch",
+            "mcp__crm__lookup",
+            "ReadMcpResourceTool",
+            "Agent",
+            "SendFile",
+            "SomeFutureTool",
+            "Readme",
+        )
+        for tool in others:
+            assert re.search(hooks.MATCHER, tool), tool
+        for tool in hooks.FILE_TOOLS:
+            assert not re.search(hooks.MATCHER, tool), tool
 
     def test_claude_settings_run_the_hooks(self, tmp_path):
         class FakeGateway:
@@ -200,7 +265,7 @@ class TestSettings:
 def test_the_hook_command_runs_isolated(vault_path, tmp_path):
     data_dir = vault_path.parent
     command = hook_command(data_dir)
-    assert command[:3] == [sys.executable, "-I", "-m"]
+    assert command[:3] == [sys.executable, "-I", "-c"]
     completed = subprocess.run(
         [*command, "pre-tool-use"],
         input=json.dumps(call("WebFetch", {"url": f"https://example.com/{EMAIL}"})),
@@ -212,3 +277,38 @@ def test_the_hook_command_runs_isolated(vault_path, tmp_path):
     answer = json.loads(completed.stdout)
     assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert completed.stderr == ""
+
+
+class TestPolicy:
+    @pytest.mark.parametrize(
+        ("tool", "tool_input", "decision"),
+        [
+            ("PowerShell", {"command": f"Write-Output {EMAIL}"}, "ask"),
+            ("Monitor", {"command": f"tail -f log | grep {EMAIL}"}, "ask"),
+            ("ReadMcpResourceTool", {"server": "crm", "uri": f"crm://{EMAIL}"}, "deny"),
+            ("SendFile", {"message": EMAIL}, "deny"),
+            ("SomeFutureTool", {"x": EMAIL}, "deny"),
+            ("Agent", {"prompt": f"Mail {EMAIL}", "isolation": "remote"}, "deny"),
+        ],
+    )
+    def test_calls_that_can_leave_the_machine(
+        self, vault_path, tool, tool_input, decision
+    ):
+        answer = hooks.pre_tool_use(call(tool, tool_input), vault_path)
+        assert answer["hookSpecificOutput"]["permissionDecision"] == decision
+
+    @pytest.mark.parametrize(
+        ("tool", "tool_input"),
+        [
+            ("Agent", {"prompt": f"Mail {EMAIL}"}),  # a local subagent: same gateway
+            ("TaskCreate", {"subject": f"Call {NAME}"}),
+            ("TodoWrite", {"todos": [{"content": EMAIL}]}),
+        ],
+    )
+    def test_calls_that_stay_here(self, vault_path, tool, tool_input):
+        assert hooks.pre_tool_use(call(tool, tool_input), vault_path) is None
+
+
+def test_the_proof_needs_the_secret():
+    assert hooks.proof("a", "n") != hooks.proof("b", "n")
+    assert hooks.proof("a", "n") == hooks.proof("a", "n")

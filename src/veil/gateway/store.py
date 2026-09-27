@@ -196,8 +196,8 @@ def shield_factory(
             for value in values:
                 shield.add_entity(value, entity_type)
         for value, entity_type in identity.items():
-            if entity_type != "EMAIL":  # emails are found by pattern already
-                shield.add_entity(value, entity_type)
+            # The email too: a local address like jan@corp has no pattern.
+            shield.add_entity(value, entity_type)
         return shield
 
     return make

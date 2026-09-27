@@ -122,6 +122,29 @@ def session(tmp_path_factory, data_dir):
     return ws, run, recorder
 
 
+def hook_runs(run, name):
+    """How many hooks ran for one event and tool, per the stream."""
+    return sum(
+        1
+        for e in run.stream
+        if e.get("type") == "system"
+        and e.get("subtype") == "hook_response"
+        and e.get("hook_name") == name
+    )
+
+
+def test_the_checking_hook_skips_only_the_file_tools(session):
+    _, run, _ = session
+    # The probe hook runs for every call; the gateway's hook for all but the
+    # file tools (Claude Code tests its matcher as a regular expression).
+    reads = len(run.calls("PreToolUse", "Read"))
+    bashes = len(run.calls("PreToolUse", "Bash"))
+    assert reads
+    assert bashes
+    assert hook_runs(run, "PreToolUse:Read") == reads
+    assert hook_runs(run, "PreToolUse:Bash") == 2 * bashes
+
+
 def test_every_model_request_went_through_the_gateway(session):
     _, run, recorder = session
     posts = [r for r in recorder.records if r["method"] == "POST"]
