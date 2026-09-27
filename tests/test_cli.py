@@ -1,0 +1,197 @@
+"""The command line: `claude` runs Claude Code through a private gateway."""
+
+import http.client
+import json
+import os
+import stat
+import sys
+import threading
+import time
+
+import pytest
+
+from veil import cli
+from veil.gateway import SECRET_HEADER, Settings, open_sessions
+
+FAKE_CLAUDE = """#!{python}
+import http.client, json, os, sys
+from urllib.parse import urlsplit
+args = sys.argv[1:]
+settings = json.loads(args[args.index("--settings") + 1])
+env = settings["env"]
+host = urlsplit(env["ANTHROPIC_BASE_URL"]).netloc
+name, _, secret = env["ANTHROPIC_CUSTOM_HEADERS"].splitlines()[-1].partition(": ")
+
+def status(headers):
+    conn = http.client.HTTPConnection(host, timeout=5)
+    conn.request("GET", "/not-served", headers=headers)
+    code = conn.getresponse().status
+    conn.close()
+    return code
+
+report = {{
+    "args": args,
+    "settings": settings,
+    "process_env": {{k: os.environ.get(k) for k in env}},
+    "with_secret": status({{name: secret}}),
+    "without_secret": status({{}}),
+    "cwd": os.getcwd(),
+}}
+with open(os.environ["FAKE_CLAUDE_REPORT"], "w") as f:
+    json.dump(report, f)
+sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
+"""
+
+
+@pytest.fixture
+def fake_claude(tmp_path, monkeypatch):
+    path = tmp_path / "bin" / "claude"
+    path.parent.mkdir()
+    path.write_text(FAKE_CLAUDE.format(python=sys.executable))
+    path.chmod(0o755)
+    report = tmp_path / "report.json"
+    monkeypatch.setenv("FAKE_CLAUDE_REPORT", str(report))
+    monkeypatch.setenv("PATH", f"{path.parent}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
+    return path, report
+
+
+@pytest.fixture
+def data_dir(tmp_path):
+    return tmp_path / "data"
+
+
+class TestClaude:
+    def test_runs_claude_through_a_live_gateway(
+        self, fake_claude, data_dir, tmp_path, capsys
+    ):
+        _, report_file = fake_claude
+        code = cli.main(
+            ["--data-dir", str(data_dir), "claude", "--resume", "abc", "-p", "hi"]
+        )
+        assert code == 0
+        report = json.loads(report_file.read_text())
+        assert report["args"][2:] == ["--resume", "abc", "-p", "hi"]
+        # The gateway was up, and let in only requests with its secret.
+        assert report["with_secret"] == 404
+        assert report["without_secret"] == 401
+        env = report["settings"]["env"]
+        assert env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
+        assert env["ANTHROPIC_CUSTOM_HEADERS"].startswith(f"{SECRET_HEADER}: ")
+        assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
+        assert report["process_env"] == env
+        assert set(cli.DENIED_TOOLS) == set(report["settings"]["permissions"]["deny"])
+        assert "masking through a local gateway" in capsys.readouterr().err
+
+    def test_the_gateway_stops_with_claude(self, fake_claude, data_dir, tmp_path):
+        _, report_file = fake_claude
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        url = json.loads(report_file.read_text())["settings"]["env"][
+            "ANTHROPIC_BASE_URL"
+        ]
+        conn = http.client.HTTPConnection(url.removeprefix("http://"), timeout=2)
+        with pytest.raises(ConnectionRefusedError):
+            conn.connect()
+
+    def test_claudes_exit_code_is_returned(self, fake_claude, data_dir, monkeypatch):
+        monkeypatch.setenv("FAKE_CLAUDE_EXIT", "3")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 3
+
+    def test_existing_custom_headers_are_kept(self, fake_claude, data_dir, monkeypatch):
+        _, report_file = fake_claude
+        monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "x-team: blue")
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        headers = json.loads(report_file.read_text())["settings"]["env"][
+            "ANTHROPIC_CUSTOM_HEADERS"
+        ]
+        lines = headers.splitlines()
+        assert lines[0] == "x-team: blue"
+        assert lines[1].startswith(f"{SECRET_HEADER}: ")
+
+    def test_a_bad_config_stops_before_claude_starts(
+        self, fake_claude, data_dir, capsys
+    ):
+        _, report_file = fake_claude
+        data_dir.mkdir(mode=0o700)
+        (data_dir / "config.json").write_text('{"entites": {}}')
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 2
+        assert "unknown key 'entites'" in capsys.readouterr().err
+        assert not report_file.exists()
+
+    def test_a_missing_claude_is_reported(
+        self, data_dir, monkeypatch, tmp_path, capsys
+    ):
+        monkeypatch.setenv("PATH", str(tmp_path))
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 1
+        assert "claude command wasn't found" in capsys.readouterr().err
+
+    def test_the_data_folder_is_private(self, fake_claude, data_dir):
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        assert stat.S_IMODE(os.stat(data_dir).st_mode) == 0o700
+
+
+class TestGateway:
+    def test_prints_the_settings_and_keeps_its_secret(self, data_dir, capsys):
+        data_dir.mkdir(mode=0o700)
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=cli.run_gateway,
+            kwargs={"data_dir": data_dir, "port": 0, "stop": stop.is_set},
+        )
+        thread.start()
+        deadline = time.time() + 5
+        while "listening at" not in capsys.readouterr().out and time.time() < deadline:
+            time.sleep(0.05)
+        stop.set()
+        thread.join(5)
+        secret = cli.gateway_secret(data_dir)
+        assert stat.S_IMODE(os.stat(data_dir / "gateway-secret").st_mode) == 0o600
+        assert cli.gateway_secret(data_dir) == secret  # created once
+
+    def test_main_runs_it(self, data_dir, monkeypatch):
+        calls = []
+        monkeypatch.setattr(cli, "run_gateway", lambda **kw: calls.append(kw) or 0)
+        assert cli.main(["--data-dir", str(data_dir), "gateway", "--port", "0"]) == 0
+        assert calls == [{"data_dir": data_dir, "port": 0}]
+
+
+class TestForget:
+    def fill(self, data_dir):
+        data_dir.mkdir(mode=0o700, exist_ok=True)
+        with open_sessions(data_dir, Settings(), {}) as sessions:
+            for name in ("s1", "s2"):
+                session = sessions.get(name)
+                session.shield.mask("jane.doe@example.com")
+                session.ledger.record_text("x", "y")
+
+    def restored(self, data_dir, name):
+        with open_sessions(data_dir, Settings(), {}) as sessions:
+            session = sessions.get(name)
+            return session.shield.restore("[EMAIL_1]").text, session.ledger.masked_text(
+                "x"
+            )
+
+    def test_one_session(self, data_dir):
+        self.fill(data_dir)
+        assert cli.main(["--data-dir", str(data_dir), "forget", "--session", "s1"]) == 0
+        assert self.restored(data_dir, "s1") == ("[EMAIL_1]", None)
+        assert self.restored(data_dir, "s2") == ("jane.doe@example.com", "y")
+
+    def test_everything(self, data_dir):
+        self.fill(data_dir)
+        assert cli.main(["--data-dir", str(data_dir), "forget", "--all"]) == 0
+        assert self.restored(data_dir, "s1") == ("[EMAIL_1]", None)
+        assert self.restored(data_dir, "s2") == ("[EMAIL_1]", None)
+
+
+def test_python_dash_m_runs_the_command_line():
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "veil", "--help"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "claude" in completed.stdout
+    assert "gateway" in completed.stdout

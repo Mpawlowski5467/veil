@@ -120,6 +120,15 @@ class SQLiteLedger:
             return None
         return json.loads(row[1])
 
+    def forget(self) -> None:
+        """Delete this conversation's entries."""
+        with self._lock:
+            for table in ("ledger_texts", "ledger_tools"):
+                self._db.execute(
+                    f"DELETE FROM {table} WHERE session = ?",  # two fixed names
+                    (self._session,),
+                )
+
     def purge(self, older_than: timedelta) -> int:
         """Delete every conversation's entries not written for ``older_than``."""
         cutoff = time.time() - older_than.total_seconds()
