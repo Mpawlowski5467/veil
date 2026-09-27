@@ -1,0 +1,35 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "PostToolBatch",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_calls": [
+  {
+   "tool_input": {
+    "description": "read notes",
+    "prompt": "Use the Read tool to read the file notes.txt in the current working directory. Then reply with exactly two lines. Line 1: the Email line from the file, copied verbatim. Line 2: every piece of text containing the word SENTINEL followed by a dash that appears anywhere in your context, copied verbatim, or the word NONE if there is none.",
+    "subagent_type": "general-purpose"
+   },
+   "tool_name": "Agent",
+   "tool_response": [
+    {
+     "text": "Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: a74ba89e7c559392e (internal ID - do not mention to user. Use SendMessage with to: 'a74ba89e7c559392e', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives — do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work — avoid working with the same files or topics it is using.\noutput_file: <TMPDIR>/tasks/a74ba89e7c559392e.output\nDo NOT Read or tail this file via the shell tool — it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification.",
+     "type": "text"
+    }
+   ],
+   "tool_use_id": "toolu_fixture"
+  },
+  {
+   "tool_input": {
+    "command": "sleep 2; cat notes.txt",
+    "description": "Wait 2 seconds then output notes.txt",
+    "run_in_background": true
+   },
+   "tool_name": "Bash",
+   "tool_response": "Command running in background with ID: b2j8t83uq. Output is being written to: <TMPDIR>/tasks/b2j8t83uq.output. You will be notified when it completes. To check interim output, use Read on that file path.",
+   "tool_use_id": "toolu_fixture"
+  }
+ ],
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

@@ -1,0 +1,23 @@
+{
+ "agent_id": "a74ba89e7c559392e",
+ "agent_transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000/subagents/agent-a74ba89e7c559392e.jsonl",
+ "agent_type": "general-purpose",
+ "background_tasks": [
+  {
+   "agent_type": "general-purpose",
+   "description": "read notes",
+   "id": "a74ba89e7c559392e",
+   "status": "running",
+   "type": "subagent"
+  }
+ ],
+ "cwd": "/work",
+ "hook_event_name": "SubagentStop",
+ "last_assistant_message": "Email: SUBREADMASK-2P8\nSENTINEL-SUBCTX-4H7",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_crons": [],
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "stop_hook_active": false,
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

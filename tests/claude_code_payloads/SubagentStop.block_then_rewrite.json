@@ -1,0 +1,41 @@
+[
+ {
+  "payload": {
+   "agent_id": "a252955c5cc184f36",
+   "agent_transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000/subagents/agent-a252955c5cc184f36.jsonl",
+   "agent_type": "general-purpose",
+   "background_tasks": [],
+   "cwd": "/work",
+   "hook_event_name": "SubagentStop",
+   "last_assistant_message": "Email: SUBREADMASK-2P8",
+   "permission_mode": "default",
+   "prompt_id": "00000000-0000-4000-8000-000000000000",
+   "session_crons": [],
+   "session_id": "00000000-0000-4000-8000-000000000000",
+   "stop_hook_active": false,
+   "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+  },
+  "response": {
+   "decision": "block",
+   "reason": "VEIL-CHECK: output your previous final answer again, with every occurrence of SUBREADMASK-2P8 replaced by REWRITTEN-7C3, and nothing else."
+  }
+ },
+ {
+  "payload": {
+   "agent_id": "a252955c5cc184f36",
+   "agent_transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000/subagents/agent-a252955c5cc184f36.jsonl",
+   "agent_type": "general-purpose",
+   "background_tasks": [],
+   "cwd": "/work",
+   "hook_event_name": "SubagentStop",
+   "last_assistant_message": "Email: REWRITTEN-7C3",
+   "permission_mode": "default",
+   "prompt_id": "00000000-0000-4000-8000-000000000000",
+   "session_crons": [],
+   "session_id": "00000000-0000-4000-8000-000000000000",
+   "stop_hook_active": true,
+   "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+  },
+  "response": null
+ }
+]

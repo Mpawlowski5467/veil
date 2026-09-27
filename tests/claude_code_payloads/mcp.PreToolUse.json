@@ -1,0 +1,17 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "PreToolUse",
+ "mcp_server": {
+  "name": "contacts",
+  "source": "dynamic"
+ },
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "name": "Jan"
+ },
+ "tool_name": "mcp__contacts__find_contact",
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

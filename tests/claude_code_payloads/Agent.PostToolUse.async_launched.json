@@ -1,0 +1,26 @@
+{
+ "cwd": "/work",
+ "duration_ms": 3,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "description": "read notes",
+  "prompt": "Use the Read tool to read the file notes.txt in the current working directory. Then reply with exactly two lines. Line 1: the Email line from the file, copied verbatim. Line 2: every piece of text containing the word SENTINEL followed by a dash that appears anywhere in your context, copied verbatim, or the word NONE if there is none.",
+  "subagent_type": "general-purpose"
+ },
+ "tool_name": "Agent",
+ "tool_response": {
+  "agentId": "a74ba89e7c559392e",
+  "canReadOutputFile": true,
+  "description": "read notes",
+  "isAsync": true,
+  "outputFile": "<TMPDIR>/tasks/a74ba89e7c559392e.output",
+  "prompt": "Use the Read tool to read the file notes.txt in the current working directory. Then reply with exactly two lines. Line 1: the Email line from the file, copied verbatim. Line 2: every piece of text containing the word SENTINEL followed by a dash that appears anywhere in your context, copied verbatim, or the word NONE if there is none.",
+  "resolvedModel": "claude-haiku-4-5-20251001",
+  "status": "async_launched"
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

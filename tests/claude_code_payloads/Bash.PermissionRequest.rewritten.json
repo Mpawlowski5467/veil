@@ -1,0 +1,14 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "PermissionRequest",
+ "permission_mode": "default",
+ "permission_suggestions": [],
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "command": "{ cat notes.txt missing1.txt ; } 2>&1; printf '\\n[exit code %s]\\n' \"$?\"",
+  "description": "Step 1: cat notes.txt missing1.txt"
+ },
+ "tool_name": "Bash",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

@@ -284,6 +284,12 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+The live tests check the Claude Code behavior the hooks rely on. They are skipped unless you opt in, and they need a logged-in `claude` CLI. Each one makes real, small model calls on the cheapest model:
+
+```bash
+VEIL_LIVE_CLAUDE=1 uv run pytest -m live
+```
+
 To rename the package:
 
 1. In `pyproject.toml`, change `name` and the `[tool.hatch.version]` path.

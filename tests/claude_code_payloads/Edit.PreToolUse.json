@@ -1,0 +1,16 @@
+{
+ "cwd": "/work",
+ "hook_event_name": "PreToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "file_path": "/work/out.txt",
+  "new_string": "hi jane.doe@example.com",
+  "old_string": "hello jane.doe@example.com",
+  "replace_all": false
+ },
+ "tool_name": "Edit",
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}

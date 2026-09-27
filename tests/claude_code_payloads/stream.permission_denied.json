@@ -1,0 +1,11 @@
+{
+ "decision_reason": "Contains compound_statement",
+ "decision_reason_type": "other",
+ "message": "Contains compound_statement",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "subtype": "permission_denied",
+ "tool_name": "Bash",
+ "tool_use_id": "toolu_fixture",
+ "type": "system",
+ "uuid": "00000000-0000-4000-8000-000000000000"
+}

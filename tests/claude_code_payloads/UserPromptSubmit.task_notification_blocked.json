@@ -1,0 +1,19 @@
+{
+ "payload": {
+  "cwd": "/work",
+  "hook_event_name": "UserPromptSubmit",
+  "permission_mode": "default",
+  "prompt": "<task-notification>\n<task-id>a6545bdf38735a630</task-id>\n<tool-use-id>toolu_fixture</tool-use-id>\n<output-file><TMPDIR>/tasks/a6545bdf38735a630.output</output-file>\n<status>completed</status>\n<summary>Agent \"bg check\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>Email: REWRITTEN-7C3</result>\n<usage><subagent_tokens>12807</subagent_tokens><tool_uses>1</tool_uses><duration_ms>8620</duration_ms></usage>\n</task-notification>",
+  "prompt_id": "00000000-0000-4000-8000-000000000000",
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+ },
+ "response": {
+  "decision": "block",
+  "hookSpecificOutput": {
+   "hookEventName": "UserPromptSubmit",
+   "suppressOriginalPrompt": true
+  },
+  "reason": "NOTIF-BLOCKED-5J2 held back by hook"
+ }
+}

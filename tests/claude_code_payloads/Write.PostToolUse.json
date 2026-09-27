@@ -1,0 +1,23 @@
+{
+ "cwd": "/work",
+ "duration_ms": 3,
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "00000000-0000-4000-8000-000000000000",
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "tool_input": {
+  "content": "hello jane.doe@example.com",
+  "file_path": "/work/out.txt"
+ },
+ "tool_name": "Write",
+ "tool_response": {
+  "content": "hello jane.doe@example.com",
+  "filePath": "/work/out.txt",
+  "originalFile": null,
+  "structuredPatch": [],
+  "type": "create",
+  "userModified": false
+ },
+ "tool_use_id": "toolu_fixture",
+ "transcript_path": "~/.claude/projects/-work/00000000-0000-4000-8000-000000000000.jsonl"
+}
