@@ -147,7 +147,7 @@ class Shield:
         """
         return self._masker.mask(text)
 
-    def restore(self, text: str) -> RestoreResult:
+    def restore(self, text: str, *, tolerant: bool | None = None) -> RestoreResult:
         """Replace placeholders in ``text`` with the original values.
 
         Never raises on unknown placeholders: they are left as they are and
@@ -157,14 +157,18 @@ class Shield:
 
         Args:
             text: Text from a model, usually its reply to masked input.
+            tolerant: Override ``tolerant_restore`` for this call. Pass
+                ``False`` for text that will be written or run, such as a
+                tool call's arguments, where only an exact placeholder
+                should become a real value.
 
         Returns:
             A `RestoreResult` with the restored text, how many placeholders
             were replaced, and any warnings.
         """
-        return self._restorer.restore(text)
+        return self._restorer.restore(text, tolerant=tolerant)
 
-    def stream_restorer(self) -> StreamRestorer:
+    def stream_restorer(self, *, tolerant: bool | None = None) -> StreamRestorer:
         """Start restoring a reply that arrives in pieces, such as a stream.
 
         Feed each piece to the returned `StreamRestorer` and send on what it
@@ -179,12 +183,17 @@ class Shield:
             >>> stream.feed("Sent to [EMA"), stream.feed("IL_1] today"), stream.finish()
             ('Sent to ', 'jane.doe@example.com today', '')
 
-        Returns:
-            A `StreamRestorer` using this shield's vault and restore settings.
-        """
-        return self._restorer.stream()
+        Args:
+            tolerant: Override ``tolerant_restore``, as for `restore`.
 
-    def restore_stream(self, pieces: Iterable[str]) -> Iterator[str]:
+        Returns:
+            A `StreamRestorer` using this shield's vault.
+        """
+        return self._restorer.stream(tolerant=tolerant)
+
+    def restore_stream(
+        self, pieces: Iterable[str], *, tolerant: bool | None = None
+    ) -> Iterator[str]:
         """Restore a reply that arrives in pieces, yielding restored pieces.
 
         A convenience for `stream_restorer` when the reply is an iterable of
@@ -199,11 +208,12 @@ class Shield:
 
         Args:
             pieces: The reply's text, in order.
+            tolerant: Override ``tolerant_restore``, as for `restore`.
 
         Yields:
             The restored text, as soon as each part of it is final.
         """
-        stream = self.stream_restorer()
+        stream = self.stream_restorer(tolerant=tolerant)
         for piece in pieces:
             restored = stream.feed(piece)
             if restored:

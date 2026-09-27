@@ -344,8 +344,11 @@ class Masker:
         pieces.append(unmasked[-1])
         masked = "".join(reversed(pieces))
 
-        warnings = self._placeholder_like_input(text)
-        warnings.extend(self._leaks(text, spans, list(reversed(unmasked)), candidates))
+        unmasked.reverse()
+        # Only text left between placeholders can be mistaken for one later;
+        # placeholder-shaped text that was itself masked restores as written.
+        warnings = self._placeholder_like_input(unmasked)
+        warnings.extend(self._leaks(text, spans, unmasked, candidates))
         return MaskResult(text=masked, entities=entities, warnings=warnings)
 
     def _store(self, spans: list[tuple[Span, tuple[Span, ...]]]) -> list[MaskedEntity]:
@@ -389,8 +392,8 @@ class Masker:
                 memory._remember(member.value, member.entity_type, entity.placeholder)
         return entities
 
-    def _placeholder_like_input(self, text: str) -> list[str]:
-        """Warn about input that restore() would treat as a placeholder.
+    def _placeholder_like_input(self, pieces: list[str]) -> list[str]:
+        """Warn about input left unmasked that restore() would treat as a placeholder.
 
         That is every exact placeholder, and, with tolerant restore, every
         rewritten form (``[Person 1]``) of a type this vault uses.
@@ -398,7 +401,10 @@ class Masker:
         known_types: set[str | None] | None = None  # built only if needed
         tokens: dict[str, None] = {}
         if self._tolerant:
-            for match in LOOSE_PLACEHOLDER_RE.finditer(text):
+            matches = (
+                m for piece in pieces for m in LOOSE_PLACEHOLDER_RE.finditer(piece)
+            )
+            for match in matches:
                 if match["exact"] is not None:
                     tokens[match.group(0)] = None
                     continue
@@ -411,7 +417,11 @@ class Masker:
                     tokens[match.group(0)] = None
         else:
             tokens.update(
-                dict.fromkeys(m.group(0) for m in PLACEHOLDER_RE.finditer(text))
+                dict.fromkeys(
+                    m.group(0)
+                    for piece in pieces
+                    for m in PLACEHOLDER_RE.finditer(piece)
+                )
             )
         warnings = []
         for token in tokens:

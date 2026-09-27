@@ -208,7 +208,7 @@ When a reply streams in, a placeholder can be split across chunks (`"[EMA"`, `"I
 ['I emailed ', 'jan.n@example.com and ', 'will follow up.']
 ```
 
-Joined, the pieces are exactly what `restore()` gives for the whole reply, however it was split. Nothing but a possible placeholder is delayed: text from a bracket onward, at most 76 characters. When the chunks come from callbacks rather than an iterable, use `shield.stream_restorer()`: call `feed(chunk)` for each chunk and send on what it returns, then `finish()` at the end, and `result()` for the count, warnings, and repairs.
+Joined, the pieces are exactly what `restore()` gives for the whole reply, however it was split. Nothing but a possible placeholder is delayed: text from a bracket onward that could still become one, always under 76 characters. A Markdown link or an array index goes straight through. When the chunks come from callbacks rather than an iterable, use `shield.stream_restorer()`: call `feed(chunk)` for each chunk and send on what it returns, then `finish()` at the end, and `result()` for the count, warnings, and repairs.
 
 ### Warnings
 
@@ -246,6 +246,24 @@ By default, leak warnings quote the value that leaked. To log them safely, creat
 >>> shield.mask("Call 555-123-4567-2").warnings
 ['Leak check: a known PHONE value ([PHONE_1]) still appears in the masked text.']
 ```
+
+### Text that already looks like a placeholder
+
+A document can contain placeholder-shaped text of its own, like a template with `[EMAIL_1]` in it. Left as it is, it would come back from the model as a real placeholder, and `restore()` would put a real value there. Add a `LiteralPlaceholderDetector` to mask such text too. It gets a placeholder of its own and restores to exactly what was written:
+
+```python
+>>> from veil import LiteralPlaceholderDetector, RegexDetector
+>>> shield = Shield(detectors=[LiteralPlaceholderDetector({"EMAIL"}), RegexDetector()])
+>>> masked = shield.mask("Template: Dear [EMAIL_1]. Sent by jan.n@example.com.").text
+>>> masked
+'Template: Dear [LITERAL_1]. Sent by [EMAIL_1].'
+>>> shield.restore(masked).text
+'Template: Dear [EMAIL_1]. Sent by jan.n@example.com.'
+```
+
+Give it the types that matter, so code like `row[COL_1]` is left alone (or `None` for every type). Keep the set the same for the whole conversation, so the same text always masks the same way.
+
+When the restored text will be written somewhere, not just read, such as a tool call's arguments, restore only exact placeholders: `shield.restore(text, tolerant=False)`. A rewritten form like `[Email 1]` in such text is then left as it is.
 
 ### Plugging in your own parts
 

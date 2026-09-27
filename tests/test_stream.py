@@ -14,6 +14,7 @@ from veil.placeholders import (
     format_placeholder,
     validate_entity_type,
 )
+from veil.restorer import _EXACT_PREFIX_RE, _LOOSE_PREFIX_RE
 
 
 def make_shield(*, tolerant=True):
@@ -161,6 +162,37 @@ def test_the_hold_back_is_bounded():
             assert len(pending) < MAX_PLACEHOLDER_LENGTH
             assert pending == "" or pending[0] in PLACEHOLDER_OPENERS
         stream.finish()
+
+
+def test_markdown_links_and_other_brackets_are_not_delayed():
+    shield = make_shield()
+    stream = shield.stream_restorer()
+    assert stream.feed("See [the docs](https://example.com) ") == (
+        "See [the docs](https://example.com) "
+    )
+    assert stream.feed("and [1, 2] or arr[i] ") == "and [1, 2] or arr[i] "
+    assert stream.feed("or \\n") == "or \\n"
+    assert stream.finish() == ""
+
+
+def test_the_prefix_patterns_accept_every_start_of_a_match():
+    rng = random.Random(5)
+    for pattern, prefix in (
+        (LOOSE_PLACEHOLDER_RE, _LOOSE_PREFIX_RE),
+        (PLACEHOLDER_RE, _EXACT_PREFIX_RE),
+    ):
+        for _ in range(3000):
+            text = random_text(rng, rng.randint(1, 6))
+            for match in pattern.finditer(text):
+                found = match.group(0)
+                for end in range(1, len(found)):
+                    assert prefix.fullmatch(found[:end]), found[:end]
+        longest = "[" + "A" * 64 + "_" + "9" * 9
+        assert prefix.fullmatch(longest)
+        assert not prefix.fullmatch(longest + "9")
+        for size in range(MAX_PLACEHOLDER_LENGTH, MAX_PLACEHOLDER_LENGTH + 3):
+            for opener in "[\\\N{LEFT BLACK LENTICULAR BRACKET}":
+                assert not prefix.fullmatch(opener + "A" * (size - 1))
 
 
 def test_an_unfinished_placeholder_is_flushed_as_is():

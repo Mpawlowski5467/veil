@@ -10,7 +10,12 @@ Example:
     'Email [PERSON_1] at [EMAIL_1]'
 """
 
-from .detectors import Detector, ManualDetector, RegexDetector
+from .detectors import (
+    Detector,
+    LiteralPlaceholderDetector,
+    ManualDetector,
+    RegexDetector,
+)
 from .restorer import StreamRestorer
 from .shield import Shield
 from .types import (
@@ -28,6 +33,7 @@ __version__ = "0.3.0"
 
 __all__ = [
     "Detector",
+    "LiteralPlaceholderDetector",
     "ManualDetector",
     "MaskResult",
     "MaskedEntity",

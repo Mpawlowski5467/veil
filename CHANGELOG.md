@@ -8,8 +8,12 @@
 
 - `Shield.restore_stream(chunks)` restores a reply that arrives in pieces, and `Shield.stream_restorer()` returns a `StreamRestorer` to feed pieces one at a time (`feed()`, `finish()`, `result()`). A placeholder split across pieces is held back until it is complete, and nothing else is delayed; joined, the pieces are exactly what `restore()` gives for the whole text.
 
+- `LiteralPlaceholderDetector(types)` masks text that is already shaped like a placeholder of those types (such as a template's `[EMAIL_1]`), as type `LITERAL`, so it restores to exactly what was written instead of a real value.
+- `restore()`, `stream_restorer()`, and `restore_stream()` take `tolerant=` to override `tolerant_restore` for one call, e.g. `tolerant=False` for text that will be written or run, where only exact placeholders should become real values.
+
 ### Changed
 
+- `mask()` warns about placeholder-like input only when that text is left unmasked. Text that was masked itself (by `LiteralPlaceholderDetector`, or as part of a registered value) restores as written, so it no longer warns.
 - Placeholders have a maximum length, so a stream never holds back more than 76 characters: entity types are at most 64 characters (`add_entity` and `custom_patterns` reject longer ones), placeholder numbers at most nine digits, and a rewritten placeholder is only restored with up to eight spaces or tabs of padding inside its brackets.
 - A `Shield` can be shared between threads: its `mask()` calls take turns.
 - A pickled `Shield(normalize=True)` no longer holds the values cached by its normalization index; they are rebuilt from the vault.

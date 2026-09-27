@@ -6,7 +6,6 @@ import re
 
 from .placeholders import (
     LOOSE_PLACEHOLDER_RE,
-    MAX_PLACEHOLDER_LENGTH,
     PLACEHOLDER_OPENERS,
     PLACEHOLDER_RE,
     loose_match_body,
@@ -46,19 +45,14 @@ class Restorer:
         self._vault = vault
         self._tolerant = tolerant
 
-    @property
-    def _pattern(self) -> re.Pattern[str]:
-        return LOOSE_PLACEHOLDER_RE if self._tolerant else PLACEHOLDER_RE
-
-    @property
-    def _openers(self) -> re.Pattern[str]:
-        return _LOOSE_OPENERS_RE if self._tolerant else _EXACT_OPENERS_RE
-
-    def restore(self, text: str) -> RestoreResult:
+    def restore(self, text: str, *, tolerant: bool | None = None) -> RestoreResult:
         """Restore every known placeholder in ``text``.
 
         Args:
             text: Text that may contain placeholders, usually a model reply.
+            tolerant: Override the restorer's ``tolerant`` setting for this
+                call, e.g. ``False`` to restore only exact placeholders in text
+                that will be written somewhere, not just read.
 
         Returns:
             The restored text, the number of placeholder occurrences replaced,
@@ -70,14 +64,30 @@ class Restorer:
         """
         if not isinstance(text, str):
             raise TypeError(f"restore() expects str, got {type(text).__name__}")
-        replacer = _Replacer(self._vault, tolerant=self._tolerant)
+        tolerant = self._resolve(tolerant)
+        replacer = _Replacer(self._vault, tolerant=tolerant)
         with _batch(self._vault):  # one check of a shared vault for all lookups
-            restored = self._pattern.sub(replacer, text)
+            restored = _pattern(tolerant).sub(replacer, text)
         return replacer.result(restored)
 
-    def stream(self) -> StreamRestorer:
-        """Start restoring text that arrives in pieces; see `StreamRestorer`."""
-        return StreamRestorer(self)
+    def stream(self, *, tolerant: bool | None = None) -> StreamRestorer:
+        """Start restoring text that arrives in pieces; see `StreamRestorer`.
+
+        Args:
+            tolerant: Override the restorer's ``tolerant`` setting.
+        """
+        return StreamRestorer(self._vault, tolerant=self._resolve(tolerant))
+
+    def _resolve(self, tolerant: bool | None) -> bool:
+        if tolerant is None:
+            return self._tolerant
+        if not isinstance(tolerant, bool):
+            raise TypeError(f"tolerant must be a bool, got {type(tolerant).__name__}")
+        return tolerant
+
+
+def _pattern(tolerant: bool) -> re.Pattern[str]:
+    return LOOSE_PLACEHOLDER_RE if tolerant else PLACEHOLDER_RE
 
 
 class StreamRestorer:
@@ -87,15 +97,23 @@ class StreamRestorer:
     so far, then call `finish` for the rest. Joined, the pieces returned are
     exactly what `Restorer.restore` gives for the whole text, however the
     text was split. Only text that could still turn into a placeholder is held
-    back: at most `MAX_PLACEHOLDER_LENGTH` characters, from a bracket onward.
+    back: text from a bracket onward that could still become a placeholder,
+    always shorter than `MAX_PLACEHOLDER_LENGTH`.
     """
 
-    def __init__(self, restorer: Restorer) -> None:
-        """Start a stream; usually made by `Shield.stream_restorer`."""
-        self._vault = restorer._vault
-        self._pattern = restorer._pattern
-        self._openers = restorer._openers
-        self._replacer = _Replacer(restorer._vault, tolerant=restorer._tolerant)
+    def __init__(self, vault: Vault, *, tolerant: bool = True) -> None:
+        """Start a stream; usually made by `Shield.stream_restorer`.
+
+        Args:
+            vault: Where placeholders are looked up.
+            tolerant: Also restore placeholders the model rewrote, as
+                `Restorer` does.
+        """
+        self._vault = vault
+        self._pattern = _pattern(tolerant)
+        self._openers = _LOOSE_OPENERS_RE if tolerant else _EXACT_OPENERS_RE
+        self._prefix = _LOOSE_PREFIX_RE if tolerant else _EXACT_PREFIX_RE
+        self._replacer = _Replacer(vault, tolerant=tolerant)
         self._pending = ""  # text received but not yet restored and returned
         self._before = ""  # the character just before it, for the lookbehind
         self._emitted: list[str] = []
@@ -158,8 +176,9 @@ class StreamRestorer:
                     out.append(text[pos:opener])
                     out.append(self._replacer(match))
                     pos = match.end()
-                elif final or len(text) - opener >= MAX_PLACEHOLDER_LENGTH:
-                    # No match starts here, and none ever will.
+                elif final or not self._prefix.fullmatch(text, opener):
+                    # No match starts here, and no text still to come can
+                    # make one: what follows can't begin a placeholder.
                     out.append(text[pos : opener + 1])
                     pos = opener + 1
                 else:
@@ -178,6 +197,18 @@ class StreamRestorer:
 # The characters a match can start with.
 _LOOSE_OPENERS_RE = re.compile(f"[{re.escape(PLACEHOLDER_OPENERS)}]")
 _EXACT_OPENERS_RE = re.compile(r"\[")
+
+# Text that may be the start of a match, if more arrives: a superset of the
+# prefixes of every match (an exact placeholder's "[", type, "_", and digits;
+# a rewritten form's opening bracket and allowed body characters), and never
+# longer than MAX_PLACEHOLDER_LENGTH - 1, so a stream holds back less than that.
+_EXACT_PREFIX_RE = re.compile(r"\[(?:[A-Z][A-Z0-9_]{0,73})?")
+_LOOSE_PREFIX_RE = re.compile(
+    r"\[(?:[A-Z][A-Z0-9_]{0,73})?"
+    r"|\x5c(?:\[[A-Za-z0-9 \t_-]{0,63}\x5c?)?"
+    r"|[\[\N{FULLWIDTH LEFT SQUARE BRACKET}\N{LEFT BLACK LENTICULAR BRACKET}]"
+    r"[A-Za-z0-9 \t_-]{0,63}"
+)
 
 
 class _Replacer:
