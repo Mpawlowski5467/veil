@@ -4,13 +4,16 @@ These run without Claude Code; the live tests that use the harness are in
 test_claude_live.py.
 """
 
+import http.client
+import http.server
 import json
 import subprocess
 import sys
+import threading
 
 import pytest
 
-from live import harness, mcp_contacts, probe_hook
+from live import harness, mcp_contacts, probe_hook, recorder
 
 READ_PAYLOAD = {
     "hook_event_name": "PostToolUse",
@@ -403,3 +406,132 @@ class TestFixtures:
         with pytest.raises(AssertionError):
             harness.save_fixture(path, {"ip": "10.20.30.40"}, work=tmp_path)
         assert not path.exists()
+
+
+class TestShape:
+    def test_paths_kinds_and_type_values(self):
+        value = {
+            "model": "m",
+            "stream": True,
+            "max_tokens": 5,
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "assistant", "content": "plain"},
+            ],
+            "metadata": None,
+        }
+        assert recorder.census([value]) == {
+            "$": ["object"],
+            "$.max_tokens": ["number"],
+            "$.messages": ["array"],
+            "$.messages[]": ["object"],
+            "$.messages[].content": ["array", "string"],
+            "$.messages[].content[]": ["object"],
+            "$.messages[].content[].text": ["string"],
+            "$.messages[].content[].type": ["type=text"],
+            "$.messages[].role": ["string"],
+            "$.metadata": ["null"],
+            "$.model": ["string"],
+            "$.stream": ["boolean"],
+        }
+
+    def test_id_keys_are_collapsed(self):
+        value = {"tool_uses": {"toolu_01AbC": {"x": 1}, "srvtoolu_9z": {"x": 2}}}
+        assert recorder.census([value])["$.tool_uses.<id>.x"] == ["number"]
+
+    def test_census_merges_values(self):
+        merged = recorder.census([{"type": "a"}, {"type": "b"}, [1]])
+        assert merged == {
+            "$": ["array", "object"],
+            "$.type": ["type=a", "type=b"],
+            "$[]": ["number"],
+        }
+
+
+SEEN = []  # what the fake API received: (path, headers, body)
+
+
+class FakeAPI(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):
+        pass
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers["Content-Length"]))
+        SEEN.append((self.path, dict(self.headers), body))
+        stream = (
+            b'event: message_start\ndata: {"type": "message_start"}\n\n'
+            b'event: content_block_delta\ndata: {"type": "content_block_delta",'
+            b' "delta": {"type": "text_delta", "text": "hi"}}\n\n'
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(stream)))
+        self.end_headers()
+        self.wfile.write(stream)
+
+    def do_GET(self):
+        data = b'{"data": [{"type": "model", "id": "m"}]}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+@pytest.fixture
+def fake_api():
+    SEEN.clear()
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeAPI)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+class TestRecorder:
+    def test_forwards_streams_and_records_shapes(self, tmp_path, fake_api):
+        body = json.dumps({"messages": [{"role": "user", "content": "hi"}]})
+        with recorder.Recorder(tmp_path, upstream=fake_api, secure=False) as gw:
+            host = gw.url.removeprefix("http://")
+            conn = http.client.HTTPConnection(host)
+            conn.request(
+                "POST",
+                "/v1/messages?beta=true",
+                body=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer secret-token",
+                    "anthropic-beta": "oauth-2025-04-20",
+                },
+            )
+            response = conn.getresponse()
+            streamed = response.read()
+            conn.close()
+        assert b"text_delta" in streamed
+        path, headers, forwarded = SEEN[0]
+        assert path == "/v1/messages?beta=true"
+        assert forwarded == body.encode()
+        assert headers["Authorization"] == "Bearer secret-token"
+        (record,) = gw.records
+        assert record["status"] == 200
+        assert record["headers"]["anthropic-beta"] == "oauth-2025-04-20"
+        assert "authorization" in record["header_names"]
+        assert "secret-token" not in json.dumps(record)
+        assert record["body_shape"]["$.messages[].content"] == ["string"]
+        assert record["response_shape"]["$.delta.type"] == ["type=text_delta"]
+        saved = (tmp_path / "requests.jsonl").read_text()
+        assert "secret-token" not in saved
+        assert (tmp_path / "request-1.json").exists()
+        assert (tmp_path / "response-1.sse").read_bytes().startswith(b"event:")
+
+    def test_json_responses_are_relayed(self, tmp_path, fake_api):
+        with recorder.Recorder(tmp_path, upstream=fake_api, secure=False) as gw:
+            conn = http.client.HTTPConnection(gw.url.removeprefix("http://"))
+            conn.request("GET", "/v1/models")
+            data = json.loads(conn.getresponse().read())
+            conn.close()
+        assert data["data"][0]["id"] == "m"
+        assert gw.records[0]["response_shape"]["$.data[].type"] == ["type=model"]

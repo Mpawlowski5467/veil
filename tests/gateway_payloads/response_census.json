@@ -1,0 +1,1258 @@
+{
+ "POST /v1/messages": {
+  "$": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.content_block": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.caller": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.caller.type": {
+   "kinds": [
+    "type=direct"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.citations": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[].encrypted_content": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[].page_age": {
+   "kinds": [
+    "null",
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[].title": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[].type": {
+   "kinds": [
+    "type=web_search_result"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.content[].url": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.input": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.name": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.signature": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.thinking": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.content_block.tool_use_id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.content_block.type": {
+   "kinds": [
+    "type=server_tool_use",
+    "type=text",
+    "type=thinking",
+    "type=tool_use",
+    "type=web_search_tool_result"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.context_management.applied_edits": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation.cited_text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation.encrypted_index": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation.title": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation.type": {
+   "kinds": [
+    "type=web_search_result_location"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.citation.url": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.delta.container": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.estimated_tokens": {
+   "kinds": [
+    "null",
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.partial_json": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "tools/run-1",
+    "web/run-1"
+   ]
+  },
+  "$.delta.safeguard_results": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status.tool_uses": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status.tool_uses.<id>": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status.tool_uses.<id>.outcome": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status.tool_uses.<id>.type": {
+   "kinds": [
+    "type=evaluated"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].status.type": {
+   "kinds": [
+    "type=available"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.safeguard_results[].type": {
+   "kinds": [
+    "type=dangerous_tool_use"
+   ],
+   "scenarios": [
+    "auto/run-1"
+   ]
+  },
+  "$.delta.signature": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.stop_details": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.stop_reason": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.stop_sequence": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.text": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.thinking": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.delta.type": {
+   "kinds": [
+    "type=citations_delta",
+    "type=input_json_delta",
+    "type=signature_delta",
+    "type=text_delta",
+    "type=thinking_delta"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.index": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.container": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.content": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.context_management": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.diagnostics": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.id": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.model": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.role": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.stop_details": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.stop_reason": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.stop_sequence": {
+   "kinds": [
+    "null"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.type": {
+   "kinds": [
+    "type=message"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.cache_creation": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.cache_creation.ephemeral_1h_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.cache_creation.ephemeral_5m_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.cache_creation_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.cache_read_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.inference_geo": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.output_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.message.usage.service_tier": {
+   "kinds": [
+    "string"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.type": {
+   "kinds": [
+    "type=content_block_delta",
+    "type=content_block_start",
+    "type=content_block_stop",
+    "type=message_delta",
+    "type=message_start",
+    "type=message_stop",
+    "type=ping"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.cache_creation_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.cache_read_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations": {
+   "kinds": [
+    "array"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[]": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].cache_creation": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].cache_creation.ephemeral_1h_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].cache_creation.ephemeral_5m_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].cache_creation_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].cache_read_input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].input_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].output_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.iterations[].type": {
+   "kinds": [
+    "type=message"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.output_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.output_tokens_details": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.output_tokens_details.thinking_tokens": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ]
+  },
+  "$.usage.server_tool_use": {
+   "kinds": [
+    "object"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.usage.server_tool_use.web_fetch_requests": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  },
+  "$.usage.server_tool_use.web_search_requests": {
+   "kinds": [
+    "number"
+   ],
+   "scenarios": [
+    "web/run-1"
+   ]
+  }
+ }
+}

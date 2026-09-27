@@ -1,0 +1,294 @@
+{
+ "anthropic_beta": [
+  "advisor-tool-2026-03-01",
+  "afk-mode-2026-01-31",
+  "claude-code-20250219",
+  "context-management-2025-06-27",
+  "dangerous-tool-use-2026-09-03",
+  "effort-2025-11-24",
+  "extended-cache-ttl-2025-04-11",
+  "interleaved-thinking-2025-05-14",
+  "mid-conversation-system-2026-04-07",
+  "oauth-2025-04-20",
+  "prompt-caching-scope-2026-01-05",
+  "thinking-token-count-2026-05-13"
+ ],
+ "endpoints": {
+  "HEAD /api/hello": {
+   "count": 9,
+   "response_types": [
+    "application/json"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ],
+   "statuses": [
+    200
+   ]
+  },
+  "POST /v1/messages": {
+   "count": 27,
+   "response_types": [
+    "text/event-stream"
+   ],
+   "scenarios": [
+    "agents/run-1",
+    "auto/run-1",
+    "mcp/run-1",
+    "media/run-1",
+    "precedence",
+    "tools/run-1",
+    "tools/run-11",
+    "tools/run-12",
+    "web/run-1"
+   ],
+   "statuses": [
+    200
+   ]
+  }
+ },
+ "request_headers": {
+  "accept": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "accept-encoding": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "anthropic-beta": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "anthropic-dangerous-direct-browser-access": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "anthropic-version": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "authorization": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "connection": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "content-length": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "content-type": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "host": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "user-agent": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-app": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-claude-code-agent-id": [
+   "agents/run-1"
+  ],
+  "x-claude-code-session-id": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-arch": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-lang": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-os": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-package-version": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-retry-count": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-runtime": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-runtime-version": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ],
+  "x-stainless-timeout": [
+   "agents/run-1",
+   "auto/run-1",
+   "mcp/run-1",
+   "media/run-1",
+   "precedence",
+   "tools/run-1",
+   "tools/run-11",
+   "tools/run-12",
+   "web/run-1"
+  ]
+ }
+}

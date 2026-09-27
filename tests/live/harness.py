@@ -26,9 +26,11 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from .recorder import Recorder
 
 HERE = Path(__file__).resolve().parent
 PROBE_HOOK = HERE / "probe_hook.py"
@@ -115,6 +117,7 @@ class Run:
     stderr: str
     debug: str
     transcript_text: str = ""
+    gateway: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def result(self) -> dict[str, Any]:
@@ -291,9 +294,17 @@ class Workspace:
         fork: bool = False,
         extra_args: Sequence[str] = (),
         extra_env: Mapping[str, str] | None = None,
+        extra_settings: Mapping[str, Any] | None = None,
+        gateway: bool = False,
         timeout: float = 300,
     ) -> Run:
-        """Run ``claude -p prompt`` here with the probe hook answering ``rules``."""
+        """Run ``claude -p prompt`` here with the probe hook answering ``rules``.
+
+        ``extra_settings`` is merged into the settings file (e.g. ``env`` or
+        ``permissions``). With ``gateway``, the CLI talks to the API through a
+        recording pass-through gateway (see ``recorder.py``), whose records
+        end up in ``Run.gateway``.
+        """
         claude = claude_path()
         if claude is None:
             raise RuntimeError("the claude CLI isn't installed")
@@ -304,10 +315,9 @@ class Workspace:
         log = run_dir / "hooks.jsonl"
         log.touch()
         settings_file = run_dir / "settings.json"
-        settings_file.write_text(
-            json.dumps(settings(hook_command(rules_file, log)), indent=1),
-            encoding="utf-8",
-        )
+        run_settings = settings(hook_command(rules_file, log))
+        run_settings.update(extra_settings or {})
+        settings_file.write_text(json.dumps(run_settings, indent=1), encoding="utf-8")
         command = [
             claude,
             "-p",
@@ -348,17 +358,24 @@ class Workspace:
         command += list(extra_args)
         (run_dir / "command.txt").write_text(shlex.join(command), encoding="utf-8")
         env = environment({"OTEL_LOG_RAW_API_BODIES": f"file:{run_dir / 'api'}"})
+        recorder = Recorder(run_dir / "gateway") if gateway else None
+        if recorder is not None:
+            env["ANTHROPIC_BASE_URL"] = recorder.url
         env.update(extra_env or {})
-        completed = subprocess.run(
-            command,
-            cwd=self.work,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.work,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        finally:
+            if recorder is not None:
+                recorder.close()
         (run_dir / "stream.jsonl").write_text(completed.stdout, encoding="utf-8")
         debug_file = run_dir / "debug.log"
         run = Run(
@@ -373,6 +390,8 @@ class Workspace:
         path = run.transcript_path
         if path is not None and path.exists():
             run.transcript_text = path.read_text(encoding="utf-8")
+        if recorder is not None:
+            run.gateway = recorder.records
         self.runs.append(run)
         return run
 
