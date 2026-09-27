@@ -252,6 +252,31 @@ class TestSessions:
             masked = sessions.get("c").shield.mask("Use [ORDER_1] and row[COL_1]").text
         assert masked == "Use [LITERAL_1] and row[COL_1]"
 
+    def test_literal_text_stays_literal_after_a_pattern_is_removed(self, tmp_path):
+        with open_sessions(tmp_path, self.settings(), {}) as sessions:
+            sessions.get("c").shield.mask("order #12345")  # [ORDER_1]
+        without = Settings(entities={"PERSON": (NAME,)})
+        with open_sessions(tmp_path, without, {}) as sessions:
+            shield = sessions.get("c").shield
+            masked = shield.mask("Template: your order [ORDER_1] shipped").text
+            assert masked == "Template: your order [LITERAL_1] shipped"
+            assert shield.restore(masked, tolerant=False).text == (
+                "Template: your order [ORDER_1] shipped"
+            )
+
+    def test_registered_values_reach_the_masker(self, tmp_path):
+        with open_sessions(
+            tmp_path, self.settings(), {"Ada Quill": "PERSON"}
+        ) as sessions:
+            masker = sessions.get("c").masker
+            body = {
+                "messages": [{"role": "user", "content": f"{NAME}em and Ada Quills"}]
+            }
+            assert (
+                masker.mask(body)["messages"][0]["content"]
+                == "[PERSON_1]em and [PERSON_2]s"
+            )
+
     def test_the_note_setting(self, tmp_path):
         with open_sessions(tmp_path, Settings(), {}) as sessions:
             assert sessions.get("c").masker.mask({"messages": []}).get("system")

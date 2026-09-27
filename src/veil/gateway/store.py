@@ -15,6 +15,7 @@ from typing import Any
 
 from ..detectors.literal import LiteralPlaceholderDetector
 from ..detectors.regex import RegexDetector
+from ..placeholders import placeholder_type
 from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
 from .config import Settings
@@ -149,6 +150,17 @@ def literal_types(settings: Settings, identity: Mapping[str, str]) -> set[str]:
     return {*detector.entity_types, *settings.entities, *identity.values()}
 
 
+def registered_values(
+    settings: Settings, identity: Mapping[str, str]
+) -> dict[str, str]:
+    """Every value registered by the settings or the git identity, by value."""
+    values = {
+        value: kind for kind, found in settings.entities.items() for value in found
+    }
+    values.update(identity)
+    return values
+
+
 def shield_factory(
     settings: Settings, vault_path: Path, identity: Mapping[str, str]
 ) -> Callable[[str], Shield]:
@@ -160,12 +172,14 @@ def shield_factory(
     types = literal_types(settings, identity)
 
     def make(session_id: str) -> Shield:
+        vault = SQLiteVault(vault_path, session=session_id)
+        # The types the conversation already uses count too, so literal text
+        # stays literal even if a pattern was since removed from the settings.
+        used = {placeholder_type(p) for p, _ in vault.items()}
+        literal = LiteralPlaceholderDetector(types | {t for t in used if t})
         shield = Shield(
-            detectors=[
-                LiteralPlaceholderDetector(types),
-                RegexDetector(settings.patterns),
-            ],
-            vault=SQLiteVault(vault_path, session=session_id),
+            detectors=[literal, RegexDetector(settings.patterns)],
+            vault=vault,
             redact_warnings=True,
         )
         for entity_type, values in settings.entities.items():
@@ -198,12 +212,13 @@ def open_sessions(
         ledger.close()
     note = DEFAULT_NOTE if settings.note else None
 
+    registered = registered_values(settings, identity)
+
     def make_session(session_id: str) -> Session:
         shield = make_shield(session_id)
         session_ledger = SQLiteLedger(ledger_path, session_id)
-        return Session(
-            shield, session_ledger, RequestMasker(shield, session_ledger, note=note)
-        )
+        masker = RequestMasker(shield, session_ledger, note=note, registered=registered)
+        return Session(shield, session_ledger, masker)
 
     make_shield = shield_factory(settings, vault_path, identity)
     return Sessions(make_session=make_session)

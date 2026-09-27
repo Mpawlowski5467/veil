@@ -12,9 +12,12 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import OrderedDict
+from collections.abc import Mapping
 from typing import Any
 
+from ..placeholders import placeholder_type
 from ..shield import Shield
+from ..vault.base import Vault
 from .ledger import Ledger
 
 
@@ -111,6 +114,79 @@ class _Memo:
             self._size -= len(old_key) + len(old_value)
 
 
+# An exact placeholder, which the known-value pass leaves as it is.
+_EXACT = r"\[[A-Z][A-Z0-9_]{0,63}_[0-9]{1,9}\]"
+
+
+class _KnownValues:
+    """Masks every known value wherever it is, even glued to other text.
+
+    Masking finds a registered value only as a whole word, so "Jan Nowakem"
+    (a restored "[PERSON_1]em") would go out as it is. This pass runs after
+    masking, over everything that leaves: any value in the vault, or any
+    registered value, still present becomes its placeholder.
+    """
+
+    #: Shorter values would be masked inside too many ordinary words.
+    MIN_LENGTH = 3
+
+    def __init__(self, vault: Vault, registered: Mapping[str, str]) -> None:
+        self._vault = vault
+        self._registered = {
+            value: kind
+            for value, kind in registered.items()
+            if len(value) >= self.MIN_LENGTH
+        }
+        self._size = -1
+        self._types: dict[str, str] = {}
+        self._pattern: re.Pattern[str] | None = None
+
+    def reset(self) -> None:
+        self._size = -1
+
+    def _current(self) -> re.Pattern[str] | None:
+        size = len(self._vault)
+        if size != self._size:
+            types = dict(self._registered)
+            for placeholder, value in self._vault.items():
+                kind = placeholder_type(placeholder)
+                if kind not in (None, "LITERAL") and len(value) >= self.MIN_LENGTH:
+                    types.setdefault(value, kind)
+            self._types = types
+            values = sorted(types, key=len, reverse=True)
+            self._pattern = (
+                re.compile(
+                    f"(?P<ph>{_EXACT})|(?P<v>{'|'.join(map(re.escape, values))})"
+                )
+                if values
+                else None
+            )
+            self._size = size
+        return self._pattern
+
+    def mask(self, text: str) -> str:
+        """Replace every known value left in ``text`` with its placeholder."""
+        pattern = self._current()
+        if pattern is None or not text:
+            return text
+
+        def replace(match: re.Match[str]) -> str:
+            value = match["v"]
+            if value is None:
+                return match.group(0)
+            found = self._vault.get_placeholder(value)
+            return found or self._vault.get_or_create(value, self._types[value])
+
+        return pattern.sub(replace, text)
+
+    def found_in(self, text: str) -> bool:
+        """Whether ``text`` holds a known value outside a placeholder."""
+        pattern = self._current()
+        return pattern is not None and any(
+            m["v"] is not None for m in pattern.finditer(text)
+        )
+
+
 class RequestMasker:
     """Masks every text a Messages API request would show the model.
 
@@ -124,6 +200,9 @@ class RequestMasker:
             back instead of masking them again.
         note: A system-prompt note telling the model about placeholders, or
             None for no note.
+        registered: The values registered with the shield (``{value:
+            type}``), so they are masked even glued to other text before the
+            vault has them.
         memo_limit: Roughly how many characters of masked text to keep for
             reuse (see above).
     """
@@ -134,13 +213,17 @@ class RequestMasker:
         ledger: Ledger,
         *,
         note: str | None = DEFAULT_NOTE,
+        registered: Mapping[str, str] | None = None,
         memo_limit: int = 64_000_000,
     ) -> None:
         """Create a masker for one conversation."""
         self._shield = shield
         self._ledger = ledger
         self._note = note
+        self._memo_limit = memo_limit
         self._memo = _Memo(memo_limit)
+        self._known = _KnownValues(shield.vault, registered or {})
+        self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
 
     def mask(self, body: dict[str, Any]) -> dict[str, Any]:
         """Return a copy of a request body with every model-read text masked.
@@ -151,6 +234,7 @@ class RequestMasker:
         """
         if not isinstance(body, dict):
             raise UnsupportedRequestError("$", "the body is not a JSON object")
+        self._notice_a_cleared_vault()
         out: dict[str, Any] = {}
         for key, value in body.items():
             if key in _TOP_LEVEL_PASS:
@@ -167,7 +251,27 @@ class RequestMasker:
                 raise UnsupportedRequestError(_key(key), "unknown field")
         if self._note is not None and "messages" in out:
             out["system"] = self._with_note(out.get("system"))
+        self._vault_state = self._state()
         return out
+
+    def _state(self) -> tuple[int, tuple[str, str] | None]:
+        items = self._shield.vault.items()
+        return len(items), (items[0] if items else None)
+
+    def _notice_a_cleared_vault(self) -> None:
+        """Start afresh if the vault was cleared since the last request.
+
+        After ``forget`` or a purge, numbering starts again, so masked text
+        kept from before would name the wrong values.
+        """
+        size, first = self._state()
+        old_size, old_first = self._vault_state
+        if size < old_size or (old_first is not None and first != old_first):
+            self._memo = _Memo(self._memo_limit)
+            self._known.reset()
+            forget = getattr(self._ledger, "forget", None)
+            if callable(forget):
+                forget()
 
     # --- the parts of a request ---------------------------------------------
 
@@ -213,10 +317,11 @@ class RequestMasker:
                     else self._text(content)
                 )
             else:
-                masked = [
+                blocks = [
                     self._block(block, f"{path}.content[{j}]", role=role)
                     for j, block in enumerate(_list(content, f"{path}.content"))
                 ]
+                masked = [block for block in blocks if block is not None]
             out.append({**message, "content": masked})
         return out
 
@@ -227,8 +332,16 @@ class RequestMasker:
             text = _str(block["text"], f"{path}.text")
             masked = self._reply_text(text) if role == "assistant" else self._text(text)
             return {**block, "text": masked}
-        if kind in ("thinking", "redacted_thinking"):
-            # Signed by the API: sent back exactly as the model wrote it.
+        if kind == "redacted_thinking":
+            return block
+        if kind == "thinking":
+            # Signed by the API, so sent back exactly as the model wrote it,
+            # or not at all: thinking about data seen before it was masked
+            # (a value registered later, a session begun without the
+            # gateway) is dropped.
+            thinking = block.get("thinking")
+            if isinstance(thinking, str) and self._known.found_in(thinking):
+                return None
             return block
         if kind == "image":
             _media_source(block.get("source"), f"{path}.source")
@@ -244,7 +357,7 @@ class RequestMasker:
         if role == "assistant" and isinstance(block.get("id"), str):
             masked = self._ledger.masked_tool_input(block["id"], tool_input)
             if masked is not None:
-                return {**block, "input": masked}
+                return {**block, "input": self._known_everywhere(masked)}
         return {**block, "input": self._anything(tool_input, f"{path}.input")}
 
     def _tool_result(self, block: dict[str, Any], path: str) -> Any:
@@ -294,7 +407,7 @@ class RequestMasker:
     def _reply_text(self, text: str) -> str:
         """Mask assistant text: the model's own words if the gateway has them."""
         masked = self._ledger.masked_text(text)
-        return masked if masked is not None else self._text(text)
+        return self._known.mask(masked) if masked is not None else self._text(text)
 
     def _text(self, text: str) -> str:
         if not text:
@@ -303,9 +416,18 @@ class RequestMasker:
         cached = self._memo.get(key)
         if cached is not None:
             return cached
-        masked = _mask_withholding_leaks(self._shield, text)
+        masked = _mask_text(self._shield, self._known, text)
         self._memo.put(key, masked)
         return masked
+
+    def _known_everywhere(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self._known.mask(value)
+        if isinstance(value, list):
+            return [self._known_everywhere(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._known_everywhere(item) for key, item in value.items()}
+        return value
 
     def _strings(self, value: Any, path: str) -> list[str]:
         return [
@@ -331,19 +453,18 @@ class RequestMasker:
         return value
 
 
-def _mask_withholding_leaks(shield: Shield, text: str) -> str:
-    """Mask ``text``; replace any line that still holds a known value."""
-    result = shield.mask(text)
-    if not any(w.startswith("Leak check") for w in result.warnings):
-        return result.text
-    # Mask each line on its own (placeholders are the same: the values are in
-    # the vault now) and withhold the lines that still leak.
-    lines = text.split("\n")
+def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
+    """Mask ``text``, then any known value left in it, even glued to a word.
+
+    A line that still holds a known value after that is withheld.
+    """
+    masked = known.mask(shield.mask(text).text)
+    if not known.found_in(masked):
+        return masked
     out = []
-    for line in lines:
-        masked = shield.mask(line)
-        leaked = any(w.startswith("Leak check") for w in masked.warnings)
-        out.append(WITHHELD_LINE if leaked else masked.text)
+    for line in text.split("\n"):
+        line_masked = known.mask(shield.mask(line).text)
+        out.append(WITHHELD_LINE if known.found_in(line_masked) else line_masked)
     return "\n".join(out)
 
 

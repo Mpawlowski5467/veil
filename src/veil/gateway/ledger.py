@@ -21,8 +21,29 @@ def _digest(value: str) -> str:
 
 
 def canonical(value: Any) -> str:
-    """Serialize a JSON value the same way whatever its key order or spacing."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    """Serialize a JSON value the same way whatever its key order or spacing.
+
+    Numbers compare as JavaScript sees them (the client parses and resends
+    tool inputs in JavaScript): ``1.0`` and ``1`` are the same, and so are
+    ``-0.0`` and ``0``.
+    """
+    return json.dumps(_as_javascript(value), sort_keys=True, separators=(",", ":"))
+
+
+def _as_javascript(value: Any) -> Any:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            number = float(value)
+        except OverflowError:
+            return value
+        return 0.0 if number == 0 else number
+    if isinstance(value, list):
+        return [_as_javascript(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _as_javascript(item) for key, item in value.items()}
+    return value
 
 
 @runtime_checkable
@@ -73,6 +94,11 @@ class MemoryLedger:
     def record_tool_input(self, tool_use_id: str, restored: Any, masked: Any) -> None:
         """Remember the masked input of a tool call restored as ``restored``."""
         self._tools[tool_use_id] = (_digest(canonical(restored)), masked)
+
+    def forget(self) -> None:
+        """Forget every entry."""
+        self._texts.clear()
+        self._tools.clear()
 
     def masked_tool_input(self, tool_use_id: str, restored: Any) -> Any | None:
         """Return the masked input of a tool call, if it still matches."""

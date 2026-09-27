@@ -85,7 +85,7 @@ def claude_code_body():
                 "content": [
                     {
                         "type": "thinking",
-                        "thinking": f"The user wants {EMAIL}.",
+                        "thinking": "The user wants [EMAIL_2].",
                         "signature": "sig==",
                     },
                     {"type": "redacted_thinking", "data": "opaque"},
@@ -147,8 +147,7 @@ class TestMasking:
         masker, _, _ = make_masker(note=None)
         out = json.dumps(masker.mask(claude_code_body())["messages"])
         for value in (EMAIL, ACCOUNT, NAME):
-            # Only the signed thinking block may still hold one (see below).
-            assert out.count(value) == (1 if value == EMAIL else 0), value
+            assert value not in out, value
         assert "[EMAIL_2]" in out
         assert "[PERSON_1]" in out
 
@@ -289,20 +288,25 @@ class TestMasking:
         assert out == "Template [LITERAL_1] for [EMAIL_1]"
         assert shield.restore(out).text == f"Template [EMAIL_1] for {EMAIL}"
 
-    def test_a_line_that_still_leaks_is_withheld(self):
+    def test_a_known_value_glued_to_text_is_masked_in_place(self):
         masker, shield, _ = make_masker(note=None)
         shield.mask("Call 555-123-4567")  # now a known value
         body = {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Keep this line\nCall 555-123-4567-2\nand this",
-                }
-            ]
+            "messages": [{"role": "user", "content": "Keep\nCall 555-123-4567-2\nok"}]
         }
         out = masker.mask(body)["messages"][0]["content"]
-        assert out == f"Keep this line\n{WITHHELD_LINE}\nand this"
-        assert "555-123-4567" not in json.dumps(masker.mask(body))
+        assert out == "Keep\nCall [PHONE_1]-2\nok"
+
+    def test_a_line_that_still_leaks_is_withheld(self, monkeypatch):
+        masker, shield, _ = make_masker(note=None)
+        shield.mask("Call 555-123-4567")
+        # If the known-value pass ever failed, the line is withheld.
+        monkeypatch.setattr(masker._known, "mask", lambda text: text)
+        body = {
+            "messages": [{"role": "user", "content": "Keep\nCall 555-123-4567-2\nok"}]
+        }
+        out = masker.mask(body)["messages"][0]["content"]
+        assert out == f"Keep\n{WITHHELD_LINE}\nok"
 
     def test_masked_text_is_reused(self):
         masker, shield, _ = make_masker(note=None)
@@ -320,6 +324,129 @@ class TestMasking:
         for i in range(20):
             masker.mask({"messages": [{"role": "user", "content": f"text number {i}"}]})
         assert masker._memo._size <= 50
+
+
+class TestGluedValues:
+    """A registered value glued to a word must never go out as it is."""
+
+    def make(self):
+        shield = make_shield()
+        return RequestMasker(
+            shield, MemoryLedger(), note=None, registered={NAME: "PERSON"}
+        ), shield
+
+    def test_before_it_was_ever_seen_whole(self):
+        masker, _ = self.make()
+        body = {"messages": [{"role": "user", "content": f"Rozmawiałem z {NAME}em."}]}
+        assert (
+            masker.mask(body)["messages"][0]["content"] == "Rozmawiałem z [PERSON_1]em."
+        )
+
+    def test_in_a_reply_the_ledger_doesnt_have(self):
+        # A fork, a purge, or a reply cut off before it was recorded.
+        masker, _ = self.make()
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": f"Das ist {NAME}s Auto."}],
+                }
+            ]
+        }
+        assert (
+            masker.mask(body)["messages"][0]["content"][0]["text"]
+            == "Das ist [PERSON_1]s Auto."
+        )
+
+    def test_in_a_summary_or_a_subagent_report(self):
+        masker, _ = self.make()
+        body = {
+            "messages": [
+                {"role": "user", "content": f"Summary: we spoke with {NAME}em."},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "t",
+                            "content": f"Report: {NAME}s file",
+                        }
+                    ],
+                },
+            ]
+        }
+        out = json.dumps(masker.mask(body))
+        assert NAME not in out
+        assert "[PERSON_1]em" in out
+
+    def test_in_replayed_text_after_it_was_registered(self):
+        ledger = MemoryLedger()
+        ledger.record_text("Ada Quill called", "Ada Quill called")  # before registering
+        shield = make_shield()
+        shield.add_entity("Ada Quill", "PERSON")
+        masker = RequestMasker(
+            shield, ledger, note=None, registered={"Ada Quill": "PERSON"}
+        )
+        body = {"messages": [{"role": "assistant", "content": "Ada Quill called"}]}
+        assert masker.mask(body)["messages"][0]["content"] == "[PERSON_1] called"
+
+    def test_thinking_that_holds_a_known_value_is_dropped(self):
+        masker, _ = self.make()
+        thinking = {
+            "type": "thinking",
+            "thinking": f"{NAME} wants this",
+            "signature": "s",
+        }
+        clean = {
+            "type": "thinking",
+            "thinking": "[PERSON_1] wants this",
+            "signature": "s",
+        }
+        text = {"type": "text", "text": "ok"}
+        body = {
+            "messages": [
+                {"role": "assistant", "content": [thinking, text]},
+                {"role": "assistant", "content": [clean, text]},
+            ]
+        }
+        out = masker.mask(body)["messages"]
+        assert out[0]["content"] == [text]
+        assert out[1]["content"] == [clean, text]
+
+    def test_short_values_are_left_inside_words(self):
+        shield = make_shield()
+        shield.add_entity("Al", "PERSON")
+        masker = RequestMasker(
+            shield, MemoryLedger(), note=None, registered={"Al": "PERSON"}
+        )
+        body = {"messages": [{"role": "user", "content": "Al asked about Alabama"}]}
+        assert (
+            masker.mask(body)["messages"][0]["content"]
+            == "[PERSON_1] asked about Alabama"
+        )
+
+
+class TestClearedVault:
+    def test_a_forget_between_requests_starts_afresh(self):
+        masker, shield, ledger = make_masker(note=None)
+        first = {
+            "messages": [{"role": "user", "content": "Write to alice@example.com"}]
+        }
+        assert masker.mask(first)["messages"][0]["content"] == "Write to [EMAIL_1]"
+        ledger.record_text("Sent to alice@example.com", "Sent to [EMAIL_1]")
+        shield.vault.clear()  # veil forget, from another process
+        shield.mask("bob.new@example.com")  # numbering starts again: [EMAIL_1]
+        again = {
+            "messages": [
+                {"role": "user", "content": "Write to alice@example.com"},
+                {"role": "assistant", "content": "Sent to alice@example.com"},
+            ]
+        }
+        out = masker.mask(again)["messages"]
+        # alice isn't sent under bob's placeholder, from the stale memo or ledger.
+        assert out[0]["content"] == "Write to [EMAIL_2]"
+        assert out[1]["content"] == "Sent to [EMAIL_2]"
+        assert shield.restore("[EMAIL_2]").text == "alice@example.com"
 
 
 class TestLedger:
@@ -383,6 +510,14 @@ class TestLedger:
 
     def test_canonical_ignores_key_order_and_spacing(self):
         assert canonical({"b": 1, "a": [1, 2]}) == canonical({"a": [1, 2], "b": 1})
+
+    def test_canonical_compares_numbers_as_javascript_does(self):
+        assert canonical({"p": 1.0, "q": -0.0, "r": 1e3}) == canonical(
+            {"p": 1, "q": 0, "r": 1000}
+        )
+        assert canonical({"big": 2**60 + 1}) == canonical({"big": float(2**60)})
+        assert canonical({"t": True}) != canonical({"t": 1})
+        assert canonical(10**400) == str(10**400)
 
 
 BAD_BODIES = [
