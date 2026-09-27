@@ -29,11 +29,13 @@ from .gateway import (
     SQLiteLedger,
     default_data_dir,
     git_identity,
+    hooks,
     load_settings,
     open_sessions,
     prepare_data_dir,
 )
 from .gateway.config import APP, Settings
+from .gateway.hooks import hook_settings
 from .vault.sqlite import SQLiteVault
 
 #: Tools that send content through Anthropic-hosted services, or to another
@@ -52,14 +54,23 @@ DENIED_TOOLS = (
 )
 
 
-def claude_settings(gateway: Gateway, *, headers: str = "") -> dict[str, Any]:
+def hook_command(data_dir: Path) -> list[str]:
+    """The command Claude Code runs for the gateway's hooks."""
+    # -I: a project's PYTHONPATH or current folder can't change what runs.
+    return [sys.executable, "-I", "-m", APP, "--data-dir", str(data_dir), "hook"]
+
+
+def claude_settings(
+    gateway: Gateway, *, data_dir: Path | None = None, headers: str = ""
+) -> dict[str, Any]:
     """Return the settings a Claude Code process gets, as for ``--settings``.
 
     Settings given on the command line outrank a project's settings and the
-    environment, so a project can't point Claude Code elsewhere.
+    environment, so a project can't point Claude Code elsewhere. With
+    ``data_dir``, they also run the gateway's hooks (see `gateway.hooks`).
     """
     custom = f"{SECRET_HEADER}: {gateway.secret}"
-    return {
+    settings: dict[str, Any] = {
         "env": {
             "ANTHROPIC_BASE_URL": gateway.url,
             "ANTHROPIC_CUSTOM_HEADERS": f"{headers}\n{custom}" if headers else custom,
@@ -67,6 +78,9 @@ def claude_settings(gateway: Gateway, *, headers: str = "") -> dict[str, Any]:
         },
         "permissions": {"deny": list(DENIED_TOOLS)},
     }
+    if data_dir is not None:
+        settings["hooks"] = hook_settings(hook_command(data_dir), gateway.url)
+    return settings
 
 
 def _open(data_dir: Path, cwd: Path) -> tuple[Settings, Any]:
@@ -92,7 +106,9 @@ def run_claude(
     registered = sum(len(values) for values in settings.entities.values())
     with Gateway(sessions) as gateway:
         custom = claude_settings(
-            gateway, headers=os.environ.get("ANTHROPIC_CUSTOM_HEADERS", "")
+            gateway,
+            data_dir=data_dir,
+            headers=os.environ.get("ANTHROPIC_CUSTOM_HEADERS", ""),
         )
         env = {**os.environ, **custom["env"]}
         print(
@@ -173,6 +189,21 @@ def forget(*, data_dir: Path, session: str | None) -> int:
     return 0
 
 
+def _hook(event: str, data_dir: Path, expected_url: str | None) -> int:
+    try:
+        allowed = load_settings(data_dir / "config.json").allow_mcp_tools
+    except SettingsError:
+        allowed = ()  # the hook still refuses; the gateway reports the error
+    return hooks.run(
+        event,
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        vault_path=data_dir / "vault.db",
+        expected_url=expected_url,
+        allowed_mcp_tools=allowed,
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP, description="Mask personal data before it reaches a model."
@@ -193,6 +224,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
     gateway.add_argument("--port", type=int, default=8484)
+    hook = commands.add_parser("hook", help="answer a Claude Code hook (internal)")
+    hook.add_argument("event", choices=["pre-tool-use", "user-prompt-submit"])
+    hook.add_argument("--expect-url")
     forget_parser = commands.add_parser("forget", help="delete stored mappings")
     which = forget_parser.add_mutually_exclusive_group(required=True)
     which.add_argument("--session", help="a Claude Code session id")
@@ -226,6 +260,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_claude(passed_on, data_dir=data_dir)
         if options.command == "gateway":
             return run_gateway(data_dir=data_dir, port=options.port)
+        if options.command == "hook":
+            return _hook(options.event, data_dir, options.expect_url)
         prepare_data_dir(data_dir)
         return forget(
             data_dir=data_dir, session=None if options.all else options.session

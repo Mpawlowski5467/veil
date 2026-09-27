@@ -81,6 +81,10 @@ class TestClaude:
         assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
         assert report["process_env"] == env
         assert set(cli.DENIED_TOOLS) == set(report["settings"]["permissions"]["deny"])
+        hook_events = report["settings"]["hooks"]
+        assert set(hook_events) == {"PreToolUse", "UserPromptSubmit"}
+        prompt_hook = hook_events["UserPromptSubmit"][0]["hooks"][0]["command"]
+        assert prompt_hook.endswith(f"--expect-url {env['ANTHROPIC_BASE_URL']}")
         assert "masking through a local gateway" in capsys.readouterr().err
 
     def test_the_gateway_stops_with_claude(self, fake_claude, data_dir, tmp_path):
