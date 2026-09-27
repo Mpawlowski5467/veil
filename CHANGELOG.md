@@ -11,6 +11,8 @@
 - `LiteralPlaceholderDetector(types)` masks text that is already shaped like a placeholder of those types (such as a template's `[EMAIL_1]`), as type `LITERAL`, so it restores to exactly what was written instead of a real value.
 - `restore()`, `stream_restorer()`, and `restore_stream()` take `tolerant=` to override `tolerant_restore` for one call, e.g. `tolerant=False` for text that will be written or run, where only exact placeholders should become real values.
 
+- `veil.gateway` (in progress; not usable on its own yet): `RequestMasker` masks a Messages API request body. Every field has a rule: text the model reads is masked (system text, messages, tool results, past tool inputs, stop sequences, auto mode's review context), settings, tool definitions, signed thinking, and image and PDF data pass unchanged, and anything else is refused with `UnsupportedRequestError`, which names the field but never a value. A reply the gateway restored goes back as the model wrote it, from a `Ledger`; a line that still holds a known value after masking is withheld; and a text masks the same way every time it is sent.
+
 ### Changed
 
 - `mask()` warns about placeholder-like input only when that text is left unmasked. Text that was masked itself (by `LiteralPlaceholderDetector`, or as part of a registered value) restores as written, so it no longer warns.
