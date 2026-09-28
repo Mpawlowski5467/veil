@@ -1097,3 +1097,76 @@ class TestCrashes:
         out = masker.mask({"messages": [{"role": "assistant", "content": [block]}]})
         assert out["messages"][0]["content"][0]["input"] == {}
         ledger.close()
+
+
+class TestBillingLine:
+    """Only the billing line's name and version, the client's own, stay."""
+
+    def masked(self, system, client_version="2.1.283"):
+        masker, _, _ = make_masker(note=None)
+        body = {"system": system, "messages": []}
+        return masker.mask(body, client_version=client_version)["system"]
+
+    def test_kept_in_any_letter_case_and_the_rest_masked(self):
+        line = (
+            f"X-Anthropic-Billing-Header: cc_version=2.1.283.a1b; note={NAME} {EMAIL};"
+        )
+        out = self.masked([{"type": "text", "text": line}])[0]["text"]
+        assert out == (
+            "X-Anthropic-Billing-Header: cc_version=2.1.283.a1b; "
+            "note=[PERSON_1] [EMAIL_1];"
+        )
+
+    def test_a_line_that_only_starts_like_it_is_masked(self):
+        line = f"x-anthropic-billing-header: {NAME} {EMAIL}"
+        out = self.masked([{"type": "text", "text": line}])[0]["text"]
+        assert out == "x-anthropic-billing-header: [PERSON_1] [EMAIL_1]"
+
+    def test_only_the_billing_line_of_a_longer_block_is_kept(self):
+        text = (
+            f"Hello {NAME}\nx-anthropic-billing-header: cc_version=2.1.283\nBye {EMAIL}"
+        )
+        out = self.masked(text)
+        assert out == (
+            "Hello [PERSON_1]\nx-anthropic-billing-header: cc_version=2.1.283\n"
+            "Bye [EMAIL_1]"
+        )
+
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "2.1.283.a1bJanNowak;",  # something glued to the version
+            "٢.1.283.a1b;",  # not ASCII digits
+            "2.1.284.a1b;",  # not the client's version
+        ],
+    )
+    def test_a_version_that_isnt_the_clients_is_not_kept(self, version):
+        line = f"x-anthropic-billing-header: cc_version={version} {EMAIL}"
+        out = self.masked([{"type": "text", "text": line}])[0]["text"]
+        assert EMAIL not in out
+        if "Jan" in version:
+            assert "JanNowak" in out or "[PERSON" in out
+        assert out == TestBillingLine.fully_masked(line)
+
+    @staticmethod
+    def fully_masked(text):
+        masker, _, _ = make_masker(note=None)
+        return masker.mask({"messages": [{"role": "user", "content": text}]})[
+            "messages"
+        ][0]["content"]
+
+    def test_without_a_client_version_only_claude_codes_own_place_is_kept(self):
+        billing = (
+            "x-anthropic-billing-header: cc_version=10.0.0.100; cc_entrypoint=cli;"
+        )
+        first = self.masked([{"type": "text", "text": billing}], client_version=None)
+        assert first[0]["text"] == billing
+        second = self.masked(
+            [{"type": "text", "text": "Hi"}, {"type": "text", "text": billing}],
+            client_version=None,
+        )
+        # 10.0.0.100 is an IPv4 address anywhere else.
+        assert "[IPV4_1]" in second[1]["text"]
+        no_hash = "x-anthropic-billing-header: cc_version=10.0.0; cc_entrypoint=cli;"
+        third = self.masked([{"type": "text", "text": no_hash}], client_version=None)
+        assert third[0]["text"] == no_hash  # nothing to mask in it anyway

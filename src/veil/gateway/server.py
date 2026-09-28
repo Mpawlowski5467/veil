@@ -46,16 +46,17 @@ SECRET_HEADER = "x-gateway-secret"
 #: The header naming the client's conversation (sent by Claude Code).
 SESSION_HEADER = "x-claude-code-session-id"
 
-# (method, path) pairs the gateway serves; everything else gets a 404.
+# (method, path) pairs the gateway masks and forwards; everything else gets a
+# 404, but for the connection check, which is answered here.
 _MESSAGES = "/v1/messages"
 _COUNT_TOKENS = "/v1/messages/count_tokens"
-_ROUTES = {
-    ("POST", _MESSAGES),
-    ("POST", _COUNT_TOKENS),
-    ("HEAD", "/api/hello"),
-    ("GET", "/api/hello"),
-}
-_MASKED_PATHS = {_MESSAGES, _COUNT_TOKENS}
+_ROUTES = {("POST", _MESSAGES), ("POST", _COUNT_TOKENS)}
+_HELLO = "/api/hello"
+# Headers only a browser sends: a page can't leave them out. (Node's fetch
+# sends Sec-Fetch-Mode alone, so that one is let in.)
+_BROWSER_HEADERS = frozenset(
+    {"origin", "sec-fetch-site", "sec-fetch-dest", "sec-fetch-user"}
+)
 # The largest request body read (a long conversation with images is a few MB).
 _MAX_BODY = 256 * 1024 * 1024
 
@@ -384,6 +385,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._check_access(secret=False)
                     self._prove(address.query)
                     return
+                if self.command in ("GET", "HEAD") and path == _HELLO:
+                    self._check_access(secret=False)
+                    self._hello()
+                    return
                 self._check_access()
                 if (self.command, path) not in _ROUTES:
                     shown = path if _SHOWN_PATH.fullmatch(path) else "this path"
@@ -393,11 +398,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         f"{self.command} {shown} isn't served by the gateway, so "
                         f"nothing was sent. {compat.version_advice(self._client)}",
                     )
-                body = self._read_body()
-                if path in _MASKED_PATHS:
-                    self._masked(path, body)
-                else:
-                    self._forward(body, None)
+                self._masked(path, self._read_body())
             except _RefusedError as refusal:
                 self._fail(refusal)
             except (BrokenPipeError, ConnectionResetError):
@@ -428,6 +429,23 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self._started = True
             self.wfile.write(data)
 
+        def _hello(self) -> None:
+            """Answer Claude Code's connection check at startup, here.
+
+            It carries no secret and nothing of the user's, and its answer is
+            ignored; forwarding it would let anything on this machine send
+            requests through the gateway without the secret.
+            """
+            data = b"{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self._started = True
+            if self.command == "GET":
+                self.wfile.write(data)
+
         def _check_access(self, *, secret: bool = True) -> None:
             port = gateway.port
             if self.headers.get("Host", "") not in (
@@ -435,9 +453,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 f"localhost:{port}",
             ):
                 raise _RefusedError(403, "permission_error", "wrong host")
-            if self.headers.get("Origin") is not None or any(
-                name.lower().startswith("sec-fetch-") for name in self.headers
-            ):
+            if any(name.lower() in _BROWSER_HEADERS for name in self.headers):
                 raise _RefusedError(
                     403, "permission_error", "browser requests are refused"
                 )
@@ -494,7 +510,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 try:
                     session = stack.enter_context(gateway.sessions.use(session_id))
                     with session.lock:
-                        masked = session.masker.mask(request)
+                        masked = session.masker.mask(
+                            request, client_version=self._client
+                        )
                 except UnsupportedRequestError as error:
                     refusal = _refusal(error, client)
                     if refusal.final:

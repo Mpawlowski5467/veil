@@ -81,8 +81,16 @@ DEFAULT_NOTE = (
     "placeholder: copy it unchanged."
 )
 
-# The client's billing header, which the API recognizes only if unchanged.
-_BILLING_HEADER = re.compile(r"x-anthropic-billing-header: [^\n]*")
+# The client's billing line. The API recognizes it by its version, so the
+# line's name and version are kept as they are, and only when the version is
+# the one in the client's User-Agent: then they tell nothing the User-Agent
+# doesn't. The rest of the line is masked like any text.
+_BILLING_LINE = re.compile(
+    r"^x-anthropic-billing-header:[ \t]*cc_version="
+    r"(?P<version>[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6})(?P<hash>\.[0-9a-f]{3})?"
+    r"(?=;|[ \t]*$)",
+    re.ASCII | re.IGNORECASE | re.MULTILINE,
+)
 
 _TOP_LEVEL_PASS = frozenset(
     {
@@ -261,12 +269,17 @@ class RequestMasker:
         self._known = _KnownValues(shield.vault, registered or {})
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
         self._problems: list[tuple[str, str]] = []
+        self._client_version: str | None = None
 
-    def mask(self, body: dict[str, Any]) -> dict[str, Any]:
+    def mask(
+        self, body: dict[str, Any], *, client_version: str | None = None
+    ) -> dict[str, Any]:
         """Return a copy of a request body with every model-read text masked.
 
         Every part of the body is checked, even after a problem is found, so
-        a refusal names all of them.
+        a refusal names all of them. ``client_version`` is the client's
+        version from its User-Agent (``claude-cli/2.1.283`` gives
+        ``"2.1.283"``), if known: a billing line with that version keeps it.
 
         Raises:
             UnsupportedRequestError: If the body has a field, role, or block type
@@ -276,6 +289,7 @@ class RequestMasker:
             raise UnsupportedRequestError("$", "the body is not a JSON object")
         self._notice_a_cleared_vault()
         self._problems = []
+        self._client_version = client_version
         try:
             out = self._body(body)
             # Named only now: by the end of the body, the vault knows every
@@ -381,25 +395,46 @@ class RequestMasker:
 
     def _system(self, value: Any) -> Any:
         if isinstance(value, str):
-            return self._text(value)
+            return self._billed(value, first=True)
         blocks = _list(value, "system")
         out = []
         for i, block in enumerate(blocks):
             path = f"system[{i}]"
             if not self._guard(_check_depth, block, path):
                 continue
-            masked = self._guard(self._system_block, block, path)
+            masked = self._guard(self._system_block, block, path, i == 0)
             if masked is not None:
                 out.append(masked)
         return out
 
-    def _system_block(self, block: Any, path: str) -> Any:
+    def _system_block(self, block: Any, path: str, first: bool) -> Any:
         _check_block(block, path, allowed={"text"})
         _no_citations(block, path)
-        text = block["text"]
-        if _BILLING_HEADER.fullmatch(text):
-            return block
-        return {**block, "text": self._text(_str(text, f"{path}.text"))}
+        text = _str(block["text"], f"{path}.text")
+        return {**block, "text": self._billed(text, first=first)}
+
+    def _billed(self, text: str, *, first: bool) -> str:
+        """Mask system text, keeping a billing line's name and version."""
+        line = self._billing_line(text, first=first)
+        if line is None:
+            return self._text(text)
+        before, after = text[: line.start()], text[line.end() :]
+        return self._text(before) + line[0] + self._text(after)
+
+    def _billing_line(self, text: str, *, first: bool) -> re.Match[str] | None:
+        """The billing line whose name and version may be kept, if any.
+
+        Its version must be the client's. Without a User-Agent version, only
+        a line that starts the first system block, with the version's short
+        hash, is kept, as Claude Code writes it.
+        """
+        for line in _BILLING_LINE.finditer(text):
+            if self._client_version is not None:
+                if line["version"] == self._client_version:
+                    return line
+            elif first and line.start() == 0 and line["hash"] is not None:
+                return line
+        return None
 
     def _with_note(self, system: Any) -> Any:
         note = {"type": "text", "text": self._note}
@@ -635,13 +670,6 @@ _TOOL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 #: walked (a recursion that deep would fail).
 MAX_DEPTH = 100
 
-# A billing line's version, for naming the client in a refusal.
-_BILLING_VERSION = re.compile(
-    r"^x-anthropic-billing-header:[ \t]*cc_version="
-    r"([0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6})",
-    re.ASCII | re.IGNORECASE | re.MULTILINE,
-)
-
 
 def billing_version(body: Any) -> str | None:
     """The Claude Code version in a body's billing line, if there is one.
@@ -655,9 +683,9 @@ def billing_version(body: Any) -> str | None:
     for block in texts:
         text = block.get("text") if isinstance(block, dict) else block
         if isinstance(text, str):
-            found = _BILLING_VERSION.search(text)
+            found = _BILLING_LINE.search(text)
             if found:
-                return found[1]
+                return found["version"]
     return None
 
 

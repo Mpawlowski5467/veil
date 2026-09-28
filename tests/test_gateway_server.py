@@ -319,10 +319,24 @@ class TestRoundTrip:
         assert response.status == 429
         assert json.loads(payload) == error
 
-    def test_the_connectivity_check_is_forwarded(self, api, gateway):
-        response, _ = call(gateway, method="HEAD", path="/api/hello", body=None)
+    @pytest.mark.parametrize("method", ["HEAD", "GET"])
+    def test_the_connection_check_is_answered_here(self, api, gateway, method):
+        # Claude Code's startup check carries no secret; it is never forwarded.
+        response, payload = call(
+            gateway, method=method, path="/api/hello", headers={SECRET_HEADER: None}
+        )
         assert response.status == 200
-        assert api.received[0][:2] == ("HEAD", "/api/hello")
+        assert response.getheader("Content-Type") == "application/json"
+        assert payload == (b"{}" if method == "GET" else b"")
+        call(gateway, method=method, path="/api/hello")  # with the secret too
+        assert api.received == []
+
+    def test_the_connection_check_still_refuses_browsers(self, api, gateway):
+        for headers in ({"Host": "evil.example.com"}, {"Sec-Fetch-Site": "none"}):
+            response, _ = call(
+                gateway, method="GET", path="/api/hello", headers=headers
+            )
+            assert response.status == 403
 
     def test_sessions_keep_separate_placeholders(self, api, gateway):
         api.replies += [text_reply("a"), text_reply("b")]
@@ -346,13 +360,19 @@ REFUSALS = [
         403,
         "browser requests are refused",
     ),
-    (
-        {"Sec-Fetch-Site": "cross-site"},
-        "POST",
-        "/v1/messages",
-        403,
-        "browser requests are refused",
-    ),
+    *[
+        (headers, "POST", "/v1/messages", 403, "browser requests are refused")
+        for headers in (
+            {"Sec-Fetch-Site": "cross-site"},
+            {"Sec-Fetch-Site": "same-site"},
+            {"Sec-Fetch-Site": "same-origin"},
+            {"Sec-Fetch-Site": "none"},
+            {"Sec-Fetch-Dest": "empty"},
+            {"Sec-Fetch-User": "?1"},
+            {"Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "cross-site"},
+            {"Origin": "null"},
+        )
+    ],
     ({SECRET_HEADER: None}, "POST", "/v1/messages", 401, "missing or wrong secret"),
     ({SECRET_HEADER: "guess"}, "POST", "/v1/messages", 401, "missing or wrong secret"),
     ({}, "POST", "/v1/complete", 404, "POST /v1/complete isn't served by the gateway"),
@@ -501,7 +521,7 @@ def test_errors_print_nothing(api, capfd):
 def test_a_masker_error_is_refused_without_details(api, gateway):
     session = gateway.sessions.get("session-1")
 
-    def explode(_body):
+    def explode(_body, **_):
         raise RuntimeError(f"boom {EMAIL}")
 
     session.masker.mask = explode
@@ -617,7 +637,7 @@ def test_only_failures_on_the_way_are_left_to_the_clients_retries(api, gateway):
     assert refused.getheader("x-should-retry") == "false"
     session = gateway.sessions.get("session-1")
     real_mask = session.masker.mask
-    session.masker.mask = lambda body: 1 / 0
+    session.masker.mask = lambda body, **_: 1 / 0
     bug, _ = call(gateway, body=REQUEST)
     assert (bug.status, bug.getheader("x-should-retry")) == (500, "false")
     session.masker.mask = real_mask
@@ -625,6 +645,41 @@ def test_only_failures_on_the_way_are_left_to_the_clients_retries(api, gateway):
     unreachable, _ = call(gateway, body=REQUEST)
     assert unreachable.status == 502
     assert unreachable.getheader("x-should-retry") is None
+
+
+def test_nodes_fetch_is_let_in(api, gateway):
+    # Node's fetch (undici) sends Sec-Fetch-Mode alone; a browser never does.
+    api.replies.append(text_reply("ok"))
+    response, _ = call(
+        gateway,
+        body=REQUEST,
+        headers={"Sec-Fetch-Mode": "cors", "Accept-Language": "*"},
+    )
+    assert response.status == 200
+    assert len(api.received) == 1
+
+
+@pytest.mark.parametrize(
+    ("agent", "kept"),
+    [
+        ("claude-cli/2.1.99 (external, cli)", True),  # the client's own version
+        ("claude-cli/2.1.300 (external, cli)", False),  # not its version
+        (None, True),  # no version to check: kept where Claude Code puts it
+    ],
+)
+def test_the_billing_line_keeps_the_clients_own_version(api, gateway, agent, kept):
+    billing = "x-anthropic-billing-header: cc_version=2.1.99.146; cc_entrypoint=cli;"
+    body = {**REQUEST, "system": [{"type": "text", "text": f"{billing} to {EMAIL}"}]}
+    api.replies.append(text_reply("ok"))
+    call(gateway, body=body, headers={"User-Agent": agent})
+    sent = json.loads(api.received[-1][3])["system"][0]["text"]
+    assert EMAIL not in sent
+    # 2.1.99.146 looks like an IPv4 address: kept only as the client's version.
+    version = "2.1.99.146" if kept else "[IPV4_1]"
+    assert sent == (
+        f"x-anthropic-billing-header: cc_version={version}; cc_entrypoint=cli; "
+        "to [EMAIL_1]"
+    )
 
 
 UNMASKABLE = {
@@ -722,7 +777,7 @@ class TestRefusals:
     def test_a_masker_bug_is_final_and_names_no_value(self, api, gateway):
         session = gateway.sessions.get("session-1")
 
-        def explode(_body):
+        def explode(_body, **_):
             raise RuntimeError(f"boom {EMAIL}")
 
         session.masker.mask = explode
@@ -742,7 +797,7 @@ class TestRefusals:
 
         session = gateway.sessions.get("session-1")
 
-        def locked(_body):
+        def locked(_body, **_):
             raise sqlite3.OperationalError("database is locked")
 
         session.masker.mask = locked
