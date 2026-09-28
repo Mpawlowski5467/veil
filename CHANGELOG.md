@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The gateway masks keys and `type` values in tool inputs and safeguards.** A past tool call's input (when the gateway had no record of it) and Claude Code's `safeguards` were masked in their values only: keys went out as they were, and so did every value under a key named `type`, at any depth. A tool input such as `{"type": "jane.doe@example.com"}` or `{"jane.doe@example.com": 1}` (an MCP tool with a `type` parameter, or an object keyed by names or emails) left the machine unmasked, and so did a safeguard `{"type": "Jan Nowak 555-123-4567"}`. Now every key and every string in them is masked. The one value kept is a safeguard's own `type`, and only a known one (`dangerous_tool_use`); any other is refused, as an unknown block type is. `/v1/messages/count_tokens` requests are masked the same way.
+  - A tool call's input the gateway restored still goes back to the model exactly as the model wrote it, so history and prompt caching don't change. A known value in one of its keys (from before it was masked) is now masked, as one in its values already was.
+  - Placeholders in the keys of a reply's tool call are restored like its values (exact placeholders only), so a key the model saw masked reaches the tool as the real value. The hook still checks keys for real values before an MCP tool gets them.
+  - Two keys of one object that would mask, or restore, to the same text can't both be kept. Rather than merge them, the gateway refuses such a request (the refusal names where, with keys as masked), and ends a reply with such a tool call with "a tool call's input could not be restored". In practice this takes a model writing a real value next to its placeholder, or a `RequestMasker` whose shield has no `LiteralPlaceholderDetector`.
+
 ## 0.4.0
 
 ### Added
