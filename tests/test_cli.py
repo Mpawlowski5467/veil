@@ -10,13 +10,18 @@ import time
 
 import pytest
 
-from veil import cli
+from veil import __version__, cli
 from veil.gateway import SECRET_HEADER, Settings, open_sessions
+from veil.gateway.compat import TESTED_CLAUDE_CODE
 
 FAKE_CLAUDE = """#!{python}
-import http.client, json, os, sys
+import http.client, json, os, sys, time
 from urllib.parse import urlsplit
 args = sys.argv[1:]
+if args == ["--version"]:
+    time.sleep(float(os.environ.get("FAKE_CLAUDE_VERSION_SLEEP", "0")))
+    print(os.environ.get("FAKE_CLAUDE_VERSION", ""))
+    sys.exit(int(os.environ.get("FAKE_CLAUDE_VERSION_EXIT", "0")))
 settings_path = args[args.index("--settings") + 1]
 settings = json.load(open(settings_path))
 mode = os.stat(settings_path).st_mode & 0o777
@@ -74,6 +79,7 @@ def fake_claude(tmp_path, monkeypatch):
     path.chmod(0o755)
     report = tmp_path / "report.json"
     monkeypatch.setenv("FAKE_CLAUDE_REPORT", str(report))
+    monkeypatch.setenv("FAKE_CLAUDE_VERSION", f"{TESTED_CLAUDE_CODE} (Claude Code)")
     monkeypatch.setenv("PATH", f"{path.parent}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
     # Not this machine's own settings: a Claude Code session running these
@@ -150,6 +156,52 @@ class TestClaude:
         )
         assert err[start + 1] == "  prompt (unknown field)"
         assert err[start + 2].startswith("veil: This is Claude Code 2.1.290")
+
+    def test_an_untested_claude_code_is_named_once(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", "9.0.0 (Claude Code)")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 0
+        err = capsys.readouterr().err
+        assert (
+            f"veil: Claude Code 9.0.0 is newer than {TESTED_CLAUDE_CODE}, the version "
+            f"veil {__version__} was tested with; if requests are refused, update veil"
+        ) in err.splitlines()
+        # Claude Code started anyway.
+        assert json.loads(fake_claude[1].read_text())["args"]
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        assert "is newer than" not in capsys.readouterr().err
+        assert (data_dir / "version-warnings").stat().st_mode & 0o777 == 0o600
+
+    def test_an_older_claude_code_is_told_to_update(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", "0.1.0 (Claude Code)")
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        err = capsys.readouterr().err
+        assert "veil: Claude Code 0.1.0 is older than" in err
+        assert "if requests are refused, update Claude Code" in err
+
+    @pytest.mark.parametrize(
+        ("output", "code", "sleep"),
+        [
+            (f"{TESTED_CLAUDE_CODE} (Claude Code)", "0", "0"),  # the tested one
+            ("not a version", "0", "0"),
+            ("9.0.0 (Claude Code)", "1", "0"),  # it failed
+            ("9.0.0 (Claude Code)", "0", "2"),  # too slow
+        ],
+    )
+    def test_nothing_is_said_when_the_version_isnt_new(
+        self, fake_claude, data_dir, monkeypatch, capsys, output, code, sleep
+    ):
+        monkeypatch.setattr(cli, "VERSION_TIMEOUT", 0.3)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", output)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION_EXIT", code)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION_SLEEP", sleep)
+        started = time.monotonic()
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 0
+        assert time.monotonic() - started < 2
+        assert "was tested with" not in capsys.readouterr().err
 
     def test_nothing_is_listed_when_nothing_was_refused(
         self, fake_claude, data_dir, capsys

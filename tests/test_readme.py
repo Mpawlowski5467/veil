@@ -36,3 +36,10 @@ def test_readme_examples(capsys, monkeypatch, tmp_path):
                 exec(compile(block, name, "exec"), namespace)
     assert runner.failures == 0, "".join(report)
     assert "Hi Jan Nowak, following up on the invoice..." in capsys.readouterr().out
+
+
+def test_readme_names_the_tested_claude_code():
+    from veil.gateway.compat import TESTED_CLAUDE_CODE
+
+    text = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+    assert f"tested with Claude Code {TESTED_CLAUDE_CODE}." in text

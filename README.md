@@ -105,7 +105,7 @@ What it doesn't cover:
 - **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
 - **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.
 
-It was checked against Claude Code 2.1.283. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
+It was tested with Claude Code 2.1.283. When yours is another version, `veil claude` says so in one line when it starts (once for each version) and starts it anyway: a newer Claude Code may send something veil doesn't know yet, which is refused, never sent unmasked. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
 
 Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
 

@@ -126,3 +126,14 @@ class TestMessages:
             "30 times"
         )
         assert lines[-1].startswith(f"{APP}: {APP} {__version__} was tested")
+
+
+def test_the_version_warning():
+    assert compat.version_warning(TESTED_CLAUDE_CODE) is None
+    assert compat.version_warning(None) is None
+    newer = compat.version_warning("9.0.0")
+    assert newer == (
+        f"{APP}: Claude Code 9.0.0 is newer than {TESTED_CLAUDE_CODE}, the version "
+        f"{APP} {__version__} was tested with; if requests are refused, update {APP}"
+    )
+    assert compat.version_warning("0.1.0").endswith("update Claude Code")

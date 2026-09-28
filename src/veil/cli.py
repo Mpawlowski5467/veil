@@ -22,11 +22,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .gateway import (
     SECRET_HEADER,
     Gateway,
     SettingsError,
     SQLiteLedger,
+    compat,
     default_data_dir,
     git_identity,
     hooks,
@@ -59,6 +61,13 @@ REFUSED_OPTIONS = ("--settings", "--bare", "--safe-mode")
 
 #: Variables that turn every hook off; they are unset for Claude Code.
 HOOKS_OFF = ("CLAUDE_CODE_SIMPLE", "CLAUDE_CODE_SAFE_MODE")
+
+#: Seconds ``claude --version`` may take; past that the version is unknown.
+VERSION_TIMEOUT = 3.0
+
+# The versions already warned about, one "<claude code> <this package>" line
+# each, in the data folder.
+_WARNED = "version-warnings"
 
 
 def hook_command(data_dir: Path) -> list[str]:
@@ -136,6 +145,51 @@ def _problems(args: Sequence[str], user_env: dict[str, str]) -> list[str]:
                 "to the Anthropic API itself, so unset it"
             )
     return found
+
+
+def claude_version(executable: str) -> str | None:
+    """The version the claude command reports, or None if it can't be read."""
+    try:
+        done = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=VERSION_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if done.returncode != 0:
+        return None
+    return compat.from_cli_output(done.stdout)
+
+
+def version_warning(version: str | None, data_dir: Path) -> str | None:
+    """The line to print about an untested Claude Code version, if any.
+
+    Given once for each pair of Claude Code and this package's version:
+    Claude Code updates often, and a line on every start would soon be
+    ignored. Never raises.
+    """
+    line = compat.version_warning(version)
+    if line is None:
+        return None
+    pair = f"{version} {__version__}"
+    path = data_dir / _WARNED
+    try:
+        if pair in path.read_text(encoding="utf-8").splitlines():
+            return None
+    except (OSError, ValueError):
+        pass
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(pair + "\n")
+    except OSError:
+        pass
+    return line
 
 
 def _open(data_dir: Path, cwd: Path) -> tuple[Settings, Any]:
@@ -233,6 +287,9 @@ def run_claude(
             f"({registered} registered values, {len(settings.patterns)} patterns)",
             file=sys.stderr,
         )
+        warning = version_warning(claude_version(executable), data_dir)
+        if warning is not None:
+            print(warning, file=sys.stderr)
         try:
             code = _run_child(
                 [executable, "--settings", str(settings_file), *args], env, cwd

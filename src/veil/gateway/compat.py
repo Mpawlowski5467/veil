@@ -81,6 +81,22 @@ def version_advice(client: str | None) -> str:
     )
 
 
+def version_warning(client: str | None) -> str | None:
+    """One line about a Claude Code version other than the tested one.
+
+    None when the version is the tested one, or isn't known.
+    """
+    order = compare(client)
+    if not order:
+        return None
+    relation, fix = ("newer", APP) if order > 0 else ("older", "Claude Code")
+    return (
+        f"{APP}: Claude Code {client} is {relation} than {TESTED_CLAUDE_CODE}, the "
+        f"version {APP} {__version__} was tested with; if requests are refused, "
+        f"update {fix}"
+    )
+
+
 def _listed(problems: Sequence[tuple[str, str, int]]) -> str:
     items = [
         f"{path} ({problem})" + (f" {count} times" if count > 1 else "")
