@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+import gateway_bodies
 from veil import LiteralPlaceholderDetector, MemoryVault, RegexDetector, Shield
 from veil.gateway import SECRET_HEADER, SESSION_HEADER, Gateway, Sessions
 from veil.gateway.compat import TESTED_CLAUDE_CODE
@@ -660,24 +661,30 @@ def test_nodes_fetch_is_let_in(api, gateway):
 @pytest.mark.parametrize(
     ("agent", "kept"),
     [
-        ("claude-cli/2.1.99 (external, cli)", True),  # the client's own version
+        ("claude-cli/2.1.283 (external, cli)", True),  # the client's own version
         ("claude-cli/2.1.300 (external, cli)", False),  # not its version
         (None, True),  # no version to check: kept where Claude Code puts it
     ],
 )
 def test_the_billing_line_keeps_the_clients_own_version(api, gateway, agent, kept):
-    billing = "x-anthropic-billing-header: cc_version=2.1.99.146; cc_entrypoint=cli;"
+    prompt = REQUEST["messages"][0]["content"]
+    billing = gateway_bodies.billing(prompt).split(" cch=")[0]
     body = {**REQUEST, "system": [{"type": "text", "text": f"{billing} to {EMAIL}"}]}
     api.replies.append(text_reply("ok"))
     call(gateway, body=body, headers={"User-Agent": agent})
-    sent = json.loads(api.received[-1][3])["system"][0]["text"]
-    assert EMAIL not in sent
-    # 2.1.99.146 looks like an IPv4 address: kept only as the client's version.
-    version = "2.1.99.146" if kept else "[IPV4_1]"
-    assert sent == (
-        f"x-anthropic-billing-header: cc_version={version}; cc_entrypoint=cli; "
-        "to [EMAIL_1]"
-    )
+    sent = json.loads(api.received[-1][3])
+    text = sent["system"][0]["text"]
+    assert EMAIL not in text
+    if kept:
+        # The hash is made again from the prompt as the API gets it.
+        masked_prompt = sent["messages"][0]["content"]
+        new_hash = gateway_bodies.fingerprint(masked_prompt)
+        assert text == (
+            f"x-anthropic-billing-header: cc_version=2.1.283.{new_hash}; "
+            "cc_entrypoint=cli; to [EMAIL_1]"
+        )
+    else:
+        assert text == f"{billing} to [EMAIL_1]"  # masked like any text
 
 
 UNMASKABLE = {

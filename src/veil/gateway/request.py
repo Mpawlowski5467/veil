@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
@@ -88,11 +89,17 @@ DEFAULT_NOTE = (
 # the one in the client's User-Agent: then they tell nothing the User-Agent
 # doesn't. The rest of the line is masked like any text.
 _BILLING_LINE = re.compile(
-    r"^x-anthropic-billing-header:[ \t]*cc_version="
-    r"(?P<version>[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6})(?P<hash>\.[0-9a-f]{3})?"
+    r"^(?i:x-anthropic-billing-header):[ \t]*cc_version="
+    r"(?P<version>[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6})(?:\.(?P<hash>[0-9a-f]{3}))?"
     r"(?=;|[ \t]*$)",
-    re.ASCII | re.IGNORECASE | re.MULTILINE,
+    re.ASCII | re.MULTILINE,
 )
+# The short hash after the version is Claude Code's fingerprint of the first
+# prompt: a few of its characters, salted and hashed. Made from the real
+# prompt, it could tell a masked character, so it is made again from the
+# masked prompt the API gets, or left out.
+_FINGERPRINT_SALT = "59cf53e54c78"
+_FINGERPRINT_AT = (4, 7, 20)
 
 _TOP_LEVEL_PASS = frozenset(
     {
@@ -276,6 +283,8 @@ class RequestMasker:
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
         self._problems: list[tuple[str, str]] = []
         self._client_version: str | None = None
+        self._billing_hash: tuple[str, str] | None = None
+        self._hash_mark = ""
         self._exposed: frozenset[str] = frozenset()
         self._generic: list[str] = []
         self._words: dict[str, bool] = {}
@@ -303,8 +312,13 @@ class RequestMasker:
         self._problems = []
         self._generic = []
         self._client_version = client_version
+        self._billing_hash = None
+        # Stands in for a kept billing line's hash until it is made again;
+        # random, so no request can hold it.
+        self._hash_mark = f"\x00{secrets.token_hex(16)}\x00"
         try:
             out = self._body(body)
+            self._fingerprinted(body, out)
             # Named only now: by the end of the body, the vault knows every
             # value in it, however early a name holding one came.
             problems = [self._safe(*problem) for problem in self._problems]
@@ -439,12 +453,21 @@ class RequestMasker:
         )
 
     def _billed(self, text: str, *, first: bool) -> str:
-        """Mask system text, keeping a billing line's name and version."""
+        """Mask system text, keeping a billing line's name and version.
+
+        The version's hash is only marked here: `_fingerprinted` makes it
+        again once the whole body is masked.
+        """
         line = self._billing_line(text, first=first)
-        if line is None:
+        if line is None or self._known.found_in(line[0]):
             return self._text(text)
+        kept = line[0]
+        if line["hash"] is not None:
+            kept = kept[: line.start("hash") - line.start() - 1]
+            self._billing_hash = (line["version"], line["hash"])
+            kept += self._hash_mark
         before, after = text[: line.start()], text[line.end() :]
-        return self._text(before) + line[0] + self._text(after)
+        return self._text(before) + kept + self._text(after)
 
     def _billing_line(self, text: str, *, first: bool) -> re.Match[str] | None:
         """The billing line whose name and version may be kept, if any.
@@ -457,9 +480,41 @@ class RequestMasker:
             if self._client_version is not None:
                 if line["version"] == self._client_version:
                     return line
-            elif first and line.start() == 0 and line["hash"] is not None:
+            elif (
+                first
+                and line.start() == 0
+                and line["hash"] is not None
+                and _mask_text(self._shield, self._known, line[0]) == line[0]
+            ):
                 return line
         return None
+
+    def _fingerprinted(self, body: dict[str, Any], out: dict[str, Any]) -> None:
+        """Make a kept billing line's hash again, from the masked first prompt.
+
+        Claude Code hashes a few characters of the first prompt into it. The
+        prompt it was made from is found by making the hash again from each
+        of the user's texts; the new hash comes from that text as masked. If
+        none gives the same hash, the hash is left out.
+        """
+        if self._billing_hash is None:
+            return
+        version, old = self._billing_hash
+        new = ""
+        for original, masked in _user_texts(body, out):
+            if _fingerprint(original, version) == old:
+                new = "." + _fingerprint(masked, version)
+                break
+        system = out.get("system")
+        if isinstance(system, str):
+            out["system"] = system.replace(self._hash_mark, new, 1)
+        elif isinstance(system, list):
+            out["system"] = [
+                {**block, "text": block["text"].replace(self._hash_mark, new, 1)}
+                if isinstance(block, dict) and isinstance(block.get("text"), str)
+                else block
+                for block in system
+            ]
 
     def _with_note(self, system: Any) -> Any:
         note = {"type": "text", "text": self._note}
@@ -1037,6 +1092,48 @@ _DOCUMENT_TYPES = frozenset({"application/pdf"})
 #: levels, and tool inputs a few more; deeper values are refused rather than
 #: walked (a recursion that deep would fail).
 MAX_DEPTH = 100
+
+
+def _fingerprint(text: str, version: str) -> str:
+    """Claude Code's short hash of a prompt, as its billing line carries it.
+
+    Characters are counted as JavaScript does (UTF-16 code units).
+    """
+    units = text.encode("utf-16-le")
+    picked = []
+    for at in _FINGERPRINT_AT:
+        if 2 * at + 2 <= len(units):
+            unit = int.from_bytes(units[2 * at : 2 * at + 2], "little")
+            picked.append("\ufffd" if 0xD800 <= unit <= 0xDFFF else chr(unit))
+        else:
+            picked.append("0")
+    data = f"{_FINGERPRINT_SALT}{''.join(picked)}{version}"
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:3]
+
+
+def _user_texts(body: dict[str, Any], out: dict[str, Any]) -> Any:
+    """Each text of the user's messages, with the same text as masked."""
+    before, after = body.get("messages"), out.get("messages")
+    if not isinstance(before, list) or not isinstance(after, list):
+        return
+    for message, masked in zip(before, after, strict=False):
+        if not (isinstance(message, dict) and isinstance(masked, dict)):
+            continue
+        if message.get("role") != "user":
+            continue
+        content, done = message.get("content"), masked.get("content")
+        if isinstance(content, str) and isinstance(done, str):
+            yield content, done
+        elif isinstance(content, list) and isinstance(done, list):
+            for block, masked_block in zip(content, done, strict=False):
+                if (
+                    isinstance(block, dict)
+                    and isinstance(masked_block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                    and isinstance(masked_block.get("text"), str)
+                ):
+                    yield block["text"], masked_block["text"]
 
 
 def billing_version(body: Any) -> str | None:

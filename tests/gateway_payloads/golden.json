@@ -181,7 +181,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -498,7 +498,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -756,7 +756,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -1014,7 +1014,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -1287,7 +1287,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -1559,7 +1559,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -1819,7 +1819,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -2081,7 +2081,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -2340,7 +2340,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -2540,7 +2540,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -2650,7 +2650,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.4ac; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {
@@ -2697,7 +2697,7 @@
    "stream": true,
    "system": [
     {
-     "text": "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.4ac; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
      "type": "text"
     },
     {

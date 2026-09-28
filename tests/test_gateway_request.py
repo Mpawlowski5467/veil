@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import gateway_bodies
 from veil import LiteralPlaceholderDetector, MemoryVault, RegexDetector, Shield
 from veil.gateway import (
     DEFAULT_NOTE,
@@ -156,8 +157,12 @@ class TestMasking:
 
     def test_system_text_is_masked_but_the_billing_header_is_not(self):
         masker, _, _ = make_masker(note=None)
-        system = masker.mask(claude_code_body())["system"]
-        assert system[0] == {"type": "text", "text": BILLING}
+        system = masker.mask(claude_code_body(), client_version="2.1.99")["system"]
+        # Kept as the client's version; its hash matches no prompt: left out.
+        assert system[0] == {
+            "type": "text",
+            "text": "x-anthropic-billing-header: cc_version=2.1.99; cc_entrypoint=cli",
+        }
         assert system[1]["text"] == "You are a helpful agent. The user is [EMAIL_1]."
         assert system[1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
 
@@ -1214,32 +1219,55 @@ class TestCrashes:
 class TestBillingLine:
     """Only the billing line's name and version, the client's own, stay."""
 
-    def masked(self, system, client_version="2.1.283"):
-        masker, _, _ = make_masker(note=None)
-        body = {"system": system, "messages": []}
-        return masker.mask(body, client_version=client_version)["system"]
+    def masked(self, system, client_version="2.1.283", prompt=None, registered=None):
+        masker, shield, _ = make_masker(note=None)
+        for value, kind in (registered or {}).items():
+            shield.add_entity(value, kind)
+        messages = [] if prompt is None else [{"role": "user", "content": prompt}]
+        body = {"system": system, "messages": messages}
+        out = masker.mask(body, client_version=client_version)
+        return out["system"], out["messages"]
 
-    def test_kept_in_any_letter_case_and_the_rest_masked(self):
-        line = (
-            f"X-Anthropic-Billing-Header: cc_version=2.1.283.a1b; note={NAME} {EMAIL};"
+    def test_the_hash_is_made_again_from_the_masked_prompt(self):
+        # Claude Code hashes three characters of the first prompt into the
+        # line; made from the real prompt, it could tell a masked one.
+        prompt = f"Please email {EMAIL} about the invoice"
+        line = gateway_bodies.billing(prompt)
+        system, messages = self.masked(line, prompt=prompt)
+        masked_prompt = messages[0]["content"]
+        assert masked_prompt == "Please email [EMAIL_1] about the invoice"
+        new_hash = gateway_bodies.fingerprint(masked_prompt)
+        assert new_hash != gateway_bodies.fingerprint(prompt)
+        assert system.startswith(
+            f"x-anthropic-billing-header: cc_version=2.1.283.{new_hash}; "
         )
-        out = self.masked([{"type": "text", "text": line}])[0]["text"]
-        assert out == (
-            "X-Anthropic-Billing-Header: cc_version=2.1.283.a1b; "
-            "note=[PERSON_1] [EMAIL_1];"
+
+    def test_a_hash_no_prompt_gives_is_left_out(self):
+        line = f"x-anthropic-billing-header: cc_version=2.1.283.a1b; to {NAME} {EMAIL};"
+        system, _ = self.masked([{"type": "text", "text": line}], prompt="Hi there")
+        assert system[0]["text"] == (
+            "x-anthropic-billing-header: cc_version=2.1.283; to [PERSON_1] [EMAIL_1];"
         )
+
+    def test_the_name_in_any_letter_case_and_only_the_name(self):
+        line = "X-Anthropic-Billing-Header: cc_version=2.1.283;"
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert system[0]["text"] == line
+        upper = "x-anthropic-billing-header: CC_VERSION=2.1.283;"
+        system, _ = self.masked([{"type": "text", "text": upper}])
+        assert system[0]["text"] == TestBillingLine.fully_masked(upper)
 
     def test_a_line_that_only_starts_like_it_is_masked(self):
         line = f"x-anthropic-billing-header: {NAME} {EMAIL}"
-        out = self.masked([{"type": "text", "text": line}])[0]["text"]
-        assert out == "x-anthropic-billing-header: [PERSON_1] [EMAIL_1]"
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert system[0]["text"] == "x-anthropic-billing-header: [PERSON_1] [EMAIL_1]"
 
     def test_only_the_billing_line_of_a_longer_block_is_kept(self):
         text = (
             f"Hello {NAME}\nx-anthropic-billing-header: cc_version=2.1.283\nBye {EMAIL}"
         )
-        out = self.masked(text)
-        assert out == (
+        system, _ = self.masked(text)
+        assert system == (
             "Hello [PERSON_1]\nx-anthropic-billing-header: cc_version=2.1.283\n"
             "Bye [EMAIL_1]"
         )
@@ -1248,17 +1276,24 @@ class TestBillingLine:
         "version",
         [
             "2.1.283.a1bJanNowak;",  # something glued to the version
+            "2.1.283.555-555-0100;",  # a phone glued after the version
             "٢.1.283.a1b;",  # not ASCII digits
             "2.1.284.a1b;",  # not the client's version
+            "2.1.283.ADA;",  # an upper-case "hash"
         ],
     )
     def test_a_version_that_isnt_the_clients_is_not_kept(self, version):
         line = f"x-anthropic-billing-header: cc_version={version} {EMAIL}"
-        out = self.masked([{"type": "text", "text": line}])[0]["text"]
-        assert EMAIL not in out
-        if "Jan" in version:
-            assert "JanNowak" in out or "[PERSON" in out
-        assert out == TestBillingLine.fully_masked(line)
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert EMAIL not in system[0]["text"]
+        assert system[0]["text"] == TestBillingLine.fully_masked(line)
+
+    def test_a_known_value_in_the_kept_part_is_masked(self):
+        line = "x-anthropic-billing-header: cc_version=2.1.283.ada;"
+        system, _ = self.masked(
+            [{"type": "text", "text": line}], registered={"ada": "USER"}
+        )
+        assert "ada" not in system[0]["text"]
 
     @staticmethod
     def fully_masked(text):
@@ -1268,17 +1303,27 @@ class TestBillingLine:
         ][0]["content"]
 
     def test_without_a_client_version_only_claude_codes_own_place_is_kept(self):
-        billing = (
-            "x-anthropic-billing-header: cc_version=10.0.0.100; cc_entrypoint=cli;"
-        )
-        first = self.masked([{"type": "text", "text": billing}], client_version=None)
-        assert first[0]["text"] == billing
-        second = self.masked(
-            [{"type": "text", "text": "Hi"}, {"type": "text", "text": billing}],
-            client_version=None,
-        )
-        # 10.0.0.100 is an IPv4 address anywhere else.
-        assert "[IPV4_1]" in second[1]["text"]
-        no_hash = "x-anthropic-billing-header: cc_version=10.0.0; cc_entrypoint=cli;"
-        third = self.masked([{"type": "text", "text": no_hash}], client_version=None)
-        assert third[0]["text"] == no_hash  # nothing to mask in it anyway
+        line = "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli;"
+        dropped = "x-anthropic-billing-header: cc_version=2.1.283; cc_entrypoint=cli;"
+        first, _ = self.masked([{"type": "text", "text": line}], client_version=None)
+        assert first[0]["text"] == dropped  # no prompt gives the hash
+        # Not at the start of the first block, it is text like any other.
+        for system in (
+            [{"type": "text", "text": "Hi"}, {"type": "text", "text": line}],
+            [{"type": "text", "text": f"Hi\n{line}"}],
+        ):
+            out, _ = self.masked(system, client_version=None)
+            assert "cc_version=2.1.283.a1b" in json.dumps(out)
+        # An address where the version goes is masked, and so is a phone
+        # number with no hash.
+        for version, masked in (
+            ("10.0.0.100", "[IPV4_1]"),
+            ("555.555.0100", "[PHONE_1]"),
+        ):
+            text = (
+                f"x-anthropic-billing-header: cc_version={version}; cc_entrypoint=cli;"
+            )
+            out, _ = self.masked([{"type": "text", "text": text}], client_version=None)
+            assert out[0]["text"] == (
+                f"x-anthropic-billing-header: cc_version={masked}; cc_entrypoint=cli;"
+            )

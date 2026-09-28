@@ -9,6 +9,7 @@ older release accepted, except where a change is intended and recorded there.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -18,10 +19,27 @@ OTHER_EMAIL = "ada.q@example.com"
 NAME = "Jan Nowak"
 PHONE = "(555) 555-0100"
 UA_VERSION = "2.1.283"
-BILLING = (
-    "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli; "
-    "cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;"
-)
+PROMPT = f"My name is {NAME}; mail {EMAIL} or call {PHONE}."
+TITLE_PROMPT = f"Help {NAME} fix the build ({EMAIL})."
+
+
+def fingerprint(prompt: str) -> str:
+    """Claude Code's (2.1.283) short hash of the first prompt, for the billing line."""
+    picked = "".join(prompt[i] if i < len(prompt) else "0" for i in (4, 7, 20))
+    data = f"59cf53e54c78{picked}{UA_VERSION}".encode()
+    return hashlib.sha256(data).hexdigest()[:3]
+
+
+def billing(prompt: str) -> str:
+    """Claude Code's billing line for a conversation that began with ``prompt``."""
+    return (
+        f"x-anthropic-billing-header: cc_version={UA_VERSION}.{fingerprint(prompt)}; "
+        "cc_entrypoint=cli; cch=00000; "
+        "cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;"
+    )
+
+
+BILLING = billing(PROMPT)
 DEVICE = "d3adb33f" * 8
 USER_ID = json.dumps(
     {
@@ -132,7 +150,7 @@ def _history() -> list[dict[str, Any]]:
                 },
                 {
                     "type": "text",
-                    "text": f"My name is {NAME}; mail {EMAIL} or call {PHONE}.",
+                    "text": PROMPT,
                     "cache_control": {"type": "ephemeral"},
                 },
             ],
@@ -242,12 +260,10 @@ def title_generation() -> dict[str, Any]:
         "stream": True,
         "metadata": {"user_id": USER_ID},
         "system": [
-            {"type": "text", "text": BILLING},
+            {"type": "text", "text": billing(TITLE_PROMPT)},
             {"type": "text", "text": "Generate a short title for this session."},
         ],
-        "messages": [
-            {"role": "user", "content": f"Help {NAME} fix the build ({EMAIL})."}
-        ],
+        "messages": [{"role": "user", "content": TITLE_PROMPT}],
         "output_config": {
             "format": {
                 "type": "json_schema",
