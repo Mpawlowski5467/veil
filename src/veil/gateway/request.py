@@ -101,23 +101,6 @@ _BILLING_LINE = re.compile(
 _FINGERPRINT_SALT = "59cf53e54c78"
 _FINGERPRINT_AT = (4, 7, 20)
 
-_TOP_LEVEL_PASS = frozenset(
-    {
-        "context_management",
-        "max_tokens",
-        "metadata",
-        "model",
-        "output_config",
-        "service_tier",
-        "stream",
-        "temperature",
-        "thinking",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p",
-    }
-)
 _ROLES = frozenset({"user", "assistant", "system"})
 _MESSAGE_KEYS = frozenset({"role", "content", "output_config"})
 # The effort a system message can set for the turns after it (its
@@ -344,8 +327,8 @@ class RequestMasker:
             # is named where it is.
             if key not in _WALKED and not self._guard(_check_depth, value, path):
                 continue
-            if key in _TOP_LEVEL_PASS:
-                out[key] = value
+            if key in _SETTINGS:
+                out[key] = self._guard(_SETTINGS[key], self, value, path)
             elif key == "system":
                 out[key] = self._guard(self._system, value)
             elif key == "messages":
@@ -446,6 +429,7 @@ class RequestMasker:
         if kind != "text":
             return self._unknown_block(block, path)
         known, extra = _split(block, _BLOCK_KEYS["text"])
+        known = self._block_settings(known, path)
         _no_citations(known, path)
         text = _str(known.get("text"), f"{path}.text")
         return self._merged(
@@ -569,6 +553,7 @@ class RequestMasker:
         if kind not in _BLOCK_KEYS:
             return self._unknown_block(block, path)
         known, extra = _split(block, _BLOCK_KEYS[kind])
+        known = self._block_settings(known, path)
         if kind in ("thinking", "redacted_thinking"):
             return self._signed(block, extra, path, role, kind)
         if kind == "text":
@@ -652,6 +637,7 @@ class RequestMasker:
         if kind not in _NESTED_BLOCKS:
             return self._unknown_block(item, path)
         known, extra = _split(item, _BLOCK_KEYS[kind])
+        known = self._block_settings(known, path)
         if kind == "text":
             _no_citations(known, path)
             text = self._text(_str(known.get("text"), f"{path}.text"))
@@ -721,6 +707,14 @@ class RequestMasker:
             raise UnsupportedRequestError(
                 f"{path}.url", "a URL that may hold personal data"
             )
+
+    def _block_settings(self, block: dict[str, Any], path: str) -> dict[str, Any]:
+        """Check a block's settings: its cache breakpoint, and a call's caller."""
+        out = block
+        for key, rule in (("cache_control", _CACHE_CONTROL), ("caller", _CALLER)):
+            if key in block:
+                out = {**out, key: rule(self, block[key], f"{path}.{key}")}
+        return out
 
     # --- names that can't be masked ------------------------------------------
 
@@ -918,26 +912,32 @@ class RequestMasker:
 
     def _safeguards(self, value: Any) -> Any:
         """Auto mode's context for its safety check: local paths, rules, state."""
-        return self._data(value, "safeguards", opaque=False)
+        return self._data(value, "safeguards", opaque="marked")
 
     def _data(
-        self, value: Any, path: str, key: str | None = None, *, opaque: bool = True
+        self, value: Any, path: str, key: str | None = None, *, opaque: str = "mask"
     ) -> Any:
         """Mask a value that is data, such as a tool call's input.
 
         Every string is masked, keys too (unless they are protocol words or
         hold nothing to mask), and ``type`` values like any other string.
-        Two keys that would mask to the same text are refused. Without
-        ``opaque``, a ``data:`` URI or a value under a key such as
-        ``signature`` is refused; other strings, however long, are masked as
-        text (a long path is ordinary in the classifier's context).
+        Two keys that would mask to the same text are refused. ``opaque``
+        says what becomes of opaque strings: ``"mask"`` them as text (a
+        tool's input, the model's own writing); refuse ``"marked"`` ones, a
+        ``data:`` URI or a value under a key such as ``signature`` (the
+        classifier's context, where a long path is ordinary); or refuse
+        ``"all"`` of them (what the user wrote, such as a schema's values).
         """
         if isinstance(value, str):
-            if (
-                not opaque
-                and (_DATA_URI.match(value) or (key and _OPAQUE_KEY.fullmatch(key)))
-                and not self._sent_by_api(value)
-            ):
+            if opaque == "all":
+                refuse = _opaque(key, value)
+            elif opaque == "marked":
+                refuse = bool(
+                    _DATA_URI.match(value) or (key and _OPAQUE_KEY.fullmatch(key))
+                )
+            else:
+                refuse = False
+            if refuse and not self._sent_by_api(value):
                 raise UnsupportedRequestError(path, "opaque data that can't be masked")
             if key == "type" and self._ident_ok(value):
                 return value
@@ -970,6 +970,92 @@ class RequestMasker:
                 )
             return value
         return value
+
+    # --- JSON schemas --------------------------------------------------------
+
+    def _schema(self, schema: Any, path: str) -> Any:
+        """Mask the text of a JSON schema, keeping what makes it a schema.
+
+        Descriptions, titles and example values are masked; the model then
+        writes a placeholder where the schema names a value, and the reply
+        restores it. What can't be masked without breaking the schema
+        (property names, ``required``, ``pattern``, ``$ref``) goes out only
+        if it holds nothing masking would change.
+        """
+        if isinstance(schema, bool):
+            return schema
+        if not isinstance(schema, dict):
+            raise UnsupportedRequestError(path, "not a schema")
+        out: dict[str, Any] = {}
+        for key, value in schema.items():
+            where = f"{path}.{_key(key)}"
+            if key in _SCHEMA_TEXT:
+                out[key] = self._text(_str(value, where))
+            elif key in _SCHEMA_VALUES:
+                out[key] = self._data(value, where, opaque="all")
+            elif key in _SCHEMA_NAMED:
+                if not isinstance(value, dict):
+                    raise UnsupportedRequestError(where, "not an object")
+                for name in value:
+                    self._schema_name(
+                        name, f"{where}.<key>", key == "patternProperties"
+                    )
+                out[key] = {
+                    name: self._schema(item, f"{where}.{_key(name)}")
+                    for name, item in value.items()
+                }
+            elif key == "required":
+                for i, name in enumerate(_list(value, where)):
+                    self._schema_name(_str(name, f"{where}[{i}]"), f"{where}[{i}]")
+                out[key] = value
+            elif key == "pattern":
+                self._schema_name(_str(value, where), where, pattern=True)
+                out[key] = value
+            elif key == "type":
+                kinds = value if isinstance(value, list) else [value]
+                if not kinds or not all(kind in _JSON_TYPES for kind in kinds):
+                    raise UnsupportedRequestError(where, "not a JSON type")
+                out[key] = value
+            elif key in _SCHEMA_REFERENCES:
+                self._schema_name(_str(value, where), where)
+                out[key] = value
+            elif key in _SCHEMA_NUMBERS:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise UnsupportedRequestError(where, "not a number")
+                out[key] = value
+            elif key in _SCHEMA_FLAGS:
+                if not isinstance(value, bool):
+                    raise UnsupportedRequestError(where, "not true or false")
+                out[key] = value
+            elif key in _SUBSCHEMAS:
+                out[key] = (
+                    [
+                        self._schema(item, f"{where}[{i}]")
+                        for i, item in enumerate(value)
+                    ]
+                    if isinstance(value, list)
+                    else self._schema(value, where)
+                )
+            else:
+                self._generic.append(where)
+                if not self._key_ok(key):
+                    raise UnsupportedRequestError(
+                        where, "a field name that may hold personal data"
+                    )
+                out[key] = self._data(value, where, opaque="all")
+        return out
+
+    def _schema_name(self, name: str, path: str, pattern: bool = False) -> None:
+        """Check a name in a schema, which can't be masked without breaking it."""
+        if pattern:
+            # Also as the text the pattern matches: jan\.n@example\.com.
+            # Counts like {1,4096} are limits, not data.
+            counted = _QUANTIFIER.sub("", name)
+            ok = self._clean(counted) and self._clean(_unregex(counted))
+        else:
+            ok = self._ident_ok(name)
+        if not ok:
+            raise UnsupportedRequestError(path, "a name that may hold personal data")
 
     # --- masking text --------------------------------------------------------
 
@@ -1012,6 +1098,301 @@ class RequestMasker:
             self._text(_str(item, f"{path}[{i}]"))
             for i, item in enumerate(_list(value, path))
         ]
+
+
+# --- settings: the request's fields with a shape of their own ---------------------
+
+_Rule = Callable[["RequestMasker", Any, str], Any]
+
+
+def _enum(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A name from a set the API may extend: an identifier holding no data."""
+    if (
+        isinstance(value, str)
+        and _TYPE_NAME.fullmatch(value)
+        and masker._ident_ok(value)
+    ):
+        return value
+    raise UnsupportedRequestError(path, "not one of the setting's names")
+
+
+def _integer(masker: RequestMasker, value: Any, path: str) -> Any:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise UnsupportedRequestError(path, "not a whole number")
+    return value
+
+
+def _number(masker: RequestMasker, value: Any, path: str) -> Any:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise UnsupportedRequestError(path, "not a number")
+    return value
+
+
+def _boolean(masker: RequestMasker, value: Any, path: str) -> Any:
+    if not isinstance(value, bool):
+        raise UnsupportedRequestError(path, "not true or false")
+    return value
+
+
+def _masked_text(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._text(_str(value, path))
+
+
+def _optional(rule: _Rule) -> _Rule:
+    def check(masker: RequestMasker, value: Any, path: str) -> Any:
+        return None if value is None else rule(masker, value, path)
+
+    return check
+
+
+def _list_of(rule: _Rule) -> _Rule:
+    def check(masker: RequestMasker, value: Any, path: str) -> Any:
+        return [
+            rule(masker, item, f"{path}[{i}]")
+            for i, item in enumerate(_list(value, path))
+        ]
+
+    return check
+
+
+def _fields(**rules: _Rule) -> _Rule:
+    """An object whose fields follow ``rules``; others are masked generically."""
+
+    def check(masker: RequestMasker, value: Any, path: str) -> Any:
+        if not isinstance(value, dict):
+            raise UnsupportedRequestError(path, "not an object")
+        known, extra = _split(value, frozenset(rules), keep_type=False)
+        out = {
+            key: rules[key](masker, item, f"{path}.{key}")
+            for key, item in known.items()
+        }
+        return masker._merged(value, out, extra, path)
+
+    return check
+
+
+def _model(masker: RequestMasker, value: Any, path: str) -> Any:
+    model = _str(value, path)
+    if _MODEL.fullmatch(model) and masker._word_clean(model):
+        return model
+    raise UnsupportedRequestError(path, "not a model's name")
+
+
+def _tool_reference(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A tool's name referred to: it can't be masked, so it must hold no data."""
+    masker._tool_name(value, path)
+    return value
+
+
+def _ttl(masker: RequestMasker, value: Any, path: str) -> Any:
+    if isinstance(value, str) and _TTL.fullmatch(value):
+        return value
+    raise UnsupportedRequestError(path, "not a time to live")
+
+
+def _amount(masker: RequestMasker, value: Any, path: str) -> Any:
+    """How much a context edit keeps or clears: ``"all"`` or a counted amount."""
+    if isinstance(value, str):
+        return _enum(masker, value, path)
+    return _fields(type=_enum, value=_integer)(masker, value, path)
+
+
+def _tool_inputs_cleared(masker: RequestMasker, value: Any, path: str) -> Any:
+    if isinstance(value, bool):
+        return value
+    return _list_of(_tool_reference)(masker, value, path)
+
+
+def _schema_rule(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._schema(value, path)
+
+
+def _examples(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._data(value, path)
+
+
+_CACHE_CONTROL = _fields(type=_enum, ttl=_ttl, scope=_enum, evict_on_complete=_boolean)
+
+
+def _call_id(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._tool_id(value, path)
+
+
+_CALLER = _fields(type=_enum, tool_id=_call_id)
+
+# The name of the tool Claude Code makes from `claude -p --json-schema`: its
+# schema is the user's own, so its text is masked.
+STRUCTURED_OUTPUT = "StructuredOutput"
+
+
+def _tool(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A tool the model may call.
+
+    Its name, description and schema go out as they are (they describe the
+    tool, not the user), except the schema of StructuredOutput, which the
+    user wrote.
+    """
+    if not isinstance(value, dict):
+        raise UnsupportedRequestError(path, "not an object")
+    rules: dict[str, _Rule] = {
+        "name": _string,
+        "description": _optional(_string),
+        "input_schema": _as_is,
+        "type": _enum,
+        "cache_control": _CACHE_CONTROL,
+        "strict": _boolean,
+        "defer_loading": _boolean,
+        "eager_input_streaming": _optional(_boolean),
+        "input_examples": _examples,
+        "max_uses": _integer,
+        "max_content_tokens": _integer,
+        "max_tokens": _integer,
+        "display_width_px": _integer,
+        "display_height_px": _integer,
+        "display_number": _optional(_integer),
+        "allowed_domains": _list_of(_masked_text),
+        "blocked_domains": _list_of(_masked_text),
+        "user_location": _fields(
+            type=_enum,
+            city=_optional(_masked_text),
+            region=_optional(_masked_text),
+            country=_optional(_masked_text),
+            timezone=_optional(_masked_text),
+        ),
+        "citations": _fields(enabled=_boolean),
+        "allowed_callers": _list_of(_enum),
+        "model": _model,
+    }
+    if value.get("name") == STRUCTURED_OUTPUT:
+        rules["input_schema"] = _schema_rule
+    return _fields(**rules)(masker, value, path)
+
+
+def _string(masker: RequestMasker, value: Any, path: str) -> Any:
+    return _str(value, path)
+
+
+def _as_is(masker: RequestMasker, value: Any, path: str) -> Any:
+    return value
+
+
+_EDIT = _fields(
+    type=_enum,
+    keep=_amount,
+    trigger=_amount,
+    clear_at_least=_amount,
+    exclude_tools=_list_of(_tool_reference),
+    clear_tool_inputs=_tool_inputs_cleared,
+    pause_after_compaction=_boolean,
+    instructions=_masked_text,
+)
+
+#: The request's settings, by field; anything they hold without a rule is
+#: masked generically.
+_SETTINGS: dict[str, _Rule] = {
+    "model": _model,
+    "max_tokens": _integer,
+    "top_k": _integer,
+    "temperature": _number,
+    "top_p": _number,
+    "stream": _boolean,
+    "service_tier": _enum,
+    "metadata": _fields(user_id=_masked_text),
+    "thinking": _fields(type=_enum, budget_tokens=_integer, display=_enum),
+    "context_management": _fields(edits=_list_of(_EDIT)),
+    "output_config": _fields(
+        effort=_enum,
+        format=_fields(type=_enum, schema=_schema_rule),
+        task_budget=_fields(type=_enum, total=_integer, remaining=_optional(_integer)),
+        timing=_fields(type=_enum, now=_masked_text),
+    ),
+    "tool_choice": _fields(
+        type=_enum, name=_tool_reference, disable_parallel_tool_use=_boolean
+    ),
+    "tools": _list_of(_tool),
+    "cache_control": _CACHE_CONTROL,
+}
+
+# The request's top-level fields that are settings.
+_TOP_LEVEL_PASS = frozenset(_SETTINGS)
+
+_SCHEMA_TEXT = frozenset({"description", "title", "$comment"})
+_SCHEMA_VALUES = frozenset({"enum", "const", "default", "examples"})
+_SCHEMA_NAMED = frozenset(
+    {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+)
+_SCHEMA_REFERENCES = frozenset(
+    {
+        "format",
+        "$ref",
+        "$id",
+        "$schema",
+        "$anchor",
+        "$dynamicRef",
+        "$dynamicAnchor",
+        "contentEncoding",
+        "contentMediaType",
+    }
+)
+_SCHEMA_NUMBERS = frozenset(
+    {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "minProperties",
+        "maxProperties",
+        "minContains",
+        "maxContains",
+    }
+)
+_SCHEMA_FLAGS = frozenset(
+    {"uniqueItems", "readOnly", "writeOnly", "deprecated", "nullable"}
+)
+_SUBSCHEMAS = frozenset(
+    {
+        "items",
+        "prefixItems",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "additionalItems",
+        "contains",
+        "propertyNames",
+        "contentSchema",
+    }
+)
+_JSON_TYPES = frozenset(
+    {"string", "number", "integer", "boolean", "object", "array", "null"}
+)
+_MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,127}", re.ASCII)
+_TTL = re.compile(r"[0-9]{1,5}[smh]", re.ASCII)
+_QUANTIFIER = re.compile(r"\{[0-9]+(?:,[0-9]*)?\}")
+
+
+def _unregex(pattern: str) -> str:
+    r"""The text a regular expression spells out, roughly: its escapes undone.
+
+    ``jan\.n@example\.com`` gives ``jan.n@example.com``; a class such as
+    ``\s`` or ``\d`` becomes a space.
+    """
+    text = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m[1], 16)), pattern)
+    text = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), text)
+    text = re.sub(r"\\[bBAzZG]", "", text)
+    text = re.sub(r"\\[sSdDwW](?:[*+?]|\{[0-9]+(?:,[0-9]*)?\})?", " ", text)
+    return re.sub(r"\\(.)", r"\1", text)
 
 
 def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:

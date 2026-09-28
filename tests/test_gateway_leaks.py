@@ -153,6 +153,97 @@ def contexts(slot):
             "safeguards": [{"type": "dangerous_tool_use", "classifier_context": slot}],
         },
     )
+    tool = {"name": "Read", "description": "d", "input_schema": {}}
+    structured = {"name": "StructuredOutput", "description": "d"}
+    yield (
+        "metadata_key",
+        {"messages": [user_text], "metadata": {"user_id": "u", "k": slot}},
+    )
+    yield (
+        "thinking_key",
+        {"messages": [user_text], "thinking": {"type": "adaptive", "k": slot}},
+    )
+    yield (
+        "output_config_key",
+        {"messages": [user_text], "output_config": {"effort": "high", "k": slot}},
+    )
+    yield (
+        "format_key",
+        {
+            "messages": [user_text],
+            "output_config": {
+                "format": {"type": "json_schema", "schema": {}, "k": slot}
+            },
+        },
+    )
+    yield (
+        "tool_choice_key",
+        {
+            "messages": [user_text],
+            "tools": [tool],
+            "tool_choice": {"type": "auto", "k": slot},
+        },
+    )
+    yield (
+        "edit_key",
+        {
+            "messages": [user_text],
+            "context_management": {
+                "edits": [{"type": "clear_thinking_20251015", "k": slot}]
+            },
+        },
+    )
+    yield (
+        "cache_control_key",
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "x",
+                            "cache_control": {"type": "ephemeral", "k": slot},
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    yield (
+        "caller_key",
+        {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_01",
+                            "name": "Read",
+                            "input": {},
+                            "caller": {"type": "direct", "k": slot},
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    yield "tool_entry_key", {"messages": [user_text], "tools": [{**tool, "k": slot}]}
+    yield (
+        "schema_keyword",
+        {
+            "messages": [user_text],
+            "tools": [{**structured, "input_schema": {"type": "object", "x-k": slot}}],
+        },
+    )
+    yield (
+        "schema_enum",
+        {
+            "messages": [user_text],
+            "tools": [{**structured, "input_schema": {"enum": [slot]}}],
+        },
+    )
     yield (
         "signed_thinking",
         {

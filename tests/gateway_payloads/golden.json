@@ -2232,14 +2232,14 @@
     {
      "content": [
       {
-       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "text": "<system-reminder>[EMAIL_2]</system-reminder>",
        "type": "text"
       },
       {
        "cache_control": {
         "type": "ephemeral"
        },
-       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "text": "My name is [PERSON_1]; mail [EMAIL_3] or call [PHONE_1].",
        "type": "text"
       }
      ],
@@ -2274,7 +2274,7 @@
     {
      "content": [
       {
-       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_3]\nPhone: [PHONE_1]\n",
        "tool_use_id": "toolu_01FixtureRead00000000000",
        "type": "tool_result"
       }
@@ -2305,7 +2305,7 @@
       {
        "content": [
         {
-         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_3]",
          "type": "text"
         },
         {
@@ -2329,7 +2329,7 @@
      "role": "user"
     },
     {
-     "content": "Reminder: [EMAIL_2] is the contact.",
+     "content": "Reminder: [EMAIL_3] is the contact.",
      "role": "system"
     }
    ],
@@ -2355,7 +2355,7 @@
      "cache_control": {
       "type": "ephemeral"
      },
-     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "text": "Working directory: /work\nThe user is [EMAIL_2].",
      "type": "text"
     },
     {
@@ -2403,7 +2403,7 @@
      "input_schema": {
       "properties": {
        "email": {
-        "description": "The contact email, for example ada.q@example.com",
+        "description": "The contact email, for example [EMAIL_1]",
         "type": "string"
        }
       },
@@ -2432,14 +2432,14 @@
     {
      "content": [
       {
-       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "text": "<system-reminder>[EMAIL_2]</system-reminder>",
        "type": "text"
       },
       {
        "cache_control": {
         "type": "ephemeral"
        },
-       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "text": "My name is [PERSON_1]; mail [EMAIL_3] or call [PHONE_1].",
        "type": "text"
       }
      ],
@@ -2474,7 +2474,7 @@
     {
      "content": [
       {
-       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_3]\nPhone: [PHONE_1]\n",
        "tool_use_id": "toolu_01FixtureRead00000000000",
        "type": "tool_result"
       }
@@ -2505,7 +2505,7 @@
       {
        "content": [
         {
-         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_3]",
          "type": "text"
         },
         {
@@ -2529,7 +2529,7 @@
      "role": "user"
     },
     {
-     "content": "Reminder: [EMAIL_2] is the contact.",
+     "content": "Reminder: [EMAIL_3] is the contact.",
      "role": "system"
     }
    ],
@@ -2555,7 +2555,7 @@
      "cache_control": {
       "type": "ephemeral"
      },
-     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "text": "Working directory: /work\nThe user is [EMAIL_2].",
      "type": "text"
     },
     {
@@ -2603,7 +2603,7 @@
      "input_schema": {
       "properties": {
        "email": {
-        "description": "The contact email, for example ada.q@example.com",
+        "description": "The contact email, for example [EMAIL_1]",
         "type": "string"
        }
       },

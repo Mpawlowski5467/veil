@@ -100,7 +100,7 @@ What it doesn't cover:
 
 - **Personal data veil doesn't detect** (see [Limitations](#limitations)), such as names you haven't registered, street addresses, and local numbers without an area code like `555-0100`.
 - **Images and PDFs** are sent as they are.
-- **Tool definitions**, including the descriptions MCP servers give their tools, and the results of Anthropic's server-side web search.
+- **Tool definitions**, including the descriptions MCP servers give their tools, and the results of Anthropic's server-side web search. The one exception is the schema you give `claude -p --json-schema`: its descriptions and example values are masked (the model writes placeholders, and the reply is restored before Claude Code checks it against your schema); a property name or `pattern` holding personal data can't be masked, so the request is refused.
 - **Who you are.** Your login tells Anthropic which account is calling.
 - **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
 - **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.

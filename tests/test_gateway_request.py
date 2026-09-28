@@ -1327,3 +1327,22 @@ class TestBillingLine:
             assert out[0]["text"] == (
                 f"x-anthropic-billing-header: cc_version={masked}; cc_entrypoint=cli;"
             )
+
+
+def test_the_protocol_words_cover_the_census():
+    """Every key and type Claude Code was seen sending is a protocol word."""
+    import re
+    from pathlib import Path
+
+    from live.harness import assert_fictional
+    from veil.gateway.vocab import WORDS
+
+    census_file = Path(__file__).parent / "gateway_payloads" / "request_census.json"
+    census = json.loads(census_file.read_text())["POST /v1/messages"]
+    seen = set()
+    for path, info in census.items():
+        seen |= {s for s in re.split(r"\.|\[\]", path) if re.fullmatch(r"\w+", s)}
+        seen |= {kind[5:] for kind in info["kinds"] if kind.startswith("type=")}
+    assert seen <= WORDS
+    assert all(re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$-]{0,63}", word) for word in WORDS)
+    assert_fictional(" ".join(sorted(WORDS)))
