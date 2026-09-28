@@ -675,6 +675,164 @@ class TestLedger:
         assert canonical(10**400) == str(10**400)
 
 
+PHONE = "(555) 555-0100"
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def opus_body():
+    """A request shaped like Claude Code's on Opus 5.5 (Claude Code 2.1.283).
+
+    Claude Code sets the effort per turn, in the output_config of a system
+    message in messages[]: a reminder after a user turn, whose text is a
+    text block with a cache marker while it is the last message and plain
+    text after that, or a message of its own with no content.
+    """
+    return {
+        "model": "claude-opus-5-5",
+        "max_tokens": 64000,
+        "stream": True,
+        "thinking": {"type": "adaptive", "display": "omitted"},
+        "output_config": {"effort": "medium"},
+        "context_management": {
+            "edits": [{"type": "clear_thinking_20251015", "keep": "all"}]
+        },
+        "system": [{"type": "text", "text": "You are an agent."}],
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": f"Email {NAME} at {EMAIL}."}],
+            },
+            {
+                "role": "system",
+                "content": f"# Environment\nThe user is {NAME}, on {PHONE}.",
+                "output_config": {"effort": "medium"},
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "", "signature": "c2lnbmVk"},
+                    {"type": "text", "text": "Sent."},
+                ],
+            },
+            {"role": "user", "content": f"Now call {PHONE}."},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{NAME} prefers mornings.",
+                        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                    }
+                ],
+                "output_config": {"effort": "high"},
+            },
+        ],
+    }
+
+
+def with_output_config(value, role="system"):
+    """A body whose second message has ``output_config`` set to ``value``."""
+    return {
+        "messages": [
+            {"role": "user", "content": "x"},
+            {"role": role, "content": [], "output_config": value},
+        ]
+    }
+
+
+class TestPerTurnEffort:
+    def test_the_effort_goes_out_as_it_is_and_the_text_masked(self):
+        masker, _, _ = make_masker(note=None)
+        body = opus_body()
+        out = masker.mask(body)
+        messages = out["messages"]
+        assert messages[1] == {
+            "role": "system",
+            "content": "# Environment\nThe user is [PERSON_1], on [PHONE_1].",
+            "output_config": {"effort": "medium"},
+        }
+        assert messages[3]["content"] == "Now call [PHONE_1]."
+        assert messages[4] == {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "[PERSON_1] prefers mornings.",
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                }
+            ],
+            "output_config": {"effort": "high"},
+        }
+        for key in ("model", "thinking", "output_config"):
+            assert out[key] == body[key]
+        sent = json.dumps(out)
+        for value in (NAME, EMAIL, PHONE):
+            assert value not in sent, value
+
+    def test_the_body_is_left_alone_and_masks_the_same_way_again(self):
+        masker, _, _ = make_masker()
+        body = opus_body()
+        first = masker.mask(body)
+        assert body == opus_body()
+        assert masker.mask(opus_body()) == first
+
+    @pytest.mark.parametrize("level", EFFORT_LEVELS)
+    def test_every_effort_level_passes(self, level):
+        masker, _, _ = make_masker(note=None)
+        out = masker.mask(with_output_config({"effort": level}))
+        assert out["messages"][1] == {
+            "role": "system",
+            "content": [],
+            "output_config": {"effort": level},
+        }
+
+    @pytest.mark.parametrize(
+        "effort",
+        [
+            "ultra",
+            "HIGH",
+            " high",
+            "high\n",
+            "jan_nowak",
+            NAME,
+            "",
+            True,
+            3,
+            1.5,
+            float("nan"),
+            None,
+            ["high"],
+            {"level": "high"},
+        ],
+    )
+    def test_only_an_effort_level_is_sent(self, effort):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(with_output_config({"effort": effort}))
+        assert str(info.value) == (
+            "messages[1].output_config.effort: not an effort level"
+        )
+
+    def test_only_a_refused_output_config_is_named_as_one(self):
+        # Claude Code (2.1.283) sends the conversation again without its
+        # per-turn settings when a refusal names output_config, so the
+        # session goes on. A refusal of anything else must not name it.
+        masker, _, _ = make_masker()
+        for body in (
+            with_output_config({"effort": "ultra"}),
+            with_output_config({"format": {"type": "json_schema"}}),
+            with_output_config({"effort": "high"}, role="user"),
+            with_output_config(None),
+        ):
+            with pytest.raises(UnsupportedRequestError) as info:
+                masker.mask(body)
+            assert "output_config" in str(info.value)
+        clear_at = {"role": "system", "content": "x", "clear_at": "next_user_message"}
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask({"messages": [clear_at]})
+        assert "output_config" not in str(info.value)
+
+
 BAD_BODIES = [
     (
         {
@@ -693,9 +851,54 @@ BAD_BODIES = [
         {"messages": [{"role": "tool", "content": "x"}]},
         "messages[0].role: unknown role",
     ),
+    ({"messages": ["x"]}, "messages[0]: not an object"),
     (
         {"messages": [{"role": "user", "content": "x", "name": "n"}]},
-        "messages[0]: a message has only role and content",
+        "messages[0].name: unknown field",
+    ),
+    (
+        {"messages": [{"role": "user", "content": "x", EMAIL: 1}]},
+        "messages[0].<key>: unknown field",
+    ),
+    (
+        {
+            "messages": [
+                {"role": "system", "content": "x", "clear_at": "next_user_message"}
+            ]
+        },
+        "messages[0].clear_at: unknown field",
+    ),
+    (
+        with_output_config({"effort": "high"}, role="user"),
+        "messages[1].output_config: only a system message has output_config",
+    ),
+    (
+        with_output_config({"effort": "high"}, role="assistant"),
+        "messages[1].output_config: only a system message has output_config",
+    ),
+    (with_output_config(None), "messages[1].output_config: not an object"),
+    (with_output_config(["high"]), "messages[1].output_config: not an object"),
+    (with_output_config("high"), "messages[1].output_config: not an object"),
+    (with_output_config({}), "messages[1].output_config.effort: not an effort level"),
+    (
+        with_output_config(
+            {"effort": "high", "timing": {"type": "now", "now": "2026-09-27T12:45"}}
+        ),
+        "messages[1].output_config.timing: unknown field",
+    ),
+    (
+        with_output_config(
+            {"format": {"type": "json_schema", "schema": {"description": EMAIL}}}
+        ),
+        "messages[1].output_config.format: unknown field",
+    ),
+    (
+        with_output_config({"effort": "high", EMAIL: 1}),
+        "messages[1].output_config.<key>: unknown field",
+    ),
+    (
+        {"messages": [{"content": [], "output_config": {"effort": "high"}}]},
+        "messages[0].role: unknown role",
     ),
     (
         {
@@ -845,6 +1048,17 @@ def test_every_recorded_field_and_block_type_has_a_rule():
         path[2:] for path in census if path.count(".") == 1 and "[" not in path
     }
     assert top_level <= handled
+    message_keys = {
+        path.split(".")[2].removesuffix("[]")
+        for path in census
+        if path.startswith("$.messages[].") and path.count(".") == 2
+    }
+    assert message_keys <= request._MESSAGE_KEYS
+    assert {
+        path.split(".")[3].removesuffix("[]")
+        for path in census
+        if path.startswith("$.messages[].output_config.")
+    } <= {"effort"}
 
     def types_at(path):
         return {kind[5:] for kind in census[path]["kinds"] if kind.startswith("type=")}
