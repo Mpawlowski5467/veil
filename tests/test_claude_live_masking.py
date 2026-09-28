@@ -38,6 +38,9 @@ NEW_PHONE = "(555) 555-0199"
 OTHER_NAME = "Ada Quill"
 OTHER_EMAIL = "ada.q@example.com"
 REAL_VALUES = (EMAIL, NAME, PHONE, NEW_PHONE, OTHER_NAME, OTHER_EMAIL)
+# The models Claude Code (2.1.283) sets the effort for turn by turn.
+PER_TURN_EFFORT = ("claude-opus-5-5", "claude-fable-5-1")
+EFFORT_LEVELS = {"low", "medium", "high", "xhigh", "max"}
 NOTES = f"Name: {NAME}\nEmail: {EMAIL}\nPhone: {PHONE}\n"
 CARD = f"Contact {OTHER_NAME} at {OTHER_EMAIL} about the invoice.\n"
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -84,14 +87,47 @@ def assert_nothing_real_left(recorder):
     return sent
 
 
-def strip_cache_markers(value):
-    if isinstance(value, dict):
-        return {
-            k: strip_cache_markers(v) for k, v in value.items() if k != "cache_control"
-        }
-    if isinstance(value, list):
-        return [strip_cache_markers(v) for v in value]
-    return value
+def assert_per_turn_effort(recorder):
+    """Check that the effort Claude Code sets per turn reached the API."""
+    for body in sent_bodies(recorder):
+        settings = [
+            (m["role"], m["output_config"])
+            for m in body["messages"]
+            if "output_config" in m
+        ]
+        for role, setting in settings:
+            assert role == "system"
+            assert set(setting) == {"effort"}
+            assert setting["effort"] in EFFORT_LEVELS
+        if body["model"].startswith(PER_TURN_EFFORT):
+            # After a refusal that names output_config, Claude Code sends
+            # the conversation again without them: none would be here.
+            assert settings, body["model"]
+
+
+def as_the_api_reads(messages):
+    """Messages without cache markers, with text content as a text block.
+
+    Claude Code marks the last message for caching, which turns a system
+    message's text into a text block, and writes it as text again once a
+    later message follows (as the <total_tokens> reminder shows).
+    """
+
+    def strip(value):
+        if isinstance(value, dict):
+            return {k: strip(v) for k, v in value.items() if k != "cache_control"}
+        if isinstance(value, list):
+            return [strip(v) for v in value]
+        return value
+
+    return [
+        strip(
+            {**m, "content": [{"type": "text", "text": m["content"]}]}
+            if isinstance(m["content"], str)
+            else m
+        )
+        for m in messages
+    ]
 
 
 # --- A whole session ----------------------------------------------------------
@@ -160,6 +196,11 @@ def test_nothing_real_left_the_machine(session):
     # The failed command's output and the @-mentioned file went out masked.
     assert "Exit code 1" in sent
     assert re.search(r"Contact \[PERSON_\d+\] at \[EMAIL_\d+\] about", sent)
+
+
+def test_the_per_turn_effort_reached_the_api(session):
+    _, _, recorder = session
+    assert_per_turn_effort(recorder)
 
 
 def test_claude_code_worked_with_the_real_values(session):
@@ -311,5 +352,6 @@ def test_a_resumed_session_masks_its_history_the_same_way(resumed):
     after = sent_bodies(recorder)[0]["messages"]
     # A new gateway process, from the files on disk: the history the model
     # saw before goes out again exactly as it was.
-    assert strip_cache_markers(after[: len(before)]) == strip_cache_markers(before)
+    assert as_the_api_reads(after[: len(before)]) == as_the_api_reads(before)
     assert_nothing_real_left(recorder)
+    assert_per_turn_effort(recorder)
