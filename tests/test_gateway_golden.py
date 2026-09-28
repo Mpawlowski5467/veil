@@ -20,7 +20,9 @@ from veil.gateway import MemoryLedger, RequestMasker, UnsupportedRequestError
 
 GOLDEN = Path(__file__).parent / "gateway_payloads" / "golden.json"
 WRITE = os.environ.get("VEIL_WRITE_GOLDEN") == "1"
-CASES = [(body, registered) for body in bodies.BODIES for registered in bodies.REGISTERED]
+CASES = [
+    (body, registered) for body in bodies.BODIES for registered in bodies.REGISTERED
+]
 
 
 def masked(body_name, registered_name):
@@ -60,7 +62,9 @@ def test_golden_file_covers_every_case():
 @pytest.mark.parametrize(("body_name", "registered_name"), CASES)
 def test_masking_matches_the_golden_file(body_name, registered_name):
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
-    assert masked(body_name, registered_name) == golden[f"{body_name}/{registered_name}"]
+    assert (
+        masked(body_name, registered_name) == golden[f"{body_name}/{registered_name}"]
+    )
 
 
 def test_golden_file_is_fictional():

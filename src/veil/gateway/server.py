@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import codecs
 import contextlib
+import hashlib
 import hmac
 import http.client
 import json
+import math
 import re
 import secrets
+import sqlite3
 import threading
 import time
 from collections import OrderedDict
@@ -27,9 +30,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
+from . import compat
+from .config import APP
 from .hooks import PROOF_PATH, proof
 from .ledger import Ledger, MemoryLedger
-from .request import RequestMasker, UnsupportedRequestError
+from .request import RequestMasker, UnsupportedRequestError, billing_version
 from .response import ResponseRestorer, restore_message
 
 #: The API the gateway forwards to.
@@ -53,6 +58,20 @@ _ROUTES = {
 _MASKED_PATHS = {_MESSAGES, _COUNT_TOKENS}
 # The largest request body read (a long conversation with images is a few MB).
 _MAX_BODY = 256 * 1024 * 1024
+
+# Claude Code (2.1.283) treats an error with this code as final for the
+# request: it doesn't send it again, on another model or without a feature.
+_FINAL = {"error_code": "dlp_request_denied"}
+# Problems Claude Code can get past by sending the request again without the
+# feature they are in: its per-turn effort, or auto mode's safeguards. A
+# plain 400 that names the feature lets it do that; any other refusal is
+# final, so it doesn't drop an unrelated feature for nothing.
+_DROPPABLE = re.compile(
+    r"(?:safeguards|messages\[[0-9]+\]\.output_config)(?![A-Za-z0-9_])"
+)
+_INDEX = re.compile(r"\[[0-9]+\]")
+# A path shown in a 404: an API path's shape, nothing that could hold data.
+_SHOWN_PATH = re.compile(r"/v1/[a-z_]{1,32}(?:/[a-z_]{1,32}){0,2}")
 
 # Headers about one hop of the connection, or that the gateway sets itself.
 _HOP_HEADERS = frozenset(
@@ -187,6 +206,55 @@ class Sessions:
         self.close()
 
 
+class Refusals:
+    """What the gateway refused, for a summary when the client exits.
+
+    Only paths and problems, never a value; a request sent again counts once.
+
+    Attributes:
+        client: The Claude Code version of the last refused request, if known.
+    """
+
+    def __init__(self, limit: int = 200) -> None:
+        """Start with nothing refused; keep at most ``limit`` problems."""
+        self._lock = threading.Lock()
+        self._limit = limit
+        self._bodies: set[str] = set()
+        self._groups: dict[tuple[str, str], list[Any]] = {}
+        self.client: str | None = None
+
+    def add(
+        self, error: UnsupportedRequestError, body: bytes, client: str | None
+    ) -> None:
+        """Count a refused request and its problems."""
+        digest = hashlib.sha256(body).hexdigest()
+        with self._lock:
+            self.client = client or self.client
+            if digest in self._bodies:
+                return
+            self._bodies.add(digest)
+            for path, problem, count in error.problems:
+                key = (_INDEX.sub("[]", path), problem)
+                if key in self._groups:
+                    self._groups[key][2] += count
+                elif len(self._groups) < self._limit:
+                    self._groups[key] = [path, problem, count]
+
+    @property
+    def requests(self) -> int:
+        """How many different requests were refused."""
+        with self._lock:
+            return len(self._bodies)
+
+    def summary(self) -> list[str]:
+        """Lines to print once the client has exited; none if nothing was refused."""
+        with self._lock:
+            if not self._bodies:
+                return []
+            problems = [(p, w, n) for p, w, n in self._groups.values()]
+            return compat.summary(len(self._bodies), problems, self.client)
+
+
 class Gateway:
     """A running gateway; use as a context manager, or call `close`.
 
@@ -199,6 +267,9 @@ class Gateway:
         secure: Use HTTPS to the upstream. Only tests turn it off.
         keepalive: Seconds of silence after which a comment line is sent to
             the client while a tool call is held back.
+
+    Attributes:
+        refusals: The requests refused so far, for a summary.
     """
 
     def __init__(
@@ -219,6 +290,7 @@ class Gateway:
         self.secure = secure
         self.keepalive = keepalive
         self.timeout = timeout
+        self.refusals = Refusals()
         self._server = _QuietServer(("127.0.0.1", port), _handler(self))
         self._server.daemon_threads = True
         self._thread = threading.Thread(
@@ -264,14 +336,29 @@ class _QuietServer(ThreadingHTTPServer):
 
 
 class _RefusedError(Exception):
+    """A request answered with an error.
+
+    ``retry`` leaves it to the client's usual retries (a failure on the way);
+    otherwise it is ``final``: Claude Code is told not to send it again, on
+    another model or without some feature, unless ``final`` is off for a
+    refusal it can get past by dropping a feature.
+    """
+
     def __init__(
-        self, status: int, kind: str, message: str, retry: bool = False
+        self,
+        status: int,
+        kind: str,
+        message: str,
+        *,
+        retry: bool = False,
+        final: bool = True,
     ) -> None:
         super().__init__(message)
         self.status = status
         self.kind = kind
         self.message = message
         self.retry = retry
+        self.final = final and not retry
 
 
 def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
@@ -288,6 +375,8 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         def _serve(self) -> None:
             self._started = False  # whether a response has begun
             self._chunked = False  # whether it is a chunked stream
+            self._forwarded = False  # whether the request went to the API
+            self._client = compat.from_user_agent(self.headers.get("User-Agent"))
             try:
                 address = urlsplit(self.path)
                 path = address.path
@@ -297,8 +386,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     return
                 self._check_access()
                 if (self.command, path) not in _ROUTES:
+                    shown = path if _SHOWN_PATH.fullmatch(path) else "this path"
                     raise _RefusedError(
-                        404, "not_found_error", "not served by the gateway"
+                        404,
+                        "not_found_error",
+                        f"{self.command} {shown} isn't served by the gateway, so "
+                        f"nothing was sent. {compat.version_advice(self._client)}",
                     )
                 body = self._read_body()
                 if path in _MASKED_PATHS:
@@ -306,12 +399,16 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 else:
                     self._forward(body, None)
             except _RefusedError as refusal:
-                self._fail(refusal.status, refusal.kind, refusal.message, refusal.retry)
+                self._fail(refusal)
             except (BrokenPipeError, ConnectionResetError):
                 self.close_connection = True  # the client went away
             except Exception:
                 # Never forwarded and never printed: the details may hold data.
-                self._fail(500, "api_error", "the gateway failed", retry=True)
+                # A bug fails the same way every time: not worth a retry.
+                message = compat.failure_message(
+                    "failed", self._client, sent=self._forwarded
+                )
+                self._fail(_RefusedError(500, "api_error", message))
 
         def _prove(self, query: str) -> None:
             """Answer the hooks' check that this is the right gateway.
@@ -377,25 +474,47 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             session_id = self.headers.get(SESSION_HEADER)
             if not session_id:
                 raise _RefusedError(
-                    400, "invalid_request_error", f"send {SESSION_HEADER}"
+                    400,
+                    "invalid_request_error",
+                    f"the request has no {SESSION_HEADER}, so nothing was sent. "
+                    + compat.version_advice(self._client),
                 )
             try:
-                request = json.loads(body)
-            except ValueError:
+                request = json.loads(
+                    body, parse_constant=_no_constant, parse_float=_finite
+                )
+            except (ValueError, RecursionError):
                 raise _RefusedError(
-                    400, "invalid_request_error", "the body isn't JSON"
+                    400,
+                    "invalid_request_error",
+                    "the body isn't JSON, or is nested too deeply",
                 ) from None
-            with gateway.sessions.use(session_id) as session:
+            client = self._client or billing_version(request)
+            with contextlib.ExitStack() as stack:
                 try:
+                    session = stack.enter_context(gateway.sessions.use(session_id))
                     with session.lock:
                         masked = session.masker.mask(request)
                 except UnsupportedRequestError as error:
+                    refusal = _refusal(error, client)
+                    if refusal.final:
+                        # Only these are lost: the rest are sent again,
+                        # without the feature, by the client.
+                        gateway.refusals.add(error, body, client)
+                    raise refusal from None
+                except Exception as error:
+                    if _busy(error):
+                        # Another process holds the data folder: worth a retry.
+                        raise _RefusedError(
+                            500,
+                            "api_error",
+                            "its data folder is busy, so nothing was sent",
+                            retry=True,
+                        ) from None
                     raise _RefusedError(
-                        400, "invalid_request_error", f"the gateway can't mask {error}"
-                    ) from None
-                except Exception:
-                    raise _RefusedError(
-                        500, "api_error", "the gateway failed to mask", retry=True
+                        500,
+                        "api_error",
+                        compat.failure_message("failed while masking", client),
                     ) from None
                 self._forward(
                     json.dumps(masked).encode(), session if path == _MESSAGES else None
@@ -411,6 +530,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             headers["Accept-Encoding"] = "identity"
             headers["Content-Length"] = str(len(body))
             upstream = gateway._connect()
+            self._forwarded = True
             try:
                 try:
                     upstream.request(
@@ -463,10 +583,17 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 except ValueError:
                     message = None
                 if message is not None:
-                    with session.lock:
-                        restored = restore_message(
-                            session.shield, session.ledger, message
+                    try:
+                        with session.lock:
+                            restored = restore_message(
+                                session.shield, session.ledger, message
+                            )
+                    except Exception:
+                        # The model already ran: don't have it run again.
+                        text = compat.failure_message(
+                            "failed while restoring the reply", self._client, sent=True
                         )
+                        raise _RefusedError(500, "api_error", text) from None
                     data = json.dumps(restored).encode()
             # Restored before anything is sent, so a failure is a clean error.
             self._send_head(response, chunked=False, length=len(data))
@@ -524,36 +651,49 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
 
-        def _end_stream_with_error(self, message: str) -> None:
-            error = {
-                "type": "error",
-                "error": {"type": "api_error", "message": message},
-            }
+        def _end_stream_with_error(self, message: str, *, final: bool = False) -> None:
+            error: dict[str, Any] = {"type": "api_error", "message": _prefixed(message)}
+            if final:
+                error["details"] = _FINAL
+            error = {"type": "error", "error": error}
             self._chunk(f"event: error\ndata: {json.dumps(error)}\n\n")
             self._end_chunks()
             self.close_connection = True
 
-        def _fail(self, status: int, kind: str, message: str, retry: bool) -> None:
+        def _fail(self, refusal: _RefusedError) -> None:
             """Report a failure: as a response, or, once one has begun, ending it."""
             self.close_connection = True
             if not self._started:
-                self._error(status, kind, message, retry=retry)
+                self._error(
+                    refusal.status,
+                    refusal.kind,
+                    refusal.message,
+                    retry=refusal.retry,
+                    final=refusal.final,
+                )
                 return
             if self._chunked:
                 with contextlib.suppress(OSError):
-                    self._end_stream_with_error(message)
+                    self._end_stream_with_error(refusal.message, final=refusal.final)
             # A response with a length already on its way can't be changed:
             # closing the connection makes the client see it as cut off.
 
         def _error(
-            self, status: int, kind: str, message: str, *, retry: bool = False
+            self,
+            status: int,
+            kind: str,
+            message: str,
+            *,
+            retry: bool = False,
+            final: bool = True,
         ) -> None:
             # The request's body may be unread: never read what follows as a
             # request of its own.
             self.close_connection = True
-            data = json.dumps(
-                {"type": "error", "error": {"type": kind, "message": message}}
-            ).encode()
+            error: dict[str, Any] = {"type": kind, "message": _prefixed(message)}
+            if final and not retry:
+                error["details"] = _FINAL
+            data = json.dumps({"type": "error", "error": error}).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -576,3 +716,38 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         do_GET = do_POST = do_HEAD = do_PUT = do_PATCH = do_DELETE = _serve  # noqa: N815
 
     return Handler
+
+
+def _prefixed(message: str) -> str:
+    """Every message the gateway writes starts with the package's name."""
+    return message if message.startswith(f"{APP}:") else f"{APP}: {message}"
+
+
+def _refusal(error: UnsupportedRequestError, client: str | None) -> _RefusedError:
+    """The response for a request that can't be masked."""
+    message = compat.refusal_message(error.problems, client)
+    if all(_DROPPABLE.match(path) for path, _, _ in error.problems):
+        # Claude Code sends it again without that feature.
+        return _RefusedError(400, "invalid_request_error", message, final=False)
+    return _RefusedError(400, "policy_blocked", message)
+
+
+def _busy(error: Exception) -> bool:
+    """Whether a failure is another process holding the data folder."""
+    text = str(error).lower()
+    return isinstance(error, sqlite3.OperationalError) and (
+        "locked" in text or "busy" in text
+    )
+
+
+def _no_constant(name: str) -> Any:
+    """Refuse NaN and Infinity, which aren't JSON and can't be sent on."""
+    raise ValueError(f"{name} isn't a JSON number")
+
+
+def _finite(text: str) -> float:
+    """Read a JSON number, refusing one too large to be sent back as JSON."""
+    number = float(text)
+    if not math.isfinite(number):
+        raise ValueError("the number is too large")
+    return number

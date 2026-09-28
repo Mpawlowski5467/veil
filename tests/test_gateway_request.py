@@ -710,7 +710,7 @@ BAD_BODIES = [
     ({"messages": {"role": "user"}}, "messages: not a list"),
     (
         {"messages": [{"role": "tool", "content": "x"}]},
-        "messages[0].role: unknown role",
+        "messages[0].role: unknown role 'tool'",
     ),
     ({"messages": ["x"]}, "messages[0]: not an object"),
     (
@@ -767,7 +767,7 @@ BAD_BODIES = [
                 {"role": "user", "content": [{"type": "server_tool_use", "id": "s"}]}
             ]
         },
-        "messages[0].content[0].type: unknown block type",
+        "messages[0].content[0].type: unknown block type 'server_tool_use'",
     ),
     (
         {
@@ -809,7 +809,7 @@ BAD_BODIES = [
                 }
             ]
         },
-        "messages[0].content[0].source.type: unknown source type",
+        "messages[0].content[0].source.type: unknown source type 'file'",
     ),
     (
         {
@@ -825,7 +825,7 @@ BAD_BODIES = [
                 }
             ]
         },
-        "messages[0].content[0].source.type: unknown document source",
+        "messages[0].content[0].source.type: unknown document source 'content'",
     ),
     (
         {
@@ -842,11 +842,11 @@ BAD_BODIES = [
                 }
             ]
         },
-        "messages[0].content[0].content[0].type: unknown block type",
+        "messages[0].content[0].content[0].type: unknown block type 'tool_use'",
     ),
     (
         {"system": [{"type": "image", "source": {}}], "messages": []},
-        "system[0].type: unknown block type",
+        "system[0].type: unknown block type 'image'",
     ),
     ({"messages": [], "stop_sequences": [1]}, "stop_sequences[0]: not a string"),
 ]
@@ -921,3 +921,179 @@ def test_every_recorded_field_and_block_type_has_a_rule():
                 any(key in keys for keys in request._BLOCK_KEYS.values())
                 or key == "type"
             )
+
+
+class TestEveryProblem:
+    """A refusal names every problem, so one update fixes them all."""
+
+    def body(self):
+        return {
+            "brand_new_field": 1,
+            "messages": [
+                {"role": "user", "content": [{"type": "future_block"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+                {"role": "user", "content": [{"type": "future_block"}]},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "x", "a": 1, "b": 2}],
+                },
+                {"role": ["user"], "content": "x"},
+            ],
+            "system": [{"type": "image"}],
+        }
+
+    def test_problems_are_collected_and_grouped(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(self.body())
+        error = info.value
+        assert error.problems == (
+            ("brand_new_field", "unknown field", 1),
+            ("messages[0].content[0].type", "unknown block type 'future_block'", 2),
+            ("messages[3].content[0].a", "unknown field", 1),
+            ("messages[3].content[0].b", "unknown field", 1),
+            ("messages[4].role", "unknown role", 1),
+            ("system[0].type", "unknown block type 'image'", 1),
+        )
+        assert error.total == 7
+        assert (error.path, error.problem) == ("brand_new_field", "unknown field")
+        assert str(error).startswith("brand_new_field: unknown field; ")
+        assert "unknown block type 'future_block' (2 times)" in str(error)
+
+    def test_one_problem_reads_as_before(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask({"messages": [], "prompt": "x"})
+        assert str(info.value) == "prompt: unknown field"
+        assert info.value.problems == (("prompt", "unknown field", 1),)
+
+    def test_a_refused_request_leaves_nothing_behind_for_the_next(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError):
+            masker.mask(self.body())
+        # The next request is judged on its own.
+        assert masker.mask({"messages": [{"role": "user", "content": "hi"}]})
+
+    def test_a_name_holding_data_is_never_shown(self):
+        shield = make_shield()
+        shield.add_entity("ada_quill", "USER")
+        masker = RequestMasker(
+            shield, MemoryLedger(), registered={"ada_quill": "USER", NAME: "PERSON"}
+        )
+        body = {
+            "ada_quill": 1,
+            "messages": [
+                {"role": "user", "content": [{"type": "ada_quill"}]},
+                {"role": "ada_quill", "content": "x"},
+                {"role": "user", "content": [{"type": "text", "text": "x", EMAIL: 1}]},
+            ],
+        }
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        text = str(info.value)
+        assert "ada_quill" not in text
+        assert EMAIL not in text
+        assert info.value.problems == (
+            ("<key>", "unknown field", 1),
+            ("messages[0].content[0].type", "unknown block type", 1),
+            ("messages[1].role", "unknown role", 1),
+            ("messages[2].content[0].<key>", "unknown field", 1),
+        )
+
+
+class TestNamesAreCheckedLast:
+    def test_a_key_holding_a_value_seen_later_is_not_shown(self):
+        # A card glued to a letter: only the known-value pass finds it, and
+        # only once the card itself has been seen, later in the same body.
+        card = "4111111111111111"
+        masker, _, _ = make_masker(note=None)
+        body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "a", f"k{card}": 1}],
+                },
+                {"role": "user", "content": f"my card is {card}"},
+            ]
+        }
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert card not in str(info.value)
+        assert info.value.path == "messages[0].content[0].<key>"
+        # Checking the name didn't leave a verdict behind for later text.
+        later = {"messages": [{"role": "user", "content": f"k{card}"}]}
+        masker.mask({"messages": [{"role": "user", "content": card}]})
+        assert card not in json.dumps(masker.mask(later))
+
+    def test_the_gateways_own_words_are_always_shown(self):
+        shield = make_shield()
+        shield.add_entity("con", "USER")
+        masker = RequestMasker(shield, MemoryLedger(), registered={"con": "USER"})
+        body = {"messages": [{"role": "user", "content": [{"type": "future_block"}]}]}
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert info.value.path == "messages[0].content[0].type"
+
+
+class TestCrashes:
+    """Bodies that used to crash the masker are refused instead."""
+
+    @pytest.mark.parametrize("role", [["user"], {"a": 1}, 1, None])
+    def test_a_role_that_isnt_a_string(self, role):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError, match=r"messages\[0\]\.role"):
+            masker.mask({"messages": [{"role": role, "content": "x"}]})
+
+    @pytest.mark.parametrize("kind", [["base64"], {"a": 1}])
+    def test_a_source_type_that_isnt_a_string(self, kind):
+        masker, _, _ = make_masker()
+        image = {"type": "image", "source": {"type": kind}}
+        with pytest.raises(UnsupportedRequestError, match="unknown source type"):
+            masker.mask({"messages": [{"role": "user", "content": [image]}]})
+
+    @pytest.mark.parametrize("where", ["tool_input", "safeguards"])
+    def test_a_value_nested_too_deeply(self, where):
+        from veil.gateway.request import MAX_DEPTH
+
+        deep = "x"
+        for _ in range(MAX_DEPTH + 5):
+            deep = {"k": deep}
+        if where == "safeguards":
+            body = {"messages": [], "safeguards": [deep]}
+        else:
+            block = {"type": "tool_use", "id": "t", "name": "n", "input": deep}
+            body = {"messages": [{"role": "assistant", "content": [block]}]}
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError, match="nested too deeply") as info:
+            masker.mask(body)
+        expected = "safeguards" if where == "safeguards" else "messages[0]"
+        assert info.value.path == expected
+
+    def test_a_deep_message_doesnt_hide_the_others_problems(self):
+        deep = "x"
+        for _ in range(200):
+            deep = {"k": deep}
+        block = {"type": "tool_use", "id": "t", "name": "n", "input": deep}
+        body = {
+            "messages": [
+                {"role": "assistant", "content": [block]},
+                {"role": "user", "content": [{"type": "future_block"}]},
+            ]
+        }
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert [p[:2] for p in info.value.problems] == [
+            ("messages[0]", "nested too deeply"),
+            ("messages[1].content[0].type", "unknown block type 'future_block'"),
+        ]
+
+    def test_a_tool_id_the_api_couldnt_have_made_isnt_looked_up(self, tmp_path):
+        from veil.gateway import SQLiteLedger
+
+        ledger = SQLiteLedger(tmp_path / "ledger.db", "s")
+        masker = RequestMasker(make_shield(), ledger, note=None)
+        block = {"type": "tool_use", "id": "a\udfffb", "name": "n", "input": {}}
+        out = masker.mask({"messages": [{"role": "assistant", "content": [block]}]})
+        assert out["messages"][0]["content"][0]["input"] == {}
+        ledger.close()

@@ -234,11 +234,16 @@ def run_claude(
             file=sys.stderr,
         )
         try:
-            return _run_child(
+            code = _run_child(
                 [executable, "--settings", str(settings_file), *args], env, cwd
             )
         finally:
             settings_file.unlink(missing_ok=True)
+        # Claude Code has left the terminal: say what it couldn't send, since
+        # a background request (a session title, say) fails without a word.
+        for line in gateway.refusals.summary():
+            print(line, file=sys.stderr)
+        return code
 
 
 def _run_child(command: list[str], env: dict[str, str], cwd: Path | None) -> int:

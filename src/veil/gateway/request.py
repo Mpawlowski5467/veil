@@ -12,28 +12,60 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypeVar
 
 from ..placeholders import placeholder_type
 from ..shield import Shield
 from ..vault.base import Vault
 from .ledger import Ledger
 
+_T = TypeVar("_T")
+
+# An index in a path, e.g. the [3] in messages[3].content.
+_INDEX = re.compile(r"\[[0-9]+\]")
+
 
 class UnsupportedRequestError(ValueError):
-    """The request has a field or block this gateway has no rule for.
+    """The request has content this gateway has no rule for.
+
+    Paths and problems never contain a value from the request: a key or a
+    type is named only when it looks like a field name and holds nothing
+    masking would change.
 
     Attributes:
-        path: Where in the body, e.g. ``messages[3].content[0].source``.
-            Never contains a value from the request.
+        path: Where the first problem is, e.g. ``messages[3].content[0].source``.
+        problem: What is wrong there.
+        problems: Every distinct problem, in the order found, as ``(path,
+            problem, count)``. Problems at the same place in different
+            messages or blocks (the path without its indices) count as one,
+            under the path where it was first found.
+        total: How many places have a problem.
     """
 
-    def __init__(self, path: str, problem: str) -> None:
-        """Describe the unsupported part by its path, never by its value."""
-        super().__init__(f"{path}: {problem}")
+    def __init__(
+        self, path: str, problem: str, *, more: Sequence[tuple[str, str]] = ()
+    ) -> None:
+        """Describe the unsupported parts by their paths, never by value."""
+        found = [(path, problem), *more]
+        groups: dict[tuple[str, str], list[Any]] = {}
+        for where, what in found:
+            key = (_INDEX.sub("[]", where), what)
+            if key in groups:
+                groups[key][2] += 1
+            else:
+                groups[key] = [where, what, 1]
+        self.found = tuple(found)
+        self.problems = tuple((w, p, n) for w, p, n in groups.values())
+        self.total = len(found)
         self.path = path
         self.problem = problem
+        super().__init__(
+            "; ".join(
+                f"{where}: {what}" + (f" ({count} times)" if count > 1 else "")
+                for where, what, count in self.problems
+            )
+        )
 
 
 #: What replaces a line that still holds a known value after masking.
@@ -228,9 +260,13 @@ class RequestMasker:
         self._memo = _Memo(memo_limit)
         self._known = _KnownValues(shield.vault, registered or {})
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
+        self._problems: list[tuple[str, str]] = []
 
     def mask(self, body: dict[str, Any]) -> dict[str, Any]:
         """Return a copy of a request body with every model-read text masked.
+
+        Every part of the body is checked, even after a problem is found, so
+        a refusal names all of them.
 
         Raises:
             UnsupportedRequestError: If the body has a field, role, or block type
@@ -239,24 +275,88 @@ class RequestMasker:
         if not isinstance(body, dict):
             raise UnsupportedRequestError("$", "the body is not a JSON object")
         self._notice_a_cleared_vault()
+        self._problems = []
+        try:
+            out = self._body(body)
+            # Named only now: by the end of the body, the vault knows every
+            # value in it, however early a name holding one came.
+            problems = [self._safe(*problem) for problem in self._problems]
+        finally:
+            self._problems = []
+        if problems:
+            raise UnsupportedRequestError(*problems[0], more=problems[1:])
+        self._vault_state = self._state()
+        return out
+
+    def _body(self, body: dict[str, Any]) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for key, value in body.items():
+            path = _key(key)
+            # The conversation is checked message by message, so a problem
+            # is named where it is.
+            if key not in _WALKED and not self._guard(_check_depth, value, path):
+                continue
             if key in _TOP_LEVEL_PASS:
                 out[key] = value
             elif key == "system":
-                out[key] = self._system(value)
+                out[key] = self._guard(self._system, value)
             elif key == "messages":
-                out[key] = self._messages(value)
+                out[key] = self._guard(self._messages, value)
             elif key == "stop_sequences":
-                out[key] = self._strings(value, "stop_sequences")
+                out[key] = self._guard(self._strings, value, "stop_sequences")
             elif key == "safeguards":
-                out[key] = self._anything(value, "safeguards")
+                out[key] = self._guard(self._anything, value, "safeguards")
             else:
-                raise UnsupportedRequestError(_key(key), "unknown field")
-        if self._note is not None and "messages" in out:
+                self._problem(path, "unknown field")
+        if self._note is not None and isinstance(out.get("messages"), list):
             out["system"] = self._with_note(out.get("system"))
-        self._vault_state = self._state()
         return out
+
+    # --- collecting problems -------------------------------------------------
+
+    def _guard(self, part: Callable[..., _T], *args: Any) -> _T | None:
+        """Run one part of the masking; on a problem, note it and go on.
+
+        Returns None for a part that failed. Nothing masked after a problem
+        is sent, since the request is refused, but the rest is still checked
+        so the refusal names every problem.
+        """
+        try:
+            return part(*args)
+        except UnsupportedRequestError as error:
+            for path, problem in error.found:
+                self._problem(path, problem)
+            return None
+
+    def _problem(self, path: str, problem: str) -> None:
+        """Note a problem; its names are checked for data when it is shown."""
+        self._problems.append((path, problem))
+
+    def _safe(self, path: str, problem: str) -> tuple[str, str]:
+        """Return a problem as it may be shown.
+
+        A name taken from the request is shown only if it holds no data;
+        otherwise it becomes ``<key>``, or a quoted name is left out.
+        """
+
+        def segment(match: re.Match[str]) -> str:
+            return match[0] if self._nameable(match[0]) else "<key>"
+
+        def quoted(match: re.Match[str]) -> str:
+            return match[0] if self._nameable(match[1]) else ""
+
+        return _SEGMENT.sub(segment, path), _QUOTED.sub(quoted, problem)
+
+    def _nameable(self, name: str) -> bool:
+        """Whether a name may appear in a refusal.
+
+        It may if it is one of the gateway's own words, or if masking leaves
+        it as it is. The memo isn't used: it may hold a verdict from before
+        the vault knew a value.
+        """
+        if name in _OWN_WORDS:
+            return True
+        return _mask_text(self._shield, self._known, name) == name
 
     def _state(self) -> tuple[int, tuple[str, str] | None]:
         items = self._shield.vault.items()
@@ -286,14 +386,20 @@ class RequestMasker:
         out = []
         for i, block in enumerate(blocks):
             path = f"system[{i}]"
-            _check_block(block, path, allowed={"text"})
-            _no_citations(block, path)
-            text = block["text"]
-            if _BILLING_HEADER.fullmatch(text):
-                out.append(block)
-            else:
-                out.append({**block, "text": self._text(_str(text, f"{path}.text"))})
+            if not self._guard(_check_depth, block, path):
+                continue
+            masked = self._guard(self._system_block, block, path)
+            if masked is not None:
+                out.append(masked)
         return out
+
+    def _system_block(self, block: Any, path: str) -> Any:
+        _check_block(block, path, allowed={"text"})
+        _no_citations(block, path)
+        text = block["text"]
+        if _BILLING_HEADER.fullmatch(text):
+            return block
+        return {**block, "text": self._text(_str(text, f"{path}.text"))}
 
     def _with_note(self, system: Any) -> Any:
         note = {"type": "text", "text": self._note}
@@ -307,35 +413,43 @@ class RequestMasker:
         out = []
         for i, message in enumerate(_list(value, "messages")):
             path = f"messages[{i}]"
-            if not isinstance(message, dict):
-                raise UnsupportedRequestError(path, "not an object")
-            extra = set(message) - _MESSAGE_KEYS
-            if extra:
-                raise UnsupportedRequestError(
-                    f"{path}.{_key(sorted(extra)[0])}", "unknown field"
-                )
-            role = message.get("role")
-            if role not in _ROLES:
-                raise UnsupportedRequestError(f"{path}.role", "unknown role")
-            if "output_config" in message:
-                _effort_only(message["output_config"], f"{path}.output_config", role)
-            content = message.get("content")
-            if isinstance(content, str):
-                masked: Any = (
-                    self._reply_text(content)
-                    if role == "assistant"
-                    else self._text(content)
-                )
-            else:
-                blocks = [
-                    self._block(block, f"{path}.content[{j}]", role=role)
-                    for j, block in enumerate(_list(content, f"{path}.content"))
-                ]
-                masked = [block for block in blocks if block is not None]
-            out.append({**message, "content": masked})
+            if not self._guard(_check_depth, message, path):
+                continue
+            masked = self._guard(self._message, message, path)
+            if masked is not None:
+                out.append(masked)
         return out
 
-    def _block(self, block: Any, path: str, *, role: str) -> Any:
+    def _message(self, message: Any, path: str) -> Any:
+        if not isinstance(message, dict):
+            raise UnsupportedRequestError(path, "not an object")
+        for key in sorted(set(message) - _MESSAGE_KEYS):
+            self._problem(f"{path}.{_key(key)}", "unknown field")
+        role = message.get("role")
+        if not isinstance(role, str) or role not in _ROLES:
+            # Checked on as a user message, so every other problem is named.
+            self._problem(f"{path}.role", f"unknown role{_named(role)}")
+            role = "user"
+        elif "output_config" in message:
+            self._guard(
+                _effort_only, message["output_config"], f"{path}.output_config", role
+            )
+        content = message.get("content")
+        if isinstance(content, str):
+            masked: Any = (
+                self._reply_text(content)
+                if role == "assistant"
+                else self._text(content)
+            )
+        else:
+            blocks = [
+                self._guard(self._block, block, f"{path}.content[{j}]", role)
+                for j, block in enumerate(_list(content, f"{path}.content"))
+            ]
+            masked = [block for block in blocks if block is not None]
+        return {**message, "content": masked}
+
+    def _block(self, block: Any, path: str, role: str) -> Any:
         kind = _check_block(block, path, allowed=set(_BLOCK_KEYS))
         if kind == "text":
             _no_citations(block, path)
@@ -364,8 +478,13 @@ class RequestMasker:
 
     def _tool_use(self, block: dict[str, Any], path: str, *, role: str) -> Any:
         tool_input = block.get("input")
-        if role == "assistant" and isinstance(block.get("id"), str):
-            masked = self._ledger.masked_tool_input(block["id"], tool_input)
+        tool_id = block.get("id")
+        if (
+            role == "assistant"
+            and isinstance(tool_id, str)
+            and _TOOL_ID.fullmatch(tool_id)
+        ):
+            masked = self._ledger.masked_tool_input(tool_id, tool_input)
             if masked is not None:
                 return {**block, "input": self._known_everywhere(masked)}
         return {**block, "input": self._anything(tool_input, f"{path}.input")}
@@ -377,18 +496,20 @@ class RequestMasker:
             return {**block, "content": masked} if "content" in block else block
         nested = []
         for i, item in enumerate(_list(content, f"{path}.content")):
-            item_path = f"{path}.content[{i}]"
-            kind = _check_block(item, item_path, allowed=_NESTED_BLOCKS)
-            if kind == "text":
-                _no_citations(item, item_path)
-                text = _str(item["text"], f"{item_path}.text")
-                nested.append({**item, "text": self._text(text)})
-            elif kind == "image":
-                _media_source(item.get("source"), f"{item_path}.source")
-                nested.append(item)
-            else:
-                nested.append(self._document(item, item_path))
+            masked = self._guard(self._nested, item, f"{path}.content[{i}]")
+            if masked is not None:
+                nested.append(masked)
         return {**block, "content": nested}
+
+    def _nested(self, item: Any, path: str) -> Any:
+        kind = _check_block(item, path, allowed=_NESTED_BLOCKS)
+        if kind == "text":
+            _no_citations(item, path)
+            return {**item, "text": self._text(_str(item["text"], f"{path}.text"))}
+        if kind == "image":
+            _media_source(item.get("source"), f"{path}.source")
+            return item
+        return self._document(item, path)
 
     def _document(self, block: dict[str, Any], path: str) -> Any:
         _no_citations(block, path)
@@ -405,12 +526,13 @@ class RequestMasker:
             _media_source(source, source_path)
             return out
         if kind == "text":
-            if set(source) - {"type", "media_type", "data"}:
-                raise UnsupportedRequestError(source_path, "unknown field")
+            _no_extra_keys(source, {"type", "media_type", "data"}, source_path)
             data = _str(source.get("data"), f"{source_path}.data")
             out["source"] = {**source, "data": self._text(data)}
             return out
-        raise UnsupportedRequestError(f"{source_path}.type", "unknown document source")
+        raise UnsupportedRequestError(
+            f"{source_path}.type", f"unknown document source{_named(kind)}"
+        )
 
     # --- masking text --------------------------------------------------------
 
@@ -481,11 +603,91 @@ def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
 
 
 _FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+_TYPE_NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Top-level parts walked item by item, each item checked for depth on its own.
+_WALKED = frozenset({"messages", "system"})
+# The gateway's own words in paths and problems: never data, always shown.
+_OWN_WORDS = frozenset(
+    {
+        *_TOP_LEVEL_PASS,
+        *_WALKED,
+        *_MESSAGE_KEYS,
+        *_BLOCK_KEYS,
+        *(key for keys in _BLOCK_KEYS.values() for key in keys),
+        "stop_sequences",
+        "safeguards",
+        "type",
+        "effort",
+        "media_type",
+        "data",
+        "url",
+    }
+)
+# The names in a path, and a name quoted in a problem, which a masker checks
+# for data before a refusal shows them.
+_SEGMENT = re.compile(r"(?<![^.])[A-Za-z_][A-Za-z0-9_]{0,63}(?![A-Za-z0-9_])")
+_QUOTED = re.compile(r" '([a-z][a-z0-9_]{0,63})'")
+# A tool call's id, as the API makes them; anything else is never looked up.
+_TOOL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+#: How deeply a request's JSON may nest. Claude Code's requests nest about ten
+#: levels, and tool inputs a few more; deeper values are refused rather than
+#: walked (a recursion that deep would fail).
+MAX_DEPTH = 100
+
+# A billing line's version, for naming the client in a refusal.
+_BILLING_VERSION = re.compile(
+    r"^x-anthropic-billing-header:[ \t]*cc_version="
+    r"([0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6})",
+    re.ASCII | re.IGNORECASE | re.MULTILINE,
+)
+
+
+def billing_version(body: Any) -> str | None:
+    """The Claude Code version in a body's billing line, if there is one.
+
+    Only for naming the client in a message; never raises.
+    """
+    system = body.get("system") if isinstance(body, dict) else None
+    texts = [system] if isinstance(system, str) else system
+    if not isinstance(texts, list):
+        return None
+    for block in texts:
+        text = block.get("text") if isinstance(block, dict) else block
+        if isinstance(text, str):
+            found = _BILLING_VERSION.search(text)
+            if found:
+                return found[1]
+    return None
 
 
 def _key(key: str) -> str:
     """Name a key in an error only if it looks like a field name, not data."""
     return key if _FIELD_NAME.fullmatch(key) else "<key>"
+
+
+def _named(value: Any) -> str:
+    """`` 'name'`` for a problem, if ``value`` looks like a type name, else ``''``.
+
+    The masker still checks the name for data before showing it.
+    """
+    if isinstance(value, str) and _TYPE_NAME.fullmatch(value):
+        return f" '{value}'"
+    return ""
+
+
+def _check_depth(value: Any, path: str) -> bool:
+    """Refuse a value nested deeper than `MAX_DEPTH`, without recursing."""
+    stack = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > MAX_DEPTH:
+            raise UnsupportedRequestError(path, "nested too deeply")
+        if isinstance(item, dict):
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+    return True
 
 
 def _list(value: Any, path: str) -> list[Any]:
@@ -506,15 +708,22 @@ def _check_block(block: Any, path: str, *, allowed: set[str] | frozenset[str]) -
         raise UnsupportedRequestError(path, "not an object")
     kind = block.get("type")
     if not isinstance(kind, str) or kind not in allowed:
-        raise UnsupportedRequestError(f"{path}.type", "unknown block type")
-    extra = set(block) - _BLOCK_KEYS[kind] - {"type"}
-    if extra:
         raise UnsupportedRequestError(
-            f"{path}.{_key(sorted(extra)[0])}", "unknown field"
+            f"{path}.type", f"unknown block type{_named(kind)}"
         )
+    _no_extra_keys(block, _BLOCK_KEYS[kind] | {"type"}, path)
     if kind == "text":
         _str(block.get("text"), f"{path}.text")
     return kind
+
+
+def _no_extra_keys(value: dict[str, Any], allowed: set[str], path: str) -> None:
+    """Refuse every key of ``value`` not in ``allowed``, naming each one."""
+    found = [
+        (f"{path}.{_key(key)}", "unknown field") for key in sorted(set(value) - allowed)
+    ]
+    if found:
+        raise UnsupportedRequestError(*found[0], more=found[1:])
 
 
 def _effort_only(value: Any, path: str, role: Any) -> None:
@@ -529,11 +738,7 @@ def _effort_only(value: Any, path: str, role: Any) -> None:
         raise UnsupportedRequestError(path, "only a system message has output_config")
     if not isinstance(value, dict):
         raise UnsupportedRequestError(path, "not an object")
-    extra = set(value) - {"effort"}
-    if extra:
-        raise UnsupportedRequestError(
-            f"{path}.{_key(sorted(extra)[0])}", "unknown field"
-        )
+    _no_extra_keys(value, {"effort"}, path)
     effort = value.get("effort")
     if not isinstance(effort, str) or effort not in _EFFORT_LEVELS:
         raise UnsupportedRequestError(f"{path}.effort", "not an effort level")
@@ -553,7 +758,8 @@ def _media_source(source: Any, path: str) -> None:
         "base64": {"type", "media_type", "data"},
         "url": {"type", "url"},
     }
-    if kind not in keys:
-        raise UnsupportedRequestError(f"{path}.type", "unknown source type")
-    if set(source) - keys[kind]:
-        raise UnsupportedRequestError(path, "unknown field")
+    if not isinstance(kind, str) or kind not in keys:
+        raise UnsupportedRequestError(
+            f"{path}.type", f"unknown source type{_named(kind)}"
+        )
+    _no_extra_keys(source, keys[kind], path)

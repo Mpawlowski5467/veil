@@ -126,7 +126,10 @@ def _history() -> list[dict[str, Any]]:
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": f"<system-reminder>{ACCOUNT}</system-reminder>"},
+                {
+                    "type": "text",
+                    "text": f"<system-reminder>{ACCOUNT}</system-reminder>",
+                },
                 {
                     "type": "text",
                     "text": f"My name is {NAME}; mail {EMAIL} or call {PHONE}.",

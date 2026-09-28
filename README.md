@@ -76,7 +76,7 @@ veil claude              # instead of claude; any claude arguments work
 What happens:
 
 - **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through settings that outrank a project's settings and your own, kept in a file only you can read. Those settings also keep hooks on, other providers and Remote Control off. `veil claude` won't start with `--settings`, `--bare`, or `--safe-mode`, or when `ANTHROPIC_BASE_URL` is already set, since each would send requests past the gateway.
-- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A known value is masked even glued to a word (`Jan Nowakem` goes out as `[PERSON_1]em`). A request with a field the gateway doesn't know is refused, never sent as it is. The model's thinking can't be changed (it is signed), so thinking about data it saw before it was masked, such as a name you registered later, is dropped.
+- **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A known value is masked even glued to a word (`Jan Nowakem` goes out as `[PERSON_1]em`). A request with a field the gateway doesn't know is refused, never sent as it is (see [When a request is refused](#when-a-request-is-refused)). The model's thinking can't be changed (it is signed), so thinking about data it saw before it was masked, such as a name you registered later, is dropped.
 - **Replies are restored as they stream.** Tool calls get the real values back, so an Edit matches the text in your file and a Write puts real values on disk. When Claude Code sends a reply back as history, the model's own words go back exactly as it wrote them.
 - **Real values don't leave through tools.** A hook checks every tool call but plain file reads and edits. A shell command that contains a real value asks you first (in `claude -p`, where nobody can answer, it is refused). A call to any other tool that could send one off the machine, such as a web request, an MCP call, or a remote agent, is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off. If the hooks can't run, `veil claude` doesn't start Claude Code, and before each prompt a hook checks that the gateway is still there.
 - **Placeholders last per session.** They are kept in `~/.veil/vault.db`, one set per Claude Code session, so `--resume` works. Sessions unused for 30 days are deleted.
@@ -108,6 +108,22 @@ What it doesn't cover:
 It was checked against Claude Code 2.1.283. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
 
 Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
+
+### When a request is refused
+
+A request the gateway can't mask is never sent. Claude Code shows why, for example:
+
+```
+API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.5.0 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].type (unknown block type 'future_block')
+```
+
+It names every part it couldn't handle and the Claude Code version that sent it. What to do:
+
+- **Update veil**, especially when Claude Code is newer than the version veil was tested with. A new Claude Code release can send something veil doesn't know yet.
+- **If it happens on every prompt**, the content is in the conversation, which Claude Code sends again with each prompt (and `/compact` too). Use `/rewind` to go back to before the prompt that brought it in, or start a new conversation; `--resume` of that conversation fails the same way. When the message says the part is sent with every request (a tool definition or a setting, not the conversation), `/rewind` won't help: update veil.
+- Requests Claude Code makes in the background, such as the one that names the session, can be refused without a message. When Claude Code exits, `veil claude` lists what it couldn't send.
+
+Refusals, and the gateway's own failures before a reply starts, are final: Claude Code doesn't send them again, on another model or otherwise. A refusal inside a feature Claude Code can do without (auto mode's safety checks, a turn's effort level) is the exception: Claude Code sends the request again without it. A busy data folder or an unreachable API is retried as usual.
 
 ## Usage
 

@@ -42,6 +42,22 @@ report = {{
     "secret_in_argv": secret in " ".join(sys.argv),
 }}
 report["pid"] = os.getpid()
+post = os.environ.get("FAKE_CLAUDE_POST")
+if post:
+    conn = http.client.HTTPConnection(host, timeout=5)
+    conn.request(
+        "POST",
+        "/v1/messages",
+        body=post,
+        headers={{
+            name: secret,
+            "x-claude-code-session-id": "s-1",
+            "User-Agent": "claude-cli/2.1.290 (external, cli)",
+            "Content-Type": "application/json",
+        }},
+    )
+    report["post_status"] = conn.getresponse().status
+    conn.close()
 with open(os.environ["FAKE_CLAUDE_REPORT"], "w") as f:
     json.dump(report, f)
 import time
@@ -118,6 +134,28 @@ class TestClaude:
     def test_claudes_exit_code_is_returned(self, fake_claude, data_dir, monkeypatch):
         monkeypatch.setenv("FAKE_CLAUDE_EXIT", "3")
         assert cli.main(["--data-dir", str(data_dir), "claude"]) == 3
+
+    def test_refused_requests_are_listed_when_claude_exits(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        _, report_file = fake_claude
+        body = {"messages": [{"role": "user", "content": "hi"}], "prompt": "x"}
+        monkeypatch.setenv("FAKE_CLAUDE_POST", json.dumps(body))
+        monkeypatch.setenv("FAKE_CLAUDE_EXIT", "1")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 1
+        assert json.loads(report_file.read_text())["post_status"] == 400
+        err = capsys.readouterr().err.splitlines()
+        start = err.index(
+            "veil: 1 request couldn't be masked, so it wasn't sent. Not handled:"
+        )
+        assert err[start + 1] == "  prompt (unknown field)"
+        assert err[start + 2].startswith("veil: This is Claude Code 2.1.290")
+
+    def test_nothing_is_listed_when_nothing_was_refused(
+        self, fake_claude, data_dir, capsys
+    ):
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        assert "couldn't be masked" not in capsys.readouterr().err
 
     def test_existing_custom_headers_are_kept(self, fake_claude, data_dir, monkeypatch):
         _, report_file = fake_claude
