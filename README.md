@@ -75,7 +75,7 @@ veil claude              # instead of claude; any claude arguments work
 
 What happens:
 
-- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch. Claude Code gets its address through settings that outrank a project's settings and your own, kept in a file only you can read. Those settings also keep hooks on, other providers and Remote Control off. `veil claude` won't start with `--settings`, `--bare`, or `--safe-mode`, or when `ANTHROPIC_BASE_URL` is already set, since each would send requests past the gateway.
+- **One private gateway per session.** `veil claude` starts a gateway on a free local port for this one Claude Code process, and stops it when Claude Code exits. It listens on your machine only, and answers only requests that carry a secret made for this launch (Claude Code's connection check, which carries none, it answers itself). Claude Code gets its address through settings that outrank a project's settings and your own, kept in a file only you can read. Those settings also keep hooks on, other providers and Remote Control off. `veil claude` won't start with `--settings`, `--bare`, or `--safe-mode`, or when `ANTHROPIC_BASE_URL` is already set, since each would send requests past the gateway.
 - **Everything the model reads is masked:** your prompts and pasted text, files you attach with `@`, every tool result (a failed command's output too), `CLAUDE.md` and memory, the git status, and the account email Claude Code adds to each request. A known value is masked even glued to a word (`Jan Nowakem` goes out as `[PERSON_1]em`). Content the gateway has no rule of its own for, such as a field or block type a newer Claude Code sends, is masked like any text; what can't be masked that way (a key, a type or a number that holds personal data, file bytes, encrypted data) is refused, never sent as it is (see [When a request is refused](#when-a-request-is-refused)). The model's thinking can't be changed (it is signed), so thinking about data it saw before it was masked, such as a name you registered later, is dropped.
 - **Replies are restored as they stream.** Tool calls get the real values back, so an Edit matches the text in your file and a Write puts real values on disk. When Claude Code sends a reply back as history, the model's own words go back exactly as it wrote them, and so does what Anthropic's servers added to the reply (a web search's results, a fetched page, a compacted summary of the conversation): it came from Anthropic, so it tells it nothing new. If such a part holds a value you registered, or it changed on the way, its text is masked like any other.
 - **Real values don't leave through tools.** A hook checks every tool call but plain file reads and edits. A shell command that contains a real value asks you first (in `claude -p`, where nobody can answer, it is refused). A call to any other tool that could send one off the machine, such as a web request, an MCP call, or a remote agent, is refused. Tools that send content through Anthropic's services (push notifications, routines, artifacts, file sharing, messages to other sessions) are turned off. If the hooks can't run, `veil claude` doesn't start Claude Code, and before each prompt a hook checks that the gateway is still there.
@@ -105,7 +105,7 @@ What it doesn't cover:
 - **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
 - **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.
 
-It was tested with Claude Code 2.1.283. When yours is another version, `veil claude` says so in one line when it starts (once for each version) and starts it anyway: a newer Claude Code may send something veil doesn't know yet, which is refused, never sent unmasked. After an update, run the live tests (see [Development](#development)) to check that nothing it relies on changed.
+It was tested with Claude Code 2.1.283. When yours is another version, `veil claude` says so in one line when it starts (once for each version) and starts it anyway: a newer Claude Code may send something veil doesn't know yet, which is refused, never sent unmasked. After an update, the census (see [Development](#development)) checks that nothing it relies on changed.
 
 Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
 
@@ -124,6 +124,8 @@ It names every part it couldn't handle and the Claude Code version that sent it.
 - Requests Claude Code makes in the background, such as the one that names the session, can be refused without a message. When Claude Code exits, `veil claude` lists what it couldn't send.
 
 Refusals and the gateway's own failures are final: Claude Code doesn't send them again, on another model or otherwise. A refusal inside a feature Claude Code can do without (auto mode's safety checks, a turn's effort level) is the exception: Claude Code sends the request again without it. A busy data folder or an unreachable API is retried as usual.
+
+On Opus 5.5 and Fable 5.1, which keep the model's earlier thinking, resuming a conversation whose masking changed since (a name you registered in between, say) costs one rejected request: Claude Code then drops the earlier thinking and goes on, without the prompt cache for that turn.
 
 ## Usage
 
@@ -383,6 +385,15 @@ The live tests check the Claude Code behavior the hooks rely on. They are skippe
 ```bash
 VEIL_LIVE_CLAUDE=1 uv run pytest -m live
 ```
+
+After a Claude Code update, run the census. It runs Claude Code through the gateway on four models, one scenario at a time (about 80-90 real model calls; `--models haiku` is a quick check), and drives an interactive session under GNU screen (`/usr/bin/screen`). It reports what Claude Code sends that `tests/gateway_payloads/` doesn't list yet, and every failure: a request refused, a real value in what left, a reply key the gateway dropped. It exits 0 when all is known and clean, 1 when something is new, 2 on a failure.
+
+```bash
+uv run python -m tests.live.census            # report only
+uv run python -m tests.live.census --update   # also refresh the census after a clean run
+```
+
+With `--update`, a run without failures refreshes the census and the protocol words (`src/veil/gateway/vocab.py`); new paths go in only with `--accept-new`, after you've checked the gateway handles them. Once `-p` and an interactive session ran clean on all four models, it also moves the tested Claude Code version forward. A failed run is kept: `--from DIR` analyzes it again, and `--resume DIR` reruns what the harness couldn't finish.
 
 To rename the package:
 
