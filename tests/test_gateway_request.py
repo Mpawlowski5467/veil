@@ -755,52 +755,6 @@ BAD_BODIES = [
         {"messages": [{"role": "user", "content": [{"type": "text", "text": 5}]}]},
         "messages[0].content[0].text: not a string",
     ),
-    (
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "x",
-                            "citations": [{"cited_text": "y"}],
-                        }
-                    ],
-                }
-            ]
-        },
-        "messages[0].content[0].citations: citations aren't supported",
-    ),
-    (
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "source": {"type": "file", "file_id": "f"}}
-                    ],
-                }
-            ]
-        },
-        "messages[0].content[0].source.type: unknown source type 'file'",
-    ),
-    (
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "document",
-                            "source": {"type": "content", "content": []},
-                        }
-                    ],
-                }
-            ]
-        },
-        "messages[0].content[0].source.type: unknown document source 'content'",
-    ),
     ({"messages": [], "stop_sequences": [1]}, "stop_sequences[0]: not a string"),
     ({"messages": [], "a b": "x"}, "<key>: a field name that may hold personal data"),
     (

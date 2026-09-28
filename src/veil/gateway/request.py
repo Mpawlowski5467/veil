@@ -9,6 +9,7 @@ after a client update.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -173,6 +174,7 @@ class _KnownValues:
             for value, kind in registered.items()
             if len(value) >= self.MIN_LENGTH
         }
+        self._registered_pattern: re.Pattern[str] | None = None
         self._size = -1
         self._types: dict[str, str] = {}
         self._pattern: re.Pattern[str] | None = None
@@ -214,6 +216,18 @@ class _KnownValues:
             return found or self._vault.get_or_create(value, self._types[value])
 
         return pattern.sub(replace, text)
+
+    def registered_in(self, text: str) -> bool:
+        """Whether ``text`` holds a registered value.
+
+        Registered values are fixed by the settings, unlike the vault, which
+        learns values as a conversation goes on.
+        """
+        if self._registered_pattern is None and self._registered:
+            values = sorted(self._registered, key=len, reverse=True)
+            self._registered_pattern = re.compile("|".join(map(re.escape, values)))
+        pattern = self._registered_pattern
+        return pattern is not None and pattern.search(text) is not None
 
     def found_in(self, text: str, *, min_length: int = 0) -> bool:
         """Whether ``text`` holds a known value outside a placeholder.
@@ -551,16 +565,24 @@ class RequestMasker:
     def _block(self, block: Any, path: str, role: str) -> Any:
         kind = _block_type(block, path)
         if kind not in _BLOCK_KEYS:
+            if role == "assistant" and self._as_it_came(block):
+                return self._block_settings(block, path)
+            rule = _API_BLOCKS.get((role, kind))
+            if rule is not None:
+                return rule(self, block, path)
             return self._unknown_block(block, path)
         known, extra = _split(block, _BLOCK_KEYS[kind])
         known = self._block_settings(known, path)
         if kind in ("thinking", "redacted_thinking"):
             return self._signed(block, extra, path, role, kind)
         if kind == "text":
-            _no_citations(known, path)
             text = _str(known.get("text"), f"{path}.text")
             masked = self._reply_text(text) if role == "assistant" else self._text(text)
             out = {**known, "text": masked}
+            citations = known.get("citations")
+            if citations:
+                rule = _CITATIONS if role == "assistant" else _USER_CITATIONS
+                out["citations"] = rule(self, citations, f"{path}.citations")
         elif kind == "image":
             self._media_source(known.get("source"), f"{path}.source", _IMAGE_TYPES)
             out = known
@@ -635,6 +657,9 @@ class RequestMasker:
     def _nested(self, item: Any, path: str) -> Any:
         kind = _block_type(item, path)
         if kind not in _NESTED_BLOCKS:
+            rule = _NESTED_API_BLOCKS.get(kind)
+            if rule is not None:
+                return rule(self, item, path)
             return self._unknown_block(item, path)
         known, extra = _split(item, _BLOCK_KEYS[kind])
         known = self._block_settings(known, path)
@@ -660,8 +685,11 @@ class RequestMasker:
         if not isinstance(source, dict):
             raise UnsupportedRequestError(source_path, "not an object")
         kind = source.get("type")
-        if kind in ("base64", "url"):
+        if kind in ("base64", "url", "file"):
             self._media_source(source, source_path, _DOCUMENT_TYPES)
+            return out
+        if kind == "content":
+            out["source"] = _CONTENT_SOURCE(self, source, source_path)
             return out
         if kind == "text":
             _no_extra_keys(source, {"type", "media_type", "data"}, source_path)
@@ -688,6 +716,7 @@ class RequestMasker:
         keys: dict[str, set[str]] = {
             "base64": {"type", "media_type", "data"},
             "url": {"type", "url"},
+            "file": {"type", "file_id"},
         }
         if not isinstance(kind, str) or kind not in keys:
             raise UnsupportedRequestError(
@@ -701,6 +730,9 @@ class RequestMasker:
                     f"{path}.media_type", "a kind of file that isn't sent"
                 )
             _str(source.get("data"), f"{path}.data")
+            return
+        if kind == "file":
+            self._tool_id(source.get("file_id"), f"{path}.file_id")
             return
         url = _str(source.get("url"), f"{path}.url")
         if not _WEB_URL.match(url) or _opaque(None, url) or not self._clean(url):
@@ -904,9 +936,44 @@ class RequestMasker:
             return self._number_clean(value, key)
         return False
 
-    def _sent_by_api(self, value: str) -> bool:
-        """Whether an opaque value is one the API itself sent in a reply."""
-        return False
+    def _sent_by_api(self, value: Any) -> bool:
+        """Whether the API itself sent this block or opaque value in a reply."""
+        was_seen = getattr(self._ledger, "was_seen", None)
+        return callable(was_seen) and bool(was_seen(value))
+
+    def _unreadable(self, value: str) -> bool:
+        """Whether no personal data can be read in an opaque value.
+
+        The API's opaque values are base64 of bytes that aren't text. One is
+        read like an id the API makes: a short known value may be in it by
+        chance, a longer one or anything a detector finds may not. If it
+        decodes to text, that text must hold nothing to mask and nothing
+        long enough to be encoded data.
+        """
+        compact = re.sub(r"[\r\n]+", "", value)
+        if not _BASE64.fullmatch(compact):
+            return False
+        # Not the cached word check: these can be large, and seen only once.
+        if self._shield.mask(compact).text != compact or self._known.found_in(
+            compact, min_length=_CHANCE
+        ):
+            return False
+        decoded = _decoded_text(compact)
+        return decoded is None or (
+            self._clean(decoded) and _ENCODED_RUN.search(decoded) is None
+        )
+
+    def _as_it_came(self, block: dict[str, Any]) -> bool:
+        """Whether a block goes back exactly as the API sent it.
+
+        It does if the gateway saw the API send it so, and nothing readable
+        in it holds a registered value. (Values the vault learned since are
+        not looked for: bytes the API wrote tell it nothing new, and changing
+        them would break what it binds to them, such as signed thinking.)
+        """
+        if not self._sent_by_api(block):
+            return False
+        return not any(self._known.registered_in(text) for text in _readable(block))
 
     # --- data: tool inputs, the classifier's context ---------------------------
 
@@ -1316,6 +1383,338 @@ _SETTINGS: dict[str, _Rule] = {
 # The request's top-level fields that are settings.
 _TOP_LEVEL_PASS = frozenset(_SETTINGS)
 
+
+# --- blocks the API makes, and the client sends back ------------------------------
+#
+# A block the gateway saw the API send goes back exactly as it came (see
+# `RequestMasker._as_it_came`). These rules are for the rest: a block it
+# didn't see (a conversation begun without it, a ledger since cleared), or one
+# holding a registered value. Their opaque parts (encrypted results, a
+# signature) go on as they are only in the model's own messages, where the API
+# put them.
+
+
+def _kept_opaque(masker: RequestMasker, value: Any, path: str) -> Any:
+    """An opaque value the API wrote into the model's own message.
+
+    It goes back as it is if the gateway saw the API send it. One it didn't
+    see (a conversation from before an update) is kept only if nothing in it
+    can be read (see `RequestMasker._unreadable`), since it can't be masked.
+    """
+    text = _str(value, path)
+    if masker._sent_by_api(text) or masker._unreadable(text):
+        return text
+    raise UnsupportedRequestError(path, "opaque data that can't be masked")
+
+
+def _call_ids(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._tool_id(value, path)
+
+
+def _exact(**rules: _Rule) -> _Rule:
+    """An object with exactly these fields: a reference, which can't be masked."""
+
+    def check(masker: RequestMasker, value: Any, path: str) -> Any:
+        if not isinstance(value, dict):
+            raise UnsupportedRequestError(path, "not an object")
+        _no_extra_keys(value, set(rules), path)
+        return {
+            key: rules[key](masker, item, f"{path}.{key}")
+            for key, item in value.items()
+        }
+
+    return check
+
+
+def _by_type(rules: Mapping[str, _Rule], default: _Rule) -> _Rule:
+    """An object whose rule depends on its type."""
+
+    def check(masker: RequestMasker, value: Any, path: str) -> Any:
+        kind = value.get("type") if isinstance(value, dict) else None
+        rule = rules.get(kind) if isinstance(kind, str) else None
+        return (rule or default)(masker, value, path)
+
+    return check
+
+
+def _server_call(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A call the API ran itself (web search, an MCP tool on its side).
+
+    Its input goes back as the API ran it if the gateway saw it, else it is
+    masked like any tool input.
+    """
+    out = _fields(
+        type=_enum,
+        id=_call_ids,
+        name=_tool_reference,
+        server_name=_tool_reference,
+        input=_as_is,
+        caller=_CALLER,
+        cache_control=_CACHE_CONTROL,
+    )(masker, value, path)
+    if "input" in out:
+        tool_id = out.get("id")
+        tool_input = value["input"]
+        replayed = (
+            masker._ledger.masked_tool_input(tool_id, tool_input)
+            if isinstance(tool_id, str)
+            else None
+        )
+        out["input"] = (
+            masker._known_everywhere(replayed, f"{path}.input")
+            if replayed is not None
+            else masker._data(tool_input, f"{path}.input")
+        )
+    return out
+
+
+_ERROR = _fields(type=_enum, error_code=_enum, error_message=_optional(_masked_text))
+
+
+def _media(masker: RequestMasker, value: Any, path: str) -> Any:
+    if value in ("text/plain", "application/pdf"):
+        return value
+    raise UnsupportedRequestError(path, "a kind of file that isn't sent")
+
+
+_FETCHED_SOURCE = _by_type(
+    {
+        "text": _fields(type=_enum, media_type=_media, data=_masked_text),
+        "base64": _fields(type=_enum, media_type=_media, data=_kept_opaque),
+    },
+    _fields(type=_enum),
+)
+_CITATION_CONFIG = _fields(enabled=_boolean)
+_WEB_SEARCH_TOOL_RESULT = _fields(
+    type=_enum,
+    tool_use_id=_call_ids,
+    content=lambda m, v, p: (
+        _list_of(
+            _fields(
+                type=_enum,
+                url=_masked_text,
+                title=_optional(_masked_text),
+                encrypted_content=_kept_opaque,
+                page_age=_optional(_masked_text),
+            )
+        )(m, v, p)
+        if isinstance(v, list)
+        else _ERROR(m, v, p)
+    ),
+    caller=_CALLER,
+    cache_control=_CACHE_CONTROL,
+)
+_WEB_FETCH_TOOL_RESULT = _fields(
+    type=_enum,
+    tool_use_id=_call_ids,
+    content=_by_type(
+        {
+            "web_fetch_result": _fields(
+                type=_enum,
+                url=_masked_text,
+                retrieved_at=_optional(_masked_text),
+                content=_fields(
+                    type=_enum,
+                    title=_optional(_masked_text),
+                    context=_optional(_masked_text),
+                    source=_FETCHED_SOURCE,
+                    citations=_optional(_CITATION_CONFIG),
+                ),
+            )
+        },
+        _ERROR,
+    ),
+    caller=_CALLER,
+    cache_control=_CACHE_CONTROL,
+)
+
+
+def _result_content(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A tool result's content: text, or blocks as in a tool_result."""
+    if isinstance(value, str):
+        return masker._text(value)
+    return [
+        masker._nested(item, f"{path}[{i}]")
+        for i, item in enumerate(_list(value, path))
+    ]
+
+
+_MCP_TOOL_RESULT = _fields(
+    type=_enum,
+    tool_use_id=_call_ids,
+    is_error=_optional(_boolean),
+    content=_result_content,
+    cache_control=_CACHE_CONTROL,
+)
+_ADVISOR_TOOL_RESULT = _fields(
+    type=_enum,
+    tool_use_id=_call_ids,
+    content=_by_type(
+        {
+            "advisor_result": _fields(
+                type=_enum, text=_masked_text, stop_reason=_optional(_enum)
+            ),
+            "advisor_redacted_result": _fields(
+                type=_enum, encrypted_content=_kept_opaque, stop_reason=_optional(_enum)
+            ),
+        },
+        _ERROR,
+    ),
+    caller=_CALLER,
+    cache_control=_CACHE_CONTROL,
+)
+# A tool named by reference: ToolSearch's results, and a tool added or
+# removed mid-conversation. The name must be exact, so it isn't masked.
+_TOOL_REFERENCE = _exact(
+    type=_enum, tool_name=_tool_reference, cache_control=_CACHE_CONTROL
+)
+_TOOL_SEARCH_TOOL_RESULT = _fields(
+    type=_enum,
+    tool_use_id=_call_ids,
+    content=_by_type(
+        {
+            "tool_search_tool_search_result": _fields(
+                type=_enum, tool_references=_list_of(_TOOL_REFERENCE)
+            )
+        },
+        _ERROR,
+    ),
+    cache_control=_CACHE_CONTROL,
+)
+_TOOL_CHANGE = _exact(
+    type=_enum,
+    tool=_by_type(
+        {
+            "tool_reference": _exact(type=_enum, name=_tool_reference),
+            "tool_definition": _exact(type=_enum, definition=_tool),
+        },
+        lambda m, v, p: _exact(type=_enum)(m, v, p),
+    ),
+    cache_control=_CACHE_CONTROL,
+)
+
+
+def _compacted(masker: RequestMasker, value: Any, path: str) -> Any:
+    """A compaction's summary: the model's text, sent back as it wrote it.
+
+    The API may have signed it, so it can't be masked again; a summary that
+    holds a registered value is refused.
+    """
+    if value is None:
+        return None
+    text = _str(value, path)
+    masked = masker._ledger.masked_text(text)
+    if masked is None:
+        return masker._text(text)
+    if masker._known.registered_in(masked):
+        raise UnsupportedRequestError(
+            path, "a summary holding a registered value, which can't be masked"
+        )
+    return masked
+
+
+_COMPACTION = _fields(
+    type=_enum,
+    content=_compacted,
+    encrypted_content=_optional(_kept_opaque),
+    signature=_optional(_kept_opaque),
+    tool_changes=_optional(_list_of(_TOOL_CHANGE)),
+    cache_control=_CACHE_CONTROL,
+)
+_MODEL_REFERENCE = _fields(model=_model)
+_FALLBACK = _fields(
+    **{
+        "type": _enum,
+        "from": _MODEL_REFERENCE,
+        "to": _MODEL_REFERENCE,
+        "trigger": _fields(type=_enum, category=_optional(_enum)),
+        "cache_control": _CACHE_CONTROL,
+    }
+)
+
+
+def _text_block(masker: RequestMasker, value: Any, path: str) -> Any:
+    return masker._nested(value, path)
+
+
+_SEARCH_RESULT = _fields(
+    type=_enum,
+    source=_masked_text,
+    title=_optional(_masked_text),
+    content=_list_of(_text_block),
+    citations=_optional(_CITATION_CONFIG),
+    cache_control=_CACHE_CONTROL,
+)
+_CONTAINER_UPLOAD = _fields(type=_enum, file_id=_call_ids, cache_control=_CACHE_CONTROL)
+_CONTENT_SOURCE = _fields(type=_enum, content=_result_content)
+
+
+def _refused_opaque(masker: RequestMasker, value: Any, path: str) -> Any:
+    raise UnsupportedRequestError(path, "opaque data that can't be masked")
+
+
+def _citation(index_rule: _Rule) -> _Rule:
+    """Where a reply's text came from; ``index_rule`` for its encrypted index."""
+    return _fields(
+        type=_enum,
+        cited_text=_masked_text,
+        document_index=_integer,
+        document_title=_optional(_masked_text),
+        start_char_index=_integer,
+        end_char_index=_integer,
+        start_page_number=_integer,
+        end_page_number=_integer,
+        start_block_index=_integer,
+        end_block_index=_integer,
+        search_result_index=_integer,
+        url=_masked_text,
+        title=_optional(_masked_text),
+        source=_masked_text,
+        encrypted_index=index_rule,
+        file_id=_optional(_call_ids),
+    )
+
+
+_CITATIONS = _list_of(_citation(_kept_opaque))
+_USER_CITATIONS = _list_of(_citation(_refused_opaque))
+
+#: Rules for block types the API defines, by the role that may send them.
+_API_BLOCKS: dict[tuple[str, str], _Rule] = {
+    ("assistant", "server_tool_use"): _server_call,
+    ("assistant", "mcp_tool_use"): _server_call,
+    ("assistant", "web_search_tool_result"): _WEB_SEARCH_TOOL_RESULT,
+    ("assistant", "web_fetch_tool_result"): _WEB_FETCH_TOOL_RESULT,
+    ("assistant", "mcp_tool_result"): _MCP_TOOL_RESULT,
+    ("assistant", "advisor_tool_result"): _ADVISOR_TOOL_RESULT,
+    ("assistant", "tool_search_tool_result"): _TOOL_SEARCH_TOOL_RESULT,
+    ("assistant", "compaction"): _COMPACTION,
+    ("assistant", "fallback"): _FALLBACK,
+    ("user", "search_result"): _SEARCH_RESULT,
+    ("user", "container_upload"): _CONTAINER_UPLOAD,
+    ("system", "tool_addition"): _TOOL_CHANGE,
+    ("system", "tool_removal"): _TOOL_CHANGE,
+}
+#: Rules for block types the API defines inside a tool result's content.
+_NESTED_API_BLOCKS: dict[str, _Rule] = {
+    "tool_reference": _TOOL_REFERENCE,
+    "search_result": _SEARCH_RESULT,
+}
+
+
+def _readable(value: Any, key: str | None = None) -> Any:
+    """Every string of a value a model would read: keys and text, not opaque data."""
+    if isinstance(value, str):
+        if not _opaque(key, value):
+            yield value
+    elif isinstance(value, list):
+        for item in value:
+            yield from _readable(item, key)
+    elif isinstance(value, dict):
+        for name, item in value.items():
+            yield name
+            yield from _readable(item, name)
+
+
 _SCHEMA_TEXT = frozenset({"description", "title", "$comment"})
 _SCHEMA_VALUES = frozenset({"enum", "const", "default", "examples"})
 _SCHEMA_NAMED = frozenset(
@@ -1449,6 +1848,8 @@ _API_ID = re.compile(
     re.ASCII,
 )
 _CHANCE = 5
+# A run of characters long enough to be encoded data (base64, hex, a URI's).
+_ENCODED_RUN = re.compile(r"[A-Za-z0-9+/_=%-]{16,}")
 # A URL a source may point to: on the web, not inline data.
 _WEB_URL = re.compile(r"https?://", re.IGNORECASE)
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}", re.ASCII)
@@ -1623,6 +2024,20 @@ def _exposed_names(body: dict[str, Any]) -> frozenset[str]:
         for tool in found
         if isinstance(tool, dict) and isinstance(tool.get("name"), str)
     )
+
+
+def _decoded_text(value: str) -> str | None:
+    """The text that base64 holds, or None if it holds bytes that aren't text.
+
+    Encrypted bytes are almost never UTF-8, so text found this way was put
+    there as text.
+    """
+    padded = value.replace("-", "+").replace("_", "/")
+    padded += "=" * (-len(padded) % 4)
+    try:
+        return base64.b64decode(padded, validate=True).decode("utf-8")
+    except ValueError:  # binascii.Error and UnicodeDecodeError both are
+        return None
 
 
 def _opaque(key: str | None, text: str) -> bool:

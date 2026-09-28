@@ -21,9 +21,21 @@ from ..restorer import StreamRestorer
 from ..shield import Shield
 from .config import APP
 from .ledger import Ledger
+from .request import _opaque
 
 _TEXT = "text"
 _TOOL_USE = "tool_use"
+_COMPACTION = "compaction"
+# Calls the API runs itself: it ran them with the masked input, which goes
+# to the client as it is (and back to the API exactly so).
+_SERVER_CALLS = frozenset({"server_tool_use", "mcp_tool_use"})
+# Blocks with a rule of their own here; any other block the API sends is
+# recorded as it came (see `Ledger.record_seen`), to go back exactly so.
+_OWN_RULES = frozenset(
+    {_TEXT, _TOOL_USE, _COMPACTION, "thinking", "redacted_thinking", *_SERVER_CALLS}
+)
+# Deltas that carry text, not opaque values: not searched for them.
+_TEXT_DELTAS = frozenset({"text_delta", "input_json_delta", "thinking_delta"})
 # The keys of an event and of a delta the restorer rewrites; any other key
 # they carry is kept as it came.
 _EVENT_KEYS = frozenset({"type", "index", "delta"})
@@ -102,6 +114,26 @@ class _ToolBlock:
         self.held: list[_Event] = []  # deltas of kinds without a rule
 
 
+class _ServerCall:
+    def __init__(self, block: dict[str, Any]) -> None:
+        self.block = block
+        self.parts: list[str] = []
+
+
+class _Compaction:
+    def __init__(self, stream: StreamRestorer, masked: str, restored: str) -> None:
+        self.stream = stream
+        self.masked = [masked]
+        self.restored = [restored]
+        self.events: list[_Event] = []  # held until the block ends
+
+
+class _Other:
+    def __init__(self, block: dict[str, Any]) -> None:
+        self.block = block
+        self.whole = True  # no part came after the start
+
+
 class StreamError(ValueError):
     """The reply can't be restored safely; the stream is ended with an error."""
 
@@ -131,6 +163,9 @@ class ResponseRestorer:
         self._carry = ""
         self._text: dict[int, _TextBlock] = {}
         self._tools: dict[int, _ToolBlock] = {}
+        self._servers: dict[int, _ServerCall] = {}
+        self._compactions: dict[int, _Compaction] = {}
+        self._others: dict[int, _Other] = {}
         self.failed: str | None = None
 
     def feed(self, data: str) -> str:
@@ -185,6 +220,8 @@ class ResponseRestorer:
         if not isinstance(data, dict):
             return raw
         event = _Event(name or str(data.get("type")), data, raw)
+        if event.delta.get("type") not in _TEXT_DELTAS:
+            self._record_opaque(data)
         kind = data.get("type")
         index = data.get("index")
         if kind == "content_block_start" and isinstance(index, int):
@@ -217,6 +254,13 @@ class ResponseRestorer:
                     event.name, {**event.data, "content_block": {**block, "input": {}}}
                 )
             return event.raw
+        if block.get("type") in _SERVER_CALLS:
+            self._servers[index] = _ServerCall(block)
+            return event.raw
+        if block.get("type") == _COMPACTION:
+            return self._compaction_start(event, index, block)
+        if block.get("type") not in _OWN_RULES:
+            self._others[index] = _Other(block)
         return event.raw
 
     def _delta(self, event: _Event, index: int) -> str:
@@ -248,6 +292,19 @@ class ResponseRestorer:
             # A kind of part without a rule: kept, and sent after the input.
             tool.held.append(event)
             return ""
+        server = self._servers.get(index)
+        if server is not None:
+            part = delta.get("partial_json")
+            if delta.get("type") == "input_json_delta" and isinstance(part, str):
+                server.parts.append(part)
+            return event.raw
+        compaction = self._compactions.get(index)
+        if compaction is not None:
+            compaction.events.append(event)
+            return ""
+        other = self._others.get(index)
+        if other is not None:
+            other.whole = False
         return event.raw
 
     def _text_delta(
@@ -295,7 +352,99 @@ class ResponseRestorer:
         tool = self._tools.pop(index, None)
         if tool is not None:
             return self._tool_stop(raw, index, tool)
+        server = self._servers.pop(index, None)
+        if server is not None:
+            self._server_stop(server)
+            return raw
+        compaction = self._compactions.pop(index, None)
+        if compaction is not None:
+            return self._compaction_stop(compaction) + raw
+        other = self._others.pop(index, None)
+        if other is not None and other.whole:
+            self._record_seen(other.block)
         return raw
+
+    def _server_stop(self, server: _ServerCall) -> None:
+        """Record a call the API ran, input as it ran it, to go back so."""
+        source = "".join(server.parts)
+        try:
+            tool_input = (
+                json.loads(source) if source.strip() else server.block.get("input")
+            )
+        except ValueError:
+            return
+        tool_id = server.block.get("id")
+        if isinstance(tool_id, str) and tool_input is not None:
+            self._record(
+                self._ledger.record_tool_input, tool_id, tool_input, tool_input
+            )
+
+    def _compaction_start(
+        self, event: _Event, index: int, block: dict[str, Any]
+    ) -> str:
+        """A summary of the conversation so far: model text, restored as text.
+
+        Its signed or encrypted parts go on as they came. Deltas are held to
+        the end: the client keeps the last delta's encrypted content, so no
+        delta may be added.
+        """
+        content = block.get("content")
+        masked = content if isinstance(content, str) else ""
+        restored = self._shield.restore(masked).text if masked else ""
+        self._compactions[index] = _Compaction(
+            self._shield.stream_restorer(), masked, restored
+        )
+        if restored == masked:
+            return event.raw
+        return _event(
+            event.name, {**event.data, "content_block": {**block, "content": restored}}
+        )
+
+    def _compaction_stop(self, compaction: _Compaction) -> str:
+        out: list[str] = []
+        last = max(
+            (
+                i
+                for i, e in enumerate(compaction.events)
+                if isinstance(e.delta.get("content"), str)
+            ),
+            default=-1,
+        )
+        for i, event in enumerate(compaction.events):
+            piece = event.delta.get("content")
+            if not isinstance(piece, str):
+                out.append(event.raw)
+                continue
+            compaction.masked.append(piece)
+            restored = compaction.stream.feed(piece)
+            if i == last:
+                restored += compaction.stream.finish()
+            compaction.restored.append(restored)
+            out.append(event.with_delta("content", restored))
+        masked = "".join(compaction.masked)
+        if masked:
+            self._record(self._ledger.record_text, "".join(compaction.restored), masked)
+        return "".join(out)
+
+    def _record_seen(self, value: Any) -> None:
+        record = getattr(self._ledger, "record_seen", None)
+        if callable(record):
+            self._record(record, value)
+
+    def _record_opaque(self, value: Any, key: str | None = None) -> None:
+        """Record every opaque value the API sends (a signature, say).
+
+        A request may then send it back, though it can't be looked into.
+        """
+        if isinstance(value, str):
+            if _opaque(key, value):
+                self._record_seen(value)
+        elif isinstance(value, list):
+            for item in value:
+                self._record_opaque(item, key)
+        elif isinstance(value, dict):
+            for name, item in value.items():
+                self._record_opaque(item, name)
 
     def _text_stop(self, raw: str, index: int, text: _TextBlock) -> str:
         masked = "".join(text.masked)
@@ -452,6 +601,23 @@ def restore_message(
                     ledger.record_tool_input, block["id"], restored_input, masked_input
                 )
             block = {**block, "input": restored_input}
+        elif isinstance(block, dict) and block.get("type") in _SERVER_CALLS:
+            if isinstance(block.get("id"), str) and block.get("input") is not None:
+                restorer._record(
+                    ledger.record_tool_input,
+                    block["id"],
+                    block["input"],
+                    block["input"],
+                )
+        elif isinstance(block, dict) and block.get("type") == _COMPACTION:
+            masked = block.get("content")
+            if isinstance(masked, str) and masked:
+                restored = shield.restore(masked).text
+                restorer._record(ledger.record_text, restored, masked)
+                block = {**block, "content": restored}
+        elif isinstance(block, dict) and block.get("type") not in _OWN_RULES:
+            restorer._record_seen(block)
+        restorer._record_opaque(block)
         content.append(block)
     return {**message, "content": content}
 

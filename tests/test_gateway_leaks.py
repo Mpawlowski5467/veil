@@ -263,6 +263,86 @@ def contexts(slot):
             ]
         },
     )
+    # Blocks the API defines, each with content no rule knows.
+    search = {"type": "web_search_result", "url": "https://example.com", "title": "t"}
+    api_blocks = {
+        "server_tool_use": {
+            "type": "server_tool_use",
+            "id": "srvtoolu_01",
+            "name": "web_search",
+            "input": {},
+        },
+        "web_search_result": {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": [{**search, "k": slot}],
+        },
+        "web_fetch_result": {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": {"type": "web_fetch_result", "url": "https://example.com"},
+        },
+        "mcp_tool_result": {
+            "type": "mcp_tool_result",
+            "tool_use_id": "mcptoolu_01",
+            "content": [{"type": "text", "text": "t"}],
+        },
+        "compaction": {"type": "compaction", "content": "summary"},
+        "citation": {
+            "type": "text",
+            "text": "t",
+            "citations": [{"type": "char_location", "cited_text": "t", "k": slot}],
+        },
+        "fallback": {"type": "fallback", "to": {"model": "claude-sonnet-5"}},
+    }
+    for name, block in api_blocks.items():
+        yield (
+            f"api_{name}",
+            {
+                "messages": [
+                    user_text,
+                    {"role": "assistant", "content": [{**block, "k": slot}]},
+                ]
+            },
+        )
+    user_blocks = {
+        "search_result": {
+            "type": "search_result",
+            "source": "https://example.com",
+            "title": "t",
+            "content": [{"type": "text", "text": "t"}],
+        },
+        "container_upload": {"type": "container_upload", "file_id": "file_01"},
+        "file_source": {"type": "image", "source": {"type": "file", "file_id": "f"}},
+        "tool_reference": {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01",
+            "content": [{"type": "tool_reference", "tool_name": "Read", "k": slot}],
+        },
+    }
+    for name, block in user_blocks.items():
+        yield (
+            f"api_{name}",
+            {"messages": [{"role": "user", "content": [{**block, "k": slot}]}]},
+        )
+    yield (
+        "api_tool_addition",
+        {
+            "messages": [
+                user_text,
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "tool_addition",
+                            "tool": {"type": "tool_reference", "name": "Read"},
+                            "k": slot,
+                        }
+                    ],
+                },
+            ]
+        },
+    )
 
 
 def outcome(body):
@@ -331,6 +411,120 @@ def test_a_number_that_holds_data_is_refused_or_dropped(context, number, carrier
     # Only signed thinking goes on without it: the block is dropped.
     assert context == "signed_thinking"
     assert number not in list(_numbers(json.loads(sent)))
+
+
+def opaque_carriers(value):
+    """The ways a value can hide in a field the API fills with opaque bytes."""
+    text = f"Contact: {value}, notes"
+    encoded = base64.b64encode(text.encode() * 3).decode()
+    return {
+        "as_is": value,
+        "text": text,
+        "base64": encoded,
+        "base64url": base64.urlsafe_b64encode(text.encode()).decode(),
+        "twice": base64.b64encode(encoded.encode()).decode(),
+        "data_uri": f"data:text/plain;base64,{encoded}",
+        "hex": base64.b64encode(text.encode().hex().encode()).decode(),
+        "json": base64.b64encode(json.dumps({"to": value}).encode()).decode(),
+        "glued": f"Eo8BCioIAhgB{value}Eo8BCioIAhgB",
+    }
+
+
+def opaque_contexts(slot):
+    """Each field of a block the API defines that holds opaque bytes."""
+    result = {"type": "web_search_result", "url": "https://example.com", "title": "t"}
+    yield (
+        "web_search",
+        {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": [{**result, "encrypted_content": slot}],
+        },
+    )
+    yield (
+        "citation",
+        {
+            "type": "text",
+            "text": "t",
+            "citations": [
+                {
+                    "type": "web_search_result_location",
+                    "cited_text": "t",
+                    "url": "https://example.com",
+                    "title": "t",
+                    "encrypted_index": slot,
+                }
+            ],
+        },
+    )
+    yield (
+        "compaction",
+        {"type": "compaction", "content": "s", "encrypted_content": slot},
+    )
+    yield (
+        "compaction_signature",
+        {"type": "compaction", "content": "s", "signature": slot},
+    )
+    yield (
+        "advisor",
+        {
+            "type": "advisor_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": {"type": "advisor_redacted_result", "encrypted_content": slot},
+        },
+    )
+    yield (
+        "fetched_pdf",
+        {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": {
+                "type": "web_fetch_result",
+                "url": "https://example.com",
+                "content": {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": slot,
+                    },
+                },
+            },
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("context", "carrier", "value"),
+    [
+        (context, carrier, value)
+        for value in VALUES
+        for carrier in opaque_carriers(value)
+        for context, _ in opaque_contexts(None)
+    ],
+)
+def test_opaque_bytes_the_api_didnt_send_carry_no_value(context, carrier, value):
+    # Kept only if they can't be read; this masker's ledger saw nothing.
+    slot = opaque_carriers(value)[carrier]
+    block = dict(opaque_contexts(slot))[context]
+    user = {"role": "user", "content": "hi"}
+    sent = outcome({"messages": [user, {"role": "assistant", "content": [block]}]})
+    if sent is None:
+        return
+    assert value not in sent
+    assert slot not in sent
+
+
+def test_bytes_that_cant_be_read_are_kept():
+    # What the API sends: base64 of bytes that aren't text.
+    for slot in ("EqYBCkgIBxABGAIqQJ1f", "Eo8BCioIAhgB", "CAEQAg=="):
+        for context, block in opaque_contexts(slot):
+            user = {"role": "user", "content": "hi"}
+            sent = outcome(
+                {"messages": [user, {"role": "assistant", "content": [block]}]}
+            )
+            assert sent is not None, context
+            assert slot in sent
 
 
 def _numbers(value):
@@ -405,7 +599,7 @@ class TestWhatGoesThrough:
         masker = make_masker()
         out = masker.mask(body)
         assert out["messages"][0]["content"][0]["content"] == [block]
-        assert masker.last_generic == ("messages[].content[].content[].type",)
+        assert masker.last_generic == ()  # a ToolSearch result has a rule
 
     def test_placeholders_in_a_new_block_stay_placeholders_of_text(self):
         # The model's own placeholder, written back in a block without a rule,
