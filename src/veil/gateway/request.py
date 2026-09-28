@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from ..placeholders import placeholder_type
@@ -83,6 +83,8 @@ _BLOCK_KEYS = {
 }
 # Blocks allowed inside a tool_result's content, and in a document's content.
 _NESTED_BLOCKS = frozenset({"text", "image", "document"})
+# Safeguard types, the one tag in "safeguards" the API reads unmasked.
+_SAFEGUARD_TYPES = frozenset({"dangerous_tool_use"})
 
 
 class _Memo:
@@ -246,7 +248,7 @@ class RequestMasker:
             elif key == "stop_sequences":
                 out[key] = self._strings(value, "stop_sequences")
             elif key == "safeguards":
-                out[key] = self._anything(value, "safeguards")
+                out[key] = self._safeguards(value)
             else:
                 raise UnsupportedRequestError(_key(key), "unknown field")
         if self._note is not None and "messages" in out:
@@ -289,6 +291,18 @@ class RequestMasker:
                 out.append(block)
             else:
                 out.append({**block, "text": self._text(_str(text, f"{path}.text"))})
+        return out
+
+    def _safeguards(self, value: Any) -> list[Any]:
+        out = []
+        for i, guard in enumerate(_list(value, "safeguards")):
+            path = f"safeguards[{i}]"
+            if not isinstance(guard, dict):
+                raise UnsupportedRequestError(path, "not an object")
+            kind = guard.get("type")
+            if not isinstance(kind, str) or kind not in _SAFEGUARD_TYPES:
+                raise UnsupportedRequestError(f"{path}.type", "unknown safeguard type")
+            out.append(self._object(guard, path, keep="type"))
         return out
 
     def _with_note(self, system: Any) -> Any:
@@ -355,11 +369,12 @@ class RequestMasker:
 
     def _tool_use(self, block: dict[str, Any], path: str, *, role: str) -> Any:
         tool_input = block.get("input")
+        input_path = f"{path}.input"
         if role == "assistant" and isinstance(block.get("id"), str):
             masked = self._ledger.masked_tool_input(block["id"], tool_input)
             if masked is not None:
-                return {**block, "input": self._known_everywhere(masked)}
-        return {**block, "input": self._anything(tool_input, f"{path}.input")}
+                return {**block, "input": self._known_everywhere(masked, input_path)}
+        return {**block, "input": self._anything(tool_input, input_path)}
 
     def _tool_result(self, block: dict[str, Any], path: str) -> Any:
         content = block.get("content")
@@ -421,13 +436,23 @@ class RequestMasker:
         self._memo.put(key, masked)
         return masked
 
-    def _known_everywhere(self, value: Any) -> Any:
+    def _known_everywhere(self, value: Any, path: str) -> Any:
+        """Mask every known value left in a JSON value, keys included."""
         if isinstance(value, str):
             return self._known.mask(value)
         if isinstance(value, list):
-            return [self._known_everywhere(item) for item in value]
+            return [
+                self._known_everywhere(item, f"{path}[{i}]")
+                for i, item in enumerate(value)
+            ]
         if isinstance(value, dict):
-            return {key: self._known_everywhere(item) for key, item in value.items()}
+            pairs = []
+            for key, item in value.items():
+                masked = self._known.mask(key)
+                pairs.append(
+                    (masked, self._known_everywhere(item, f"{path}.{_key(masked)}"))
+                )
+            return _unique(pairs, path)
         return value
 
     def _strings(self, value: Any, path: str) -> list[str]:
@@ -437,7 +462,7 @@ class RequestMasker:
         ]
 
     def _anything(self, value: Any, path: str) -> Any:
-        """Mask every string in a JSON value; keys and ``type`` values stay."""
+        """Mask every string in a JSON value, keys and ``type`` values too."""
         if isinstance(value, str):
             return self._text(value)
         if isinstance(value, list):
@@ -445,13 +470,24 @@ class RequestMasker:
                 self._anything(item, f"{path}[{i}]") for i, item in enumerate(value)
             ]
         if isinstance(value, dict):
-            return {
-                key: item
-                if key == "type" and isinstance(item, str)
-                else self._anything(item, f"{path}.{key}")
-                for key, item in value.items()
-            }
+            return self._object(value, path)
         return value
+
+    def _object(
+        self, value: dict[str, Any], path: str, *, keep: str | None = None
+    ) -> dict[str, Any]:
+        """Mask an object's keys and values; the entry named ``keep`` stays.
+
+        Paths name a key only as masked, so a refusal never quotes one.
+        """
+        pairs = []
+        for key, item in value.items():
+            if key == keep:
+                pairs.append((key, item))
+            else:
+                masked = self._text(key)
+                pairs.append((masked, self._anything(item, f"{path}.{_key(masked)}")))
+        return _unique(pairs, path)
 
 
 def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
@@ -466,6 +502,19 @@ def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
     # (never mask lines alone: a value may span a line break).
     lines = masked.split("\n")
     return "\n".join(WITHHELD_LINE if known.found_in(line) else line for line in lines)
+
+
+def _unique(pairs: Iterable[tuple[str, Any]], path: str) -> dict[str, Any]:
+    """Build an object from masked entries; two keys masked alike are refused.
+
+    Merging them would change the data, and keeping one would drop a value.
+    """
+    out: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in out:
+            raise UnsupportedRequestError(path, "two keys mask to the same text")
+        out[key] = item
+    return out
 
 
 # --- checking shapes -----------------------------------------------------------
