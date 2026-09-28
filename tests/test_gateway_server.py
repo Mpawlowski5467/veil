@@ -398,6 +398,44 @@ def test_an_unmaskable_request_is_refused_by_path(api, gateway):
     assert api.received == []
 
 
+@pytest.mark.parametrize(
+    ("path", "reply"),
+    [
+        ("/v1/messages?beta=true", text_reply("OK")),
+        (
+            "/v1/messages/count_tokens?beta=true",
+            (200, "application/json", [b'{"input_tokens": 12}']),
+        ),
+    ],
+)
+def test_a_per_turn_effort_goes_through_unchanged(api, gateway, path, reply):
+    effort = {"role": "system", "content": [], "output_config": {"effort": "high"}}
+    body = {**REQUEST, "model": "claude-opus-5-5", "messages": [*REQUEST["messages"]]}
+    body["messages"].append(effort)
+    api.replies.append(reply)
+    response, _ = call(gateway, path=path, body=body)
+    assert response.status == 200
+    sent = json.loads(api.received[0][3])
+    assert sent["messages"][0]["content"] == "Email [PERSON_1] at [EMAIL_1]"
+    assert sent["messages"][1] == effort
+
+
+def test_a_refused_effort_is_named_so_the_client_can_drop_it(api, gateway):
+    effort = {"role": "system", "content": [], "output_config": {"effort": "ultra"}}
+    body = {**REQUEST, "messages": [*REQUEST["messages"], effort]}
+    response, payload = call(gateway, body=body)
+    assert response.status == 400
+    assert json.loads(payload)["error"] == {
+        "type": "invalid_request_error",
+        "message": (
+            "the gateway can't mask messages[1].output_config.effort: "
+            "not an effort level"
+        ),
+    }
+    assert response.getheader("x-should-retry") == "false"
+    assert api.received == []
+
+
 def test_a_body_that_isnt_json_is_refused(api, gateway):
     response, _ = call(gateway, body=b"{not json")
     assert response.status == 400

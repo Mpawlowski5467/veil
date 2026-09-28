@@ -9,7 +9,10 @@ passed on the command line decide where requests go.
 ``tests/gateway_payloads/`` holds the census of body fields and reply events
 recorded from Claude Code 2.1.283 (shapes only). A test here fails when a
 live run uses a field or event type the census doesn't list, which means the
-gateway's list of known fields needs updating.
+gateway's list of known fields needs updating. Scenarios named after a model
+(``opus/...``, ``sonnet/...``) were recorded on it, so a field only one
+model sends shows up as such; the others on Haiku, except ``auto/run-1``
+(Sonnet).
 """
 
 import json
