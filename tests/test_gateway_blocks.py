@@ -206,6 +206,67 @@ class TestAsItCame:
             masker.mask(body)
 
 
+class TestNotAsTheApiSentIt:
+    @pytest.mark.parametrize("streamed", [False, True])
+    def test_a_restored_value_is_never_taken_for_the_apis_bytes(self, streamed):
+        # A tool input under an opaque-looking key holds a placeholder; the
+        # value it restores to must not count as sent by the API.
+        masker, shield, ledger = make()
+        call = {
+            "type": "tool_use",
+            "id": "toolu_01AbCdEfGhIjKl",
+            "name": "send_mail",
+            "input": {"signature": "Regards, [PERSON_1], [EMAIL_1]"},
+        }
+        if streamed:
+            events = [
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {**call, "input": {}},
+                },
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": json.dumps(call["input"]),
+                    },
+                },
+                {"type": "content_block_stop", "index": 0},
+            ]
+            stream = "".join(
+                f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events
+            )
+            ResponseRestorer(shield, ledger).feed(stream)
+        else:
+            restore_message(shield, ledger, {"content": [call]})
+        real = f"Regards, {NAME}, {EMAIL}"
+        assert not ledger.was_seen(real)
+        carriers = [
+            history(
+                {
+                    **search_result(),
+                    "content": [
+                        {**search_result()["content"][0], "encrypted_content": real}
+                    ],
+                }
+            ),
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "x", "signature": real}],
+                    }
+                ]
+            },
+            history({"type": "compaction", "content": "s", "encrypted_content": real}),
+        ]
+        for body in carriers:
+            with pytest.raises(UnsupportedRequestError, match="opaque"):
+                masker.mask(body)
+
+
 class TestRules:
     def test_a_server_call_not_seen_is_masked_like_a_tool_input(self):
         masker, _, _ = make()

@@ -597,6 +597,9 @@ def restore_message(
     content = []
     restorer = ResponseRestorer(shield, ledger, json_text=json_text)
     for block in message["content"]:
+        # What the API sent, before any placeholder in it is restored: a
+        # restored value must never count as one the API sent.
+        restorer._record_opaque(block)
         if isinstance(block, dict) and block.get("type") == _TEXT:
             masked = block.get("text")
             if isinstance(masked, str):
@@ -631,7 +634,6 @@ def restore_message(
                 block = {**block, "content": restored}
         elif isinstance(block, dict) and block.get("type") not in _OWN_RULES:
             restorer._record_seen(block)
-        restorer._record_opaque(block)
         content.append(block)
     return {**message, "content": content}
 
