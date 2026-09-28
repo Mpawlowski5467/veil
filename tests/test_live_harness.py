@@ -458,6 +458,16 @@ class TestShape:
         value = {"tool_uses": {"toolu_01AbC": {"x": 1}, "srvtoolu_9z": {"x": 2}}}
         assert recorder.census([value])["$.tool_uses.<id>.x"] == ["number"]
 
+    def test_keys_and_types_that_look_like_data_are_hidden(self):
+        value = {
+            "metadata": {"jane.doe@example.com": 1, "$ref": "x"},
+            "block": {"type": "Jan Nowak"},
+        }
+        shape = recorder.census([value])
+        assert shape["$.metadata.<key>"] == ["number"]
+        assert shape["$.metadata.$ref"] == ["string"]
+        assert shape["$.block.type"] == ["type=<value>"]
+
     def test_census_merges_values(self):
         merged = recorder.census([{"type": "a"}, {"type": "b"}, [1]])
         assert merged == {
@@ -546,6 +556,21 @@ class TestRecorder:
         assert (tmp_path / "request-1.json").exists()
         assert (tmp_path / "response-1.sse").read_bytes().startswith(b"event:")
 
+    def test_a_body_can_be_changed_on_the_way(self, tmp_path, fake_api):
+        def plant(body):
+            return {**body, "planted": True} if "messages" in body else None
+
+        with recorder.Recorder(
+            tmp_path, upstream=fake_api, secure=False, rewrite=plant
+        ) as gw:
+            conn = http.client.HTTPConnection(gw.url.removeprefix("http://"))
+            conn.request("POST", "/v1/messages", body=json.dumps({"messages": []}))
+            conn.getresponse().read()
+            conn.close()
+        assert json.loads(SEEN[0][2]) == {"messages": [], "planted": True}
+        assert gw.records[0]["rewritten"] is True
+        assert gw.records[0]["body_shape"]["$.planted"] == ["boolean"]
+
     def test_json_responses_are_relayed(self, tmp_path, fake_api):
         with recorder.Recorder(tmp_path, upstream=fake_api, secure=False) as gw:
             conn = http.client.HTTPConnection(gw.url.removeprefix("http://"))
@@ -554,3 +579,4 @@ class TestRecorder:
             conn.close()
         assert data["data"][0]["id"] == "m"
         assert gw.records[0]["response_shape"]["$.data[].type"] == ["type=model"]
+        assert json.loads((tmp_path / "response-1.json").read_text()) == data

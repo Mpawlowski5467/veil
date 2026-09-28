@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from live import harness as h
+from live.census import collapse, new_paths
 from live.recorder import Recorder, census
 
 pytestmark = [
@@ -56,18 +57,12 @@ def request_bodies(run):
     ]
 
 
-def unknown(shape, known):
-    """Paths or kinds in ``shape`` that the recorded census doesn't list."""
-    missing = {}
-    for path, kinds in shape.items():
-        if path.startswith("$.tools[].input_schema."):
-            continue  # tool schemas are Claude Code's own definitions
-        if ".input." in path and path.startswith("$.messages[]"):
-            continue  # tool inputs vary by tool
-        new = set(kinds) - set(known.get(path, {}).get("kinds", []))
-        if new:
-            missing[path] = sorted(new)
-    return missing
+def unknown(shape, known, *, reply=False):
+    """Paths or kinds in ``shape`` that the recorded census doesn't list.
+
+    The census script's rules: tool schemas and tool inputs don't count.
+    """
+    return new_paths(collapse(shape), known, reply=reply)
 
 
 # --- One session through a recording gateway ---------------------------------
@@ -138,7 +133,7 @@ def test_bodies_and_replies_use_only_known_fields(session):
     assert unknown(census(request_bodies(session)), KNOWN_REQUEST[MESSAGES]) == {}
     for record in model_requests(session):
         shape = record.get("response_shape", {})
-        assert unknown(shape, KNOWN_RESPONSE[MESSAGES]) == {}, record["id"]
+        assert unknown(shape, KNOWN_RESPONSE[MESSAGES], reply=True) == {}, record["id"]
 
 
 # --- Which settings decide where requests go ---------------------------------
