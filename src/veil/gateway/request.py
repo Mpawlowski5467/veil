@@ -69,6 +69,9 @@ _TOP_LEVEL_PASS = frozenset(
         "top_p",
     }
 )
+# The speeds a request can ask for (fast mode, beta fast-mode-2026-02-01).
+# Claude Code sends "fast" when fast mode is on, and no speed otherwise.
+_SPEEDS = frozenset({"standard", "fast"})
 _ROLES = frozenset({"user", "assistant", "system"})
 _MESSAGE_KEYS = frozenset({"role", "content", "output_config"})
 # The effort a system message can set for the turns after it (its
@@ -251,6 +254,8 @@ class RequestMasker:
                 out[key] = self._strings(value, "stop_sequences")
             elif key == "safeguards":
                 out[key] = self._anything(value, "safeguards")
+            elif key == "speed":
+                out[key] = _speed(value)
             else:
                 raise UnsupportedRequestError(_key(key), "unknown field")
         if self._note is not None and "messages" in out:
@@ -537,6 +542,16 @@ def _effort_only(value: Any, path: str, role: Any) -> None:
     effort = value.get("effort")
     if not isinstance(effort, str) or effort not in _EFFORT_LEVELS:
         raise UnsupportedRequestError(f"{path}.effort", "not an effort level")
+
+
+def _speed(value: Any) -> Any:
+    """Check the requested speed, a setting passed on as it is.
+
+    A string, so passing it unchecked would let any text out unmasked.
+    """
+    if not isinstance(value, str) or value not in _SPEEDS:
+        raise UnsupportedRequestError("speed", "unknown speed")
+    return value
 
 
 def _no_citations(block: dict[str, Any], path: str) -> None:
