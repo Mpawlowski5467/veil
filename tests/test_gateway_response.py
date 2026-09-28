@@ -10,6 +10,7 @@ from veil.gateway import (
     MemoryLedger,
     RequestMasker,
     ResponseRestorer,
+    StreamError,
     restore_message,
 )
 
@@ -377,3 +378,32 @@ class TestWholeMessages:
     @pytest.mark.parametrize("message", [None, "text", {"content": "plain"}, {"id": 1}])
     def test_other_bodies_pass_unchanged(self, message):
         assert restore_message(make_shield(), MemoryLedger(), message) == message
+
+
+class TestToolInputKeys:
+    """Keys of a tool call's input are restored, as the gateway masks them."""
+
+    def test_a_masked_key_is_restored(self):
+        shield = make_shield()
+        placeholder = shield.mask(EMAIL).text
+        tool = {"type": "tool_use", "id": "t1", "name": "save", "input": {}}
+        masked = {placeholder: "x"}
+        message = {"content": [{**tool, "input": masked}]}
+        restored = restore_message(shield, MemoryLedger(), message)
+        assert restored["content"][0]["input"] == {EMAIL: "x"}
+
+    def test_two_keys_that_restore_alike_are_refused(self):
+        shield = make_shield()
+        placeholder = shield.mask(EMAIL).text
+        message = {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "save",
+                    "input": {placeholder: 1, EMAIL: 2},
+                }
+            ]
+        }
+        with pytest.raises(StreamError, match="two keys"):
+            restore_message(shield, MemoryLedger(), message)

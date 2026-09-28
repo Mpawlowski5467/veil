@@ -38,9 +38,12 @@ def masked(body_name, registered_name):
         shield.add_entity(value, kind)
     masker = RequestMasker(shield, MemoryLedger(), registered=registered)
     try:
-        return {"masked": masker.mask(bodies.BODIES[body_name]())}
+        out = {"masked": masker.mask(bodies.BODIES[body_name]())}
     except UnsupportedRequestError as error:
         return {"refused": str(error)}
+    # Claude Code's own shapes all have rules: nothing is masked generically.
+    assert masker.last_generic == ()
+    return out
 
 
 def test_golden_file_covers_every_case():

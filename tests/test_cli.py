@@ -145,7 +145,9 @@ class TestClaude:
         self, fake_claude, data_dir, monkeypatch, capsys
     ):
         _, report_file = fake_claude
-        body = {"messages": [{"role": "user", "content": "hi"}], "prompt": "x"}
+        # Refused: thinking the gateway can't vouch for, in the user's message.
+        thinking = {"type": "thinking", "thinking": "x", "signature": "s"}
+        body = {"messages": [{"role": "user", "content": [thinking]}]}
         monkeypatch.setenv("FAKE_CLAUDE_POST", json.dumps(body))
         monkeypatch.setenv("FAKE_CLAUDE_EXIT", "1")
         assert cli.main(["--data-dir", str(data_dir), "claude"]) == 1
@@ -154,7 +156,10 @@ class TestClaude:
         start = err.index(
             "veil: 1 request couldn't be masked, so it wasn't sent. Not handled:"
         )
-        assert err[start + 1] == "  prompt (unknown field)"
+        assert err[start + 1] == (
+            "  messages[0].content[0].type "
+            "(only the model's own messages have thinking)"
+        )
         assert err[start + 2].startswith("veil: This is Claude Code 2.1.290")
 
     def test_an_untested_claude_code_is_named_once(

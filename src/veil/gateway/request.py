@@ -10,6 +10,7 @@ after a client update.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -19,6 +20,7 @@ from ..placeholders import placeholder_type
 from ..shield import Shield
 from ..vault.base import Vault
 from .ledger import Ledger
+from .vocab import WORDS
 
 _T = TypeVar("_T")
 
@@ -223,11 +225,15 @@ class _KnownValues:
 
         return pattern.sub(replace, text)
 
-    def found_in(self, text: str) -> bool:
-        """Whether ``text`` holds a known value outside a placeholder."""
+    def found_in(self, text: str, *, min_length: int = 0) -> bool:
+        """Whether ``text`` holds a known value outside a placeholder.
+
+        With ``min_length``, only values at least that long count.
+        """
         pattern = self._current()
         return pattern is not None and any(
-            m["v"] is not None for m in pattern.finditer(text)
+            m["v"] is not None and len(m["v"]) >= min_length
+            for m in pattern.finditer(text)
         )
 
 
@@ -270,6 +276,12 @@ class RequestMasker:
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
         self._problems: list[tuple[str, str]] = []
         self._client_version: str | None = None
+        self._exposed: frozenset[str] = frozenset()
+        self._generic: list[str] = []
+        self._words: dict[str, bool] = {}
+        #: Where the last `mask` call found content without a rule of its
+        #: own, which it masked generically (paths with indices dropped).
+        self.last_generic: tuple[str, ...] = ()
 
     def mask(
         self, body: dict[str, Any], *, client_version: str | None = None
@@ -289,14 +301,21 @@ class RequestMasker:
             raise UnsupportedRequestError("$", "the body is not a JSON object")
         self._notice_a_cleared_vault()
         self._problems = []
+        self._generic = []
         self._client_version = client_version
         try:
             out = self._body(body)
             # Named only now: by the end of the body, the vault knows every
             # value in it, however early a name holding one came.
             problems = [self._safe(*problem) for problem in self._problems]
+            self.last_generic = tuple(
+                dict.fromkeys(
+                    _INDEX.sub("[]", self._safe(path, "")[0]) for path in self._generic
+                )
+            )
         finally:
             self._problems = []
+            self._generic = []
         if problems:
             raise UnsupportedRequestError(*problems[0], more=problems[1:])
         self._vault_state = self._state()
@@ -304,6 +323,7 @@ class RequestMasker:
 
     def _body(self, body: dict[str, Any]) -> dict[str, Any]:
         out: dict[str, Any] = {}
+        self._exposed = _exposed_names(body)
         for key, value in body.items():
             path = _key(key)
             # The conversation is checked message by message, so a problem
@@ -319,9 +339,9 @@ class RequestMasker:
             elif key == "stop_sequences":
                 out[key] = self._guard(self._strings, value, "stop_sequences")
             elif key == "safeguards":
-                out[key] = self._guard(self._anything, value, "safeguards")
+                out[key] = self._guard(self._safeguards, value)
             else:
-                self._problem(path, "unknown field")
+                out.update(self._unknown_fields({key: value}, ""))
         if self._note is not None and isinstance(out.get("messages"), list):
             out["system"] = self._with_note(out.get("system"))
         return out
@@ -408,10 +428,15 @@ class RequestMasker:
         return out
 
     def _system_block(self, block: Any, path: str, first: bool) -> Any:
-        _check_block(block, path, allowed={"text"})
-        _no_citations(block, path)
-        text = _str(block["text"], f"{path}.text")
-        return {**block, "text": self._billed(text, first=first)}
+        kind = _block_type(block, path)
+        if kind != "text":
+            return self._unknown_block(block, path)
+        known, extra = _split(block, _BLOCK_KEYS["text"])
+        _no_citations(known, path)
+        text = _str(known.get("text"), f"{path}.text")
+        return self._merged(
+            block, {**known, "text": self._billed(text, first=first)}, extra, path
+        )
 
     def _billed(self, text: str, *, first: bool) -> str:
         """Mask system text, keeping a billing line's name and version."""
@@ -458,18 +483,18 @@ class RequestMasker:
     def _message(self, message: Any, path: str) -> Any:
         if not isinstance(message, dict):
             raise UnsupportedRequestError(path, "not an object")
-        for key in sorted(set(message) - _MESSAGE_KEYS):
-            self._problem(f"{path}.{_key(key)}", "unknown field")
-        role = message.get("role")
+        # A message has no type of its own: a "type" here is an unknown field.
+        known, extra = _split(message, _MESSAGE_KEYS, keep_type=False)
+        role = known.get("role")
         if not isinstance(role, str) or role not in _ROLES:
             # Checked on as a user message, so every other problem is named.
             self._problem(f"{path}.role", f"unknown role{_named(role)}")
             role = "user"
-        elif "output_config" in message:
+        elif "output_config" in known:
             self._guard(
-                _effort_only, message["output_config"], f"{path}.output_config", role
+                _effort_only, known["output_config"], f"{path}.output_config", role
             )
-        content = message.get("content")
+        content = known.get("content")
         if isinstance(content, str):
             masked: Any = (
                 self._reply_text(content)
@@ -482,49 +507,80 @@ class RequestMasker:
                 for j, block in enumerate(_list(content, f"{path}.content"))
             ]
             masked = [block for block in blocks if block is not None]
-        return {**message, "content": masked}
+        return self._merged(message, {**known, "content": masked}, extra, path)
 
     def _block(self, block: Any, path: str, role: str) -> Any:
-        kind = _check_block(block, path, allowed=set(_BLOCK_KEYS))
+        kind = _block_type(block, path)
+        if kind not in _BLOCK_KEYS:
+            return self._unknown_block(block, path)
+        known, extra = _split(block, _BLOCK_KEYS[kind])
+        if kind in ("thinking", "redacted_thinking"):
+            return self._signed(block, extra, path, role, kind)
         if kind == "text":
-            _no_citations(block, path)
-            text = _str(block["text"], f"{path}.text")
+            _no_citations(known, path)
+            text = _str(known.get("text"), f"{path}.text")
             masked = self._reply_text(text) if role == "assistant" else self._text(text)
-            return {**block, "text": masked}
-        if kind == "redacted_thinking":
-            return block
+            out = {**known, "text": masked}
+        elif kind == "image":
+            self._media_source(known.get("source"), f"{path}.source", _IMAGE_TYPES)
+            out = known
+        elif kind == "document":
+            out = self._document(known, path)
+        elif kind == "tool_use":
+            out = self._tool_use(known, path, role=role)
+        else:
+            out = self._tool_result(known, path)
+        return self._merged(block, out, extra, path)
+
+    def _signed(
+        self,
+        block: dict[str, Any],
+        extra: dict[str, Any],
+        path: str,
+        role: str,
+        kind: str,
+    ) -> Any:
+        """A thinking block, signed by the API: sent exactly as it came, or not at all.
+
+        Thinking about data seen before it was masked (a value registered
+        later, a session begun without the gateway) is dropped, and so is one
+        with a field this gateway has no rule for that holds anything
+        masking would change: nothing in a signed block can be changed.
+        """
+        if role != "assistant":
+            raise UnsupportedRequestError(
+                f"{path}.type", f"only the model's own messages have {kind}"
+            )
         if kind == "thinking":
-            # Signed by the API, so sent back exactly as the model wrote it,
-            # or not at all: thinking about data seen before it was masked
-            # (a value registered later, a session begun without the
-            # gateway) is dropped.
-            thinking = block.get("thinking")
-            if isinstance(thinking, str) and self._known.found_in(thinking):
+            thinking = _str(block.get("thinking"), f"{path}.thinking")
+            _str(block.get("signature"), f"{path}.signature")
+            if self._known.found_in(thinking):
                 return None
-            return block
-        if kind == "image":
-            _media_source(block.get("source"), f"{path}.source")
-            return block
-        if kind == "document":
-            return self._document(block, path)
-        if kind == "tool_use":
-            return self._tool_use(block, path, role=role)
-        return self._tool_result(block, path)
+        else:
+            _str(block.get("data"), f"{path}.data")
+        if extra:
+            self._generic.extend(f"{path}.{_key(name)}" for name in extra)
+            if not self._unchanged(extra):
+                return None
+        return block
 
     def _tool_use(self, block: dict[str, Any], path: str, *, role: str) -> Any:
+        tool_id = self._tool_id(block.get("id"), f"{path}.id")
         tool_input = block.get("input")
-        tool_id = block.get("id")
-        if (
-            role == "assistant"
-            and isinstance(tool_id, str)
-            and _TOOL_ID.fullmatch(tool_id)
-        ):
+        if role == "assistant":
             masked = self._ledger.masked_tool_input(tool_id, tool_input)
             if masked is not None:
-                return {**block, "input": self._known_everywhere(masked)}
-        return {**block, "input": self._anything(tool_input, f"{path}.input")}
+                # The API made this call, name and all.
+                _str(block.get("name"), f"{path}.name")
+                replayed = self._known_everywhere(masked, f"{path}.input")
+                return {**block, "input": replayed}
+        self._tool_name(block.get("name"), f"{path}.name")
+        return {**block, "input": self._data(tool_input, f"{path}.input")}
 
     def _tool_result(self, block: dict[str, Any], path: str) -> Any:
+        self._tool_id(block.get("tool_use_id"), f"{path}.tool_use_id")
+        if block.get("is_error") not in (None, True, False):
+            raise UnsupportedRequestError(f"{path}.is_error", "not true or false")
         content = block.get("content")
         if content is None or isinstance(content, str):
             masked = None if content is None else self._text(content)
@@ -537,14 +593,20 @@ class RequestMasker:
         return {**block, "content": nested}
 
     def _nested(self, item: Any, path: str) -> Any:
-        kind = _check_block(item, path, allowed=_NESTED_BLOCKS)
+        kind = _block_type(item, path)
+        if kind not in _NESTED_BLOCKS:
+            return self._unknown_block(item, path)
+        known, extra = _split(item, _BLOCK_KEYS[kind])
         if kind == "text":
-            _no_citations(item, path)
-            return {**item, "text": self._text(_str(item["text"], f"{path}.text"))}
-        if kind == "image":
-            _media_source(item.get("source"), f"{path}.source")
-            return item
-        return self._document(item, path)
+            _no_citations(known, path)
+            text = self._text(_str(known.get("text"), f"{path}.text"))
+            out = {**known, "text": text}
+        elif kind == "image":
+            self._media_source(known.get("source"), f"{path}.source", _IMAGE_TYPES)
+            out = known
+        else:
+            out = self._document(known, path)
+        return self._merged(item, out, extra, path)
 
     def _document(self, block: dict[str, Any], path: str) -> Any:
         _no_citations(block, path)
@@ -558,16 +620,301 @@ class RequestMasker:
             raise UnsupportedRequestError(source_path, "not an object")
         kind = source.get("type")
         if kind in ("base64", "url"):
-            _media_source(source, source_path)
+            self._media_source(source, source_path, _DOCUMENT_TYPES)
             return out
         if kind == "text":
             _no_extra_keys(source, {"type", "media_type", "data"}, source_path)
+            if source.get("media_type") != "text/plain":
+                raise UnsupportedRequestError(
+                    f"{source_path}.media_type", "not text/plain"
+                )
             data = _str(source.get("data"), f"{source_path}.data")
             out["source"] = {**source, "data": self._text(data)}
             return out
         raise UnsupportedRequestError(
             f"{source_path}.type", f"unknown document source{_named(kind)}"
         )
+
+    def _media_source(self, source: Any, path: str, types: frozenset[str]) -> None:
+        """Check an image or PDF source, which is passed on as it is.
+
+        Its bytes can't be masked, so only the media Claude Code sends are
+        let through, and a URL only if it holds nothing masking would change.
+        """
+        if not isinstance(source, dict):
+            raise UnsupportedRequestError(path, "not an object")
+        kind = source.get("type")
+        keys: dict[str, set[str]] = {
+            "base64": {"type", "media_type", "data"},
+            "url": {"type", "url"},
+        }
+        if not isinstance(kind, str) or kind not in keys:
+            raise UnsupportedRequestError(
+                f"{path}.type", f"unknown source type{_named(kind)}"
+            )
+        _no_extra_keys(source, keys[kind], path)
+        if kind == "base64":
+            media_type = source.get("media_type")
+            if not isinstance(media_type, str) or media_type not in types:
+                raise UnsupportedRequestError(
+                    f"{path}.media_type", "a kind of file that isn't sent"
+                )
+            _str(source.get("data"), f"{path}.data")
+            return
+        url = _str(source.get("url"), f"{path}.url")
+        if not _WEB_URL.match(url) or _opaque(None, url) or not self._clean(url):
+            raise UnsupportedRequestError(
+                f"{path}.url", "a URL that may hold personal data"
+            )
+
+    # --- names that can't be masked ------------------------------------------
+
+    def _tool_id(self, value: Any, path: str) -> str:
+        """A tool call's id: never masked (it pairs a call with its result)."""
+        tool_id = _str(value, path)
+        if _TOOL_ID.fullmatch(tool_id) and self._id_ok(tool_id):
+            return tool_id
+        raise UnsupportedRequestError(path, "an id the API couldn't have made")
+
+    def _id_ok(self, value: str) -> bool:
+        """Whether an id may go out as it is, never masked.
+
+        One masking would leave as it is may. So may one the API makes at
+        random, if the only known values inside it are short ones, there by
+        chance (a registered ``ada`` inside ``toolu_01ada9...``).
+        """
+        if self._clean(value):
+            return True
+        return (
+            _API_ID.fullmatch(value) is not None
+            and self._word_clean(value)
+            and not self._known.found_in(value, min_length=_CHANCE)
+        )
+
+    def _tool_name(self, value: Any, path: str) -> None:
+        """A tool's name: never masked (the client runs the tool by it)."""
+        name = _str(value, path)
+        if name in self._exposed:
+            return
+        # Tool names go out as they are in the request's tools, by design; one
+        # used earlier (an MCP tool still connecting, say) is checked as a word.
+        if _TOOL_NAME.fullmatch(name) and self._word_clean(name):
+            return
+        raise UnsupportedRequestError(path, "a tool name that may hold personal data")
+
+    def _key_ok(self, name: str) -> bool:
+        """Whether a key of content without a rule may go out as it is."""
+        if name in WORDS:
+            return self._word_clean(name)
+        return _FIELD_NAME.fullmatch(name) is not None and self._clean(name)
+
+    def _ident_ok(self, name: str) -> bool:
+        """Whether a name that can't be masked may go out as it is.
+
+        A protocol word may (unless it is a registered value itself); any
+        other name only if masking would leave it as it is.
+        """
+        if name in WORDS:
+            return self._word_clean(name)
+        return self._clean(name)
+
+    def _word_clean(self, word: str) -> bool:
+        """No detector and no registered value finds ``word`` as a whole word.
+
+        Short registered values inside it don't count, so an id or a protocol
+        word isn't taken for data by chance.
+        """
+        found = self._words.get(word)
+        if found is None:
+            found = self._shield.mask(word).text == word
+            self._words[word] = found
+        return found
+
+    def _clean(self, text: str) -> bool:
+        """Whether masking leaves ``text`` as it is."""
+        return self._text(text) == text
+
+    # --- content without a rule of its own -----------------------------------
+
+    def _merged(
+        self, whole: dict[str, Any], masked: Any, extra: dict[str, Any], path: str
+    ) -> Any:
+        """Put a part's unknown fields, masked, back with its masked known ones."""
+        if not extra or masked is None:
+            return masked
+        fields = self._unknown_fields(extra, path)
+        merged = {**masked, **fields}
+        return {key: merged[key] for key in whole if key in merged}
+
+    def _unknown_fields(self, fields: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+        """Mask fields this gateway has no rule for; note any it can't."""
+        out: dict[str, Any] = {}
+        for name, value in fields.items():
+            path = f"{prefix}.{_key(name)}" if prefix else _key(name)
+            self._generic.append(path)
+            if not self._key_ok(name):
+                self._problem(path, "a field name that may hold personal data")
+                continue
+            try:
+                out[name] = self._unknown(value, path, name)
+            except UnsupportedRequestError as error:
+                for where, problem in error.found:
+                    self._problem(where, problem)
+        return out
+
+    def _unknown_block(self, block: dict[str, Any], path: str) -> Any:
+        """A block of a type this gateway has no rule for, masked generically."""
+        self._generic.append(f"{path}.type")
+        return self._unknown(block, path)
+
+    def _unknown(self, value: Any, path: str, key: str | None = None) -> Any:
+        """Mask content without a rule of its own, or refuse it.
+
+        Text is masked as any text is. What can't be masked goes out only if
+        it holds nothing masking would change: a key, a type, an id, a
+        number. Bytes (base64, anything with a media type) and opaque values
+        (signatures, encrypted data) are refused: they can't be checked.
+        """
+        if isinstance(value, dict):
+            if _MEDIA_KEYS & value.keys() or value.get("type") == "base64":
+                raise UnsupportedRequestError(path, "file data that can't be masked")
+            out: dict[str, Any] = {}
+            for name, item in value.items():
+                where = f"{path}.{_key(name)}"
+                if not self._key_ok(name):
+                    raise UnsupportedRequestError(
+                        where, "a field name that may hold personal data"
+                    )
+                out[name] = self._unknown(item, where, name)
+            return out
+        if isinstance(value, list):
+            return [
+                self._unknown(item, f"{path}[{i}]", key) for i, item in enumerate(value)
+            ]
+        if isinstance(value, str):
+            return self._unknown_text(value, path, key)
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, (int, float)):
+            if not self._number_clean(value, key):
+                raise UnsupportedRequestError(
+                    path, "a number that may hold personal data"
+                )
+            return value
+        return value
+
+    def _unknown_text(self, text: str, path: str, key: str | None) -> str:
+        if _opaque(key, text):
+            if self._sent_by_api(text):
+                return text
+            raise UnsupportedRequestError(path, "opaque data that can't be masked")
+        if key == "type":
+            if _TYPE_NAME.fullmatch(text) and self._ident_ok(text):
+                return text
+            raise UnsupportedRequestError(path, "a type that may hold personal data")
+        if key is not None and _ID_KEY.fullmatch(key):
+            return text if self._id_ok(text) else self._text(text)
+        if key is not None and _NAME_KEY.fullmatch(key) and text in self._exposed:
+            return text
+        return self._text(text)
+
+    def _number_clean(self, number: float, key: str | None) -> bool:
+        """Whether a number holds nothing masking would change in its digits.
+
+        A number can't become a placeholder without changing its type, so
+        one that would be masked as text (a card number, a registered value)
+        is refused. Settings (token counts, limits) are only numbers.
+        """
+        texts = [json.dumps(number)]
+        if isinstance(number, float) and number.is_integer() and abs(number) < 1e21:
+            texts.append(str(int(number)))
+        if key is not None and _SETTING_KEY.fullmatch(key):
+            # A setting may hold a registered number by chance (64000 when
+            # 4000 is registered), but not be one, or a card.
+            return all(self._word_clean(text) for text in texts)
+        return all(self._clean(text) for text in texts)
+
+    def _unchanged(self, value: Any, key: str | None = None) -> bool:
+        """Whether ``value`` holds nothing masking would change; nothing is masked."""
+        if isinstance(value, dict):
+            return all(
+                self._key_ok(name) and self._unchanged(item, name)
+                for name, item in value.items()
+            )
+        if isinstance(value, list):
+            return all(self._unchanged(item, key) for item in value)
+        if isinstance(value, str):
+            if _opaque(key, value):
+                return self._sent_by_api(value)
+            if key == "type":
+                return _TYPE_NAME.fullmatch(value) is not None and self._ident_ok(value)
+            return self._clean(value)
+        if isinstance(value, bool) or value is None:
+            return True
+        if isinstance(value, (int, float)):
+            return self._number_clean(value, key)
+        return False
+
+    def _sent_by_api(self, value: str) -> bool:
+        """Whether an opaque value is one the API itself sent in a reply."""
+        return False
+
+    # --- data: tool inputs, the classifier's context ---------------------------
+
+    def _safeguards(self, value: Any) -> Any:
+        """Auto mode's context for its safety check: local paths, rules, state."""
+        return self._data(value, "safeguards", opaque=False)
+
+    def _data(
+        self, value: Any, path: str, key: str | None = None, *, opaque: bool = True
+    ) -> Any:
+        """Mask a value that is data, such as a tool call's input.
+
+        Every string is masked, keys too (unless they are protocol words or
+        hold nothing to mask), and ``type`` values like any other string.
+        Two keys that would mask to the same text are refused. Without
+        ``opaque``, a ``data:`` URI or a value under a key such as
+        ``signature`` is refused; other strings, however long, are masked as
+        text (a long path is ordinary in the classifier's context).
+        """
+        if isinstance(value, str):
+            if (
+                not opaque
+                and (_DATA_URI.match(value) or (key and _OPAQUE_KEY.fullmatch(key)))
+                and not self._sent_by_api(value)
+            ):
+                raise UnsupportedRequestError(path, "opaque data that can't be masked")
+            if key == "type" and self._ident_ok(value):
+                return value
+            if key is not None and _ID_KEY.fullmatch(key) and self._id_ok(value):
+                return value
+            return self._text(value)
+        if isinstance(value, list):
+            return [
+                self._data(item, f"{path}[{i}]", key, opaque=opaque)
+                for i, item in enumerate(value)
+            ]
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for name, item in value.items():
+                masked = name if self._ident_ok(name) else self._text(name)
+                if masked in out:
+                    raise UnsupportedRequestError(
+                        f"{path}.<key>", "two keys that mask to the same text"
+                    )
+                out[masked] = self._data(
+                    item, f"{path}.{_key(name)}", name, opaque=opaque
+                )
+            return out
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, (int, float)):
+            if not self._number_clean(value, key):
+                raise UnsupportedRequestError(
+                    path, "a number that may hold personal data"
+                )
+            return value
+        return value
 
     # --- masking text --------------------------------------------------------
 
@@ -587,13 +934,22 @@ class RequestMasker:
         self._memo.put(key, masked)
         return masked
 
-    def _known_everywhere(self, value: Any) -> Any:
+    def _known_everywhere(self, value: Any, path: str) -> Any:
+        """Mask any known value left in a replayed tool input, keys included."""
         if isinstance(value, str):
             return self._known.mask(value)
         if isinstance(value, list):
-            return [self._known_everywhere(item) for item in value]
+            return [self._known_everywhere(item, path) for item in value]
         if isinstance(value, dict):
-            return {key: self._known_everywhere(item) for key, item in value.items()}
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                masked = key if self._ident_ok(key) else self._known.mask(key)
+                if masked in out:
+                    raise UnsupportedRequestError(
+                        f"{path}.<key>", "two keys that mask to the same text"
+                    )
+                out[masked] = self._known_everywhere(item, path)
+            return out
         return value
 
     def _strings(self, value: Any, path: str) -> list[str]:
@@ -601,23 +957,6 @@ class RequestMasker:
             self._text(_str(item, f"{path}[{i}]"))
             for i, item in enumerate(_list(value, path))
         ]
-
-    def _anything(self, value: Any, path: str) -> Any:
-        """Mask every string in a JSON value; keys and ``type`` values stay."""
-        if isinstance(value, str):
-            return self._text(value)
-        if isinstance(value, list):
-            return [
-                self._anything(item, f"{path}[{i}]") for i, item in enumerate(value)
-            ]
-        if isinstance(value, dict):
-            return {
-                key: item
-                if key == "type" and isinstance(item, str)
-                else self._anything(item, f"{path}.{key}")
-                for key, item in value.items()
-            }
-        return value
 
 
 def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
@@ -664,6 +1003,35 @@ _SEGMENT = re.compile(r"(?<![^.])[A-Za-z_][A-Za-z0-9_]{0,63}(?![A-Za-z0-9_])")
 _QUOTED = re.compile(r" '([a-z][a-z0-9_]{0,63})'")
 # A tool call's id, as the API makes them; anything else is never looked up.
 _TOOL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+# Ids the API makes at random: a short known value inside one is chance
+# (under _CHANCE characters). Hex ids need a letter: digits alone may be an
+# account number.
+_API_ID = re.compile(
+    r"(?:srv|mcp)?toolu_[A-Za-z0-9_]{8,128}|(?:msg|req|file|container)_[A-Za-z0-9]{8,128}"
+    r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    r"|(?=[0-9]*[a-f])[0-9a-f]{16,128}",
+    re.ASCII,
+)
+_CHANCE = 5
+# A URL a source may point to: on the web, not inline data.
+_WEB_URL = re.compile(r"https?://", re.IGNORECASE)
+_TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}", re.ASCII)
+# Keys whose values are ids, names, settings, opaque data or file bytes.
+_ID_KEY = re.compile(r"id|.+_id|.+_ids")
+_NAME_KEY = re.compile(r"name|.+_name")
+# Only names that say so: a generic one like "value" could hold anything.
+_SETTING_KEY = re.compile(r"max_uses|target_tokens_saved|[a-z_]*_tokens")
+_OPAQUE_KEY = re.compile(
+    r"signature|.+_signature|encrypted(?:_.+)?|.+_encrypted|ciphertext"
+)
+_BYTES_KEY = re.compile(r"data|bytes|blob|.+_b64|.+_base64")
+# Base64 uses one alphabet or the other, never both.
+_BASE64 = re.compile(r"[A-Za-z0-9+/]+={0,2}|[A-Za-z0-9_-]+={0,2}")
+_DATA_URI = re.compile(r"\s*data:[^,]{0,100};base64,", re.IGNORECASE)
+_MEDIA_KEYS = frozenset({"media_type", "mime_type", "mimeType"})
+# The files Claude Code sends as they are: images, and PDFs.
+_IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+_DOCUMENT_TYPES = frozenset({"application/pdf"})
 
 #: How deeply a request's JSON may nest. Claude Code's requests nest about ten
 #: levels, and tool inputs a few more; deeper values are refused rather than
@@ -730,19 +1098,80 @@ def _str(value: Any, path: str) -> str:
     return value
 
 
-def _check_block(block: Any, path: str, *, allowed: set[str] | frozenset[str]) -> str:
-    """Return the block's type after checking it has a rule and known keys."""
+def _block_type(block: Any, path: str) -> str:
+    """A block's type, which may be one without a rule of its own."""
     if not isinstance(block, dict):
         raise UnsupportedRequestError(path, "not an object")
     kind = block.get("type")
-    if not isinstance(kind, str) or kind not in allowed:
-        raise UnsupportedRequestError(
-            f"{path}.type", f"unknown block type{_named(kind)}"
-        )
-    _no_extra_keys(block, _BLOCK_KEYS[kind] | {"type"}, path)
-    if kind == "text":
-        _str(block.get("text"), f"{path}.text")
+    if not isinstance(kind, str):
+        raise UnsupportedRequestError(f"{path}.type", "not a string")
     return kind
+
+
+def _split(
+    whole: dict[str, Any],
+    known: set[str] | frozenset[str],
+    *,
+    keep_type: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split a part into the fields with a rule (and a block's type) and the rest."""
+    extra = {
+        key: value
+        for key, value in whole.items()
+        if key not in known and not (keep_type and key == "type")
+    }
+    if not extra:
+        return whole, {}
+    return {key: value for key, value in whole.items() if key not in extra}, extra
+
+
+def _exposed_names(body: dict[str, Any]) -> frozenset[str]:
+    """The tool names a request itself defines, which go out as they are.
+
+    Those of its tools, and of tools added in the conversation (a system
+    message's ``tool_addition`` with a definition).
+    """
+    tools = body.get("tools")
+    found = list(tools) if isinstance(tools, list) else []
+    messages = body.get("messages")
+    for message in messages if isinstance(messages, list) else []:
+        content = message.get("content") if isinstance(message, dict) else None
+        for block in content if isinstance(content, list) else []:
+            tool = block.get("tool") if isinstance(block, dict) else None
+            if isinstance(tool, dict) and block.get("type") == "tool_addition":
+                found.append(tool.get("definition"))
+    return frozenset(
+        tool["name"]
+        for tool in found
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    )
+
+
+def _opaque(key: str | None, text: str) -> bool:
+    """Whether a string is opaque: a signature, encrypted data, or file bytes.
+
+    Masking can't look into it, so it goes out only if the API sent it.
+    """
+    if key is not None and _OPAQUE_KEY.fullmatch(key):
+        return True
+    if _DATA_URI.match(text):
+        return True
+    compact = re.sub(r"[\r\n]+", "", text)
+    if not _BASE64.fullmatch(compact):
+        return False
+    mixed = (
+        any(c.isupper() for c in compact)
+        and any(c.islower() for c in compact)
+        and any(c.isdigit() for c in compact)
+    )
+    if len(compact) >= 64 and mixed:
+        return True
+    return (
+        key is not None
+        and _BYTES_KEY.fullmatch(key) is not None
+        and len(compact) >= 16
+        and (mixed or compact.endswith("="))
+    )
 
 
 def _no_extra_keys(value: dict[str, Any], allowed: set[str], path: str) -> None:
@@ -773,21 +1202,15 @@ def _effort_only(value: Any, path: str, role: Any) -> None:
 
 
 def _no_citations(block: dict[str, Any], path: str) -> None:
-    if block.get("citations"):
-        raise UnsupportedRequestError(f"{path}.citations", "citations aren't supported")
-
-
-def _media_source(source: Any, path: str) -> None:
-    """Check an image or PDF source, which is passed on as it is."""
-    if not isinstance(source, dict):
-        raise UnsupportedRequestError(path, "not an object")
-    kind = source.get("type")
-    keys: dict[str, set[str]] = {
-        "base64": {"type", "media_type", "data"},
-        "url": {"type", "url"},
-    }
-    if not isinstance(kind, str) or kind not in keys:
-        raise UnsupportedRequestError(
-            f"{path}.type", f"unknown source type{_named(kind)}"
-        )
-    _no_extra_keys(source, keys[kind], path)
+    """Text blocks carry no citations; a document may say whether to make them."""
+    citations = block.get("citations")
+    if citations is None or citations == []:
+        return
+    if (
+        block.get("type") == "document"
+        and isinstance(citations, dict)
+        and set(citations) <= {"enabled"}
+        and isinstance(citations.get("enabled", False), bool)
+    ):
+        return
+    raise UnsupportedRequestError(f"{path}.citations", "citations aren't supported")

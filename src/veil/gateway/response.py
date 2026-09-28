@@ -272,13 +272,25 @@ class ResponseRestorer:
         )
 
     def _restore_value(self, value: Any) -> Any:
-        """Restore exact placeholders in every string of a tool call's input."""
+        """Restore exact placeholders in every string of a tool call's input.
+
+        Keys too: the gateway masks them on the way out, like any string of
+        a tool's input.
+        """
         if isinstance(value, str):
             return self._shield.restore(value, tolerant=False).text
         if isinstance(value, list):
             return [self._restore_value(item) for item in value]
         if isinstance(value, dict):
-            return {key: self._restore_value(item) for key, item in value.items()}
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                restored = self._shield.restore(key, tolerant=False).text
+                if restored in out:
+                    raise StreamError(
+                        "two keys of a tool call's input stand for the same text"
+                    )
+                out[restored] = self._restore_value(item)
+            return out
         return value
 
 

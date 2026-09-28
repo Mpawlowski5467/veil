@@ -138,6 +138,9 @@ def stream_reply(*parts):
     return (200, "text/event-stream", list(parts))
 
 
+# Thinking in a message of the user's: the gateway can't vouch for it.
+USER_THINKING = {"type": "thinking", "thinking": "x", "signature": "s"}
+
 REQUEST = {
     "model": "claude-haiku-4-5-20251001",
     "max_tokens": 100,
@@ -420,12 +423,7 @@ def test_options_is_refused(api, gateway):
 
 
 def test_an_unmaskable_request_is_refused_by_path(api, gateway):
-    body = {
-        **REQUEST,
-        "messages": [
-            {"role": "user", "content": [{"type": "server_tool_use", "id": "x"}]}
-        ],
-    }
+    body = {**REQUEST, "messages": [{"role": "user", "content": [USER_THINKING]}]}
     response, payload = call(gateway, body=body)
     assert response.status == 400
     error = json.loads(payload)["error"]
@@ -436,7 +434,7 @@ def test_an_unmaskable_request_is_refused_by_path(api, gateway):
     assert error["message"].startswith(f"{APP}: can't mask this request")
     assert error["message"].endswith(
         "Not handled: messages[0].content[0].type "
-        "(unknown block type 'server_tool_use')"
+        "(only the model's own messages have thinking)"
     )
     assert response.getheader("x-should-retry") == "false"
     assert api.received == []
@@ -684,11 +682,11 @@ def test_the_billing_line_keeps_the_clients_own_version(api, gateway, agent, kep
 
 UNMASKABLE = {
     **REQUEST,
-    "brand_new_field": {"x": 1},
+    "brand_new_field": {"type": NAME},
     "messages": [
         {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": [{"type": "future_block", "id": "a"}]},
-        {"role": "user", "content": [{"type": "future_block", "id": "b"}]},
+        {"role": "user", "content": [USER_THINKING]},
+        {"role": "user", "content": [USER_THINKING]},
     ],
 }
 
@@ -712,10 +710,10 @@ class TestRefusals:
         assert f"was tested with {TESTED_CLAUDE_CODE}: update {APP}." in message
         # Not everything is in the conversation, so /rewind won't help.
         assert "/rewind won't help" in message
-        assert "brand_new_field (unknown field)" in message
+        assert "brand_new_field.type (a type that may hold personal data)" in message
         assert (
-            "messages[1].content[0].type (unknown block type 'future_block') 2 times"
-            in message
+            "messages[1].content[0].type (only the model's own messages have "
+            "thinking) 2 times" in message
         )
         assert "\n" not in message
         assert api.received == []
@@ -757,7 +755,7 @@ class TestRefusals:
         assert EMAIL.encode() not in payload
         assert NAME.encode() not in payload
         message = json.loads(payload)["error"]["message"]
-        assert "<key> (unknown field)" in message
+        assert "<key> (a field name that may hold personal data)" in message
         assert "messages[0].role (unknown role)" in message
 
     def test_a_registered_value_shaped_like_a_name_is_not_named(self, api):
@@ -772,7 +770,8 @@ class TestRefusals:
         ) as gw:
             _, payload = call(gw, body=body)
         assert b"ada_quill" not in payload
-        assert "<key> (unknown field)" in json.loads(payload)["error"]["message"]
+        message = json.loads(payload)["error"]["message"]
+        assert "<key> (a field name that may hold personal data)" in message
 
     def test_a_masker_bug_is_final_and_names_no_value(self, api, gateway):
         session = gateway.sessions.get("session-1")
@@ -851,15 +850,15 @@ class TestRefusals:
     def test_refusals_are_counted_once_per_request(self, api, gateway):
         call(gateway, body=UNMASKABLE)
         call(gateway, body=UNMASKABLE)  # sent again: the same request
-        body = {**REQUEST, "other_field": 1}
+        body = {**REQUEST, "other_field": {"type": NAME}}
         call(gateway, body=body, headers={"User-Agent": "claude-cli/2.1.290 (x)"})
         assert gateway.refusals.requests == 2
         lines = gateway.refusals.summary()
         assert lines[0] == (
             f"{APP}: 2 requests couldn't be masked, so they weren't sent. Not handled:"
         )
-        assert "  brand_new_field (unknown field)" in lines
-        assert "  other_field (unknown field)" in lines
+        assert "  brand_new_field.type (a type that may hold personal data)" in lines
+        assert "  other_field.type (a type that may hold personal data)" in lines
         assert lines[-1].startswith(f"{APP}: This is Claude Code 2.1.290")
 
     def test_nothing_refused_means_no_summary(self, gateway):
@@ -881,7 +880,7 @@ class TestRefusals:
             return shield
 
         effort = {"role": "user", "content": "x", "output_config": {"effort": "high"}}
-        future = {"role": "user", "content": [{"type": "future_block"}]}
+        future = {"role": "user", "content": [USER_THINKING]}
         with Gateway(
             Sessions(shield_with_handle), upstream=api.host, secure=False
         ) as gw:
