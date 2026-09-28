@@ -70,6 +70,10 @@ _TOP_LEVEL_PASS = frozenset(
     }
 )
 _ROLES = frozenset({"user", "assistant", "system"})
+_MESSAGE_KEYS = frozenset({"role", "content", "output_config"})
+# The effort a system message can set for the turns after it (its
+# output_config). The top-level output_config is still passed as it is.
+_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 # Allowed keys for each content block type, besides "type".
 _BLOCK_KEYS = {
@@ -303,13 +307,18 @@ class RequestMasker:
         out = []
         for i, message in enumerate(_list(value, "messages")):
             path = f"messages[{i}]"
-            if not isinstance(message, dict) or set(message) - {"role", "content"}:
+            if not isinstance(message, dict):
+                raise UnsupportedRequestError(path, "not an object")
+            extra = set(message) - _MESSAGE_KEYS
+            if extra:
                 raise UnsupportedRequestError(
-                    path, "a message has only role and content"
+                    f"{path}.{_key(sorted(extra)[0])}", "unknown field"
                 )
             role = message.get("role")
             if role not in _ROLES:
                 raise UnsupportedRequestError(f"{path}.role", "unknown role")
+            if "output_config" in message:
+                _effort_only(message["output_config"], f"{path}.output_config", role)
             content = message.get("content")
             if isinstance(content, str):
                 masked: Any = (
@@ -506,6 +515,27 @@ def _check_block(block: Any, path: str, *, allowed: set[str] | frozenset[str]) -
     if kind == "text":
         _str(block.get("text"), f"{path}.text")
     return kind
+
+
+def _effort_only(value: Any, path: str, role: Any) -> None:
+    """Check a message's output_config: a system message's effort, and no more.
+
+    It is passed on as it is. Every refusal here names output_config, which
+    Claude Code (2.1.283) takes as a sign to send the conversation again
+    without its per-turn effort, so the session goes on at the request's.
+    """
+    if role != "system":
+        raise UnsupportedRequestError(path, "only a system message has output_config")
+    if not isinstance(value, dict):
+        raise UnsupportedRequestError(path, "not an object")
+    extra = set(value) - {"effort"}
+    if extra:
+        raise UnsupportedRequestError(
+            f"{path}.{_key(sorted(extra)[0])}", "unknown field"
+        )
+    effort = value.get("effort")
+    if not isinstance(effort, str) or effort not in _EFFORT_LEVELS:
+        raise UnsupportedRequestError(f"{path}.effort", "not an effort level")
 
 
 def _no_citations(block: dict[str, Any], path: str) -> None:
