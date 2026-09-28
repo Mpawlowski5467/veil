@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1
+
+### Fixed
+
+- **`veil claude` works on Claude Opus 5.5 and Claude Fable 5.1.** On these models (the `opus`, `fable` and `best` aliases, and `opusplan` in plan mode) Claude Code 2.1.283 sets the effort turn by turn, in the `output_config` of `role: "system"` messages in the conversation. The gateway refused any message field but `role` and `content`, so every request failed with "400 the gateway can't mask messages[1]". It now accepts `output_config` on a system message when it is exactly `{"effort": ...}` with one of `low`, `medium`, `high`, `xhigh` or `max`, and passes it on as it is; the message's text is masked as before. Anything else in it is refused, so no text goes out unmasked that way. Such a refusal names `output_config`, which Claude Code takes as a sign to send the conversation again without its per-turn effort, so an effort level added later leaves the session working instead of failing.
+
+### Changed
+
+- A message field the gateway has no rule for is named in the refusal, like other unknown fields (`messages[0].clear_at: unknown field`), instead of "a message has only role and content".
+- The request census in `tests/gateway_payloads/` now includes what Claude Code sends on Opus 5.5 and Sonnet 5, interactive requests included, each scenario labelled with its model, and a test fails when a recorded message field has no rule. The live masking tests (`VEIL_LIVE_MODEL=opus` and so on) check that the per-turn effort reaches the API, and compare a resumed session's history as the API reads it, since Claude Code sends one reminder as a text block or as plain text depending on where it is.
+
 ## 0.4.0
 
 ### Added
