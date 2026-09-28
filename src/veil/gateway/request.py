@@ -520,9 +520,10 @@ def _check_block(block: Any, path: str, *, allowed: set[str] | frozenset[str]) -
 def _effort_only(value: Any, path: str, role: Any) -> None:
     """Check a message's output_config: a system message's effort, and no more.
 
-    It is passed on as it is. Every refusal here names output_config, which
-    Claude Code (2.1.283) takes as a sign to send the conversation again
-    without its per-turn effort, so the session goes on at the request's.
+    It is passed on as it is. Every refusal here names output_config:
+    Claude Code (2.1.283) then sends the conversation again without its
+    per-turn settings (for output_config.timing, only without the time), so
+    the session goes on.
     """
     if role != "system":
         raise UnsupportedRequestError(path, "only a system message has output_config")

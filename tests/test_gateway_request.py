@@ -544,8 +544,9 @@ def opus_body():
     """A request shaped like Claude Code's on Opus 5.5 (Claude Code 2.1.283).
 
     Claude Code sets the effort per turn, in the output_config of a system
-    message in messages[]: the reminder that follows the first user turn,
-    or a message of its own, with no content, after the effort changes.
+    message in messages[]: a reminder after a user turn, whose text is a
+    text block with a cache marker while it is the last message and plain
+    text after that, or a message of its own with no content.
     """
     return {
         "model": "claude-opus-5-5",
@@ -564,13 +565,7 @@ def opus_body():
             },
             {
                 "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"# Environment\nThe user is {NAME}, on {PHONE}.",
-                        "cache_control": {"type": "ephemeral", "ttl": "1h"},
-                    }
-                ],
+                "content": f"# Environment\nThe user is {NAME}, on {PHONE}.",
                 "output_config": {"effort": "medium"},
             },
             {
@@ -581,7 +576,17 @@ def opus_body():
                 ],
             },
             {"role": "user", "content": f"Now call {PHONE}."},
-            {"role": "system", "content": [], "output_config": {"effort": "high"}},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{NAME} prefers mornings.",
+                        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                    }
+                ],
+                "output_config": {"effort": "high"},
+            },
         ],
     }
 
@@ -604,17 +609,21 @@ class TestPerTurnEffort:
         messages = out["messages"]
         assert messages[1] == {
             "role": "system",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "# Environment\nThe user is [PERSON_1], on [PHONE_1].",
-                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
-                }
-            ],
+            "content": "# Environment\nThe user is [PERSON_1], on [PHONE_1].",
             "output_config": {"effort": "medium"},
         }
         assert messages[3]["content"] == "Now call [PHONE_1]."
-        assert messages[4] == body["messages"][4]
+        assert messages[4] == {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "[PERSON_1] prefers mornings.",
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                }
+            ],
+            "output_config": {"effort": "high"},
+        }
         for key in ("model", "thinking", "output_config"):
             assert out[key] == body[key]
         sent = json.dumps(out)
@@ -666,13 +675,13 @@ class TestPerTurnEffort:
         )
 
     def test_only_a_refused_output_config_is_named_as_one(self):
-        # Claude Code (2.1.283) drops its per-turn effort and retries when a
-        # refusal names output_config, so the session goes on at the
-        # request's effort. A refusal of anything else must not name it.
+        # Claude Code (2.1.283) sends the conversation again without its
+        # per-turn settings when a refusal names output_config, so the
+        # session goes on. A refusal of anything else must not name it.
         masker, _, _ = make_masker()
         for body in (
             with_output_config({"effort": "ultra"}),
-            with_output_config({"timing": {"type": "now"}}),
+            with_output_config({"format": {"type": "json_schema"}}),
             with_output_config({"effort": "high"}, role="user"),
             with_output_config(None),
         ):

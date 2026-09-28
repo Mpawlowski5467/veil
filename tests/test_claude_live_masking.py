@@ -88,7 +88,11 @@ def assert_nothing_real_left(recorder):
 
 
 def assert_per_turn_effort(recorder):
-    """Check that the effort Claude Code sets per turn reached the API."""
+    """Check that the effort Claude Code sets per turn reached the API.
+
+    Returns how many requests were from a model that gets one.
+    """
+    checked = 0
     for body in sent_bodies(recorder):
         settings = [
             (m["role"], m["output_config"])
@@ -103,6 +107,8 @@ def assert_per_turn_effort(recorder):
             # After a refusal that names output_config, Claude Code sends
             # the conversation again without them: none would be here.
             assert settings, body["model"]
+            checked += 1
+    return checked
 
 
 def as_the_api_reads(messages):
@@ -200,7 +206,8 @@ def test_nothing_real_left_the_machine(session):
 
 def test_the_per_turn_effort_reached_the_api(session):
     _, _, recorder = session
-    assert_per_turn_effort(recorder)
+    if not assert_per_turn_effort(recorder):
+        pytest.skip("only Opus 5.5 and Fable 5.1 get it: set VEIL_LIVE_MODEL")
 
 
 def test_claude_code_worked_with_the_real_values(session):
