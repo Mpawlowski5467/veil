@@ -33,10 +33,11 @@ Names in this example are registered in advance. Email detection is built in. A 
 | --- | --- |
 | Python scripts and AI applications | Mask text before your provider call and restore the reply. The library is independent of any model SDK. |
 | Claude Code in a terminal | `veil claude` starts a local gateway and launches Claude Code through it. |
-| Codex and other coding assistants | No bundled adapter yet. Automatic coverage needs an integration with that tool's request and response path. |
+| Codex CLI with an OpenAI API key | Experimental manual setup through `veil gateway --api openai`. See the [integration guide](docs/openai-integration.md). |
+| Other coding assistants | Automatic coverage needs an integration with that tool's request and response path. |
 | Browser chats and desktop AI apps | No bundled copy-and-paste commands or desktop integration yet. |
 
-The Python library can be used with different AI providers wherever you control the text sent and received. The included gateway targets Anthropic's API; it is not a general proxy for other providers.
+The Python library can be used with different AI providers wherever you control the text sent and received. The gateway has separate adapters for Anthropic Messages and an experimental subset of OpenAI Responses.
 
 ## Install
 
@@ -176,6 +177,18 @@ These commands delete Veil's stored session mappings and ledger entries. They do
 
 The repository's live tests record compatibility checks against Claude Code 2.1.283. Re-run the live tests after client updates.
 
+## Try Veil with Codex CLI
+
+From a checkout containing the experimental adapter:
+
+```bash
+veil gateway --api openai --port 8485
+```
+
+The gateway prints a private provider configuration and the command to start Codex through it. This requires an **OpenAI API key**. Text requests and replies, local function/custom tool calls, and conversation replay are supported; unsupported request shapes are refused.
+
+This first stage does not include a `veil codex` launcher, ChatGPT subscription routing, or the tool execution checks provided by `veil claude`. Images, files, hosted tools, and remote compaction are refused. The [OpenAI integration guide](docs/openai-integration.md) explains setup, supported fields, and remaining work.
+
 ## What Veil detects
 
 | Type | Examples and scope |
@@ -243,9 +256,9 @@ See the [Python guide](docs/python-guide.md) for detection rules, opt-in normali
 ## Understand the boundaries
 
 - **Only detected text is masked.** Unregistered names, unsupported formats, and sensitive context can remain visible.
-- **Images and PDFs pass through the gateway.** Tool definitions and server-side web-search results are also outside its masking coverage.
+- **Coverage depends on the adapter.** Images and PDFs pass through the Anthropic adapter; the OpenAI adapter refuses them. Tool definitions are not scrubbed. Hosted search results are outside the Anthropic adapter's coverage, and OpenAI hosted tools are refused.
 - **Masking is reversible.** The vault holds original values; placeholders still reveal types, counts, and repeated references. Surrounding context may reveal identity.
-- **Tool checks cover arguments containing known values.** A command can read and send a file without including its contents in the arguments. Veil is not a sandbox or a network firewall.
+- **Claude Code's tool checks cover arguments containing known values.** A command can read and send a file without including its contents in the arguments. The experimental Codex setup has no tool execution guard. Veil is not a sandbox or a network firewall.
 - **Your provider still authenticates you.** Masking prompt content does not hide your account or prevent local transcripts.
 - **Restoration depends on placeholders surviving.** Unknown placeholders remain unchanged and produce warnings. Use exact restoration (`tolerant=False`) for library output that will be executed or written as tool arguments.
 - **Warnings need handling.** Direct `mask()` and `restore()` calls return warnings; `wrap()` emits them by default. Use `strict=True` to raise and `redact_warnings=True` to avoid quoting leaked values in warnings.

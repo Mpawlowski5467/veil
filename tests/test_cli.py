@@ -282,7 +282,34 @@ class TestGateway:
         calls = []
         monkeypatch.setattr(cli, "run_gateway", lambda **kw: calls.append(kw) or 0)
         assert cli.main(["--data-dir", str(data_dir), "gateway", "--port", "0"]) == 0
-        assert calls == [{"data_dir": data_dir.absolute(), "port": 0}]
+        assert calls == [
+            {"data_dir": data_dir.absolute(), "port": 0, "api": "anthropic"}
+        ]
+
+    def test_main_selects_the_openai_adapter(self, data_dir, monkeypatch):
+        calls = []
+        monkeypatch.setattr(cli, "run_gateway", lambda **kw: calls.append(kw) or 0)
+        assert (
+            cli.main(["--data-dir", str(data_dir), "gateway", "--api", "openai"]) == 0
+        )
+        assert calls == [
+            {"data_dir": data_dir.absolute(), "port": 8484, "api": "openai"}
+        ]
+
+    def test_openai_prints_api_key_provider_settings(self, data_dir, capsys):
+        assert (
+            cli.run_gateway(data_dir=data_dir, port=0, api="openai", stop=lambda: True)
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert 'model_provider="veil"' in out
+        assert 'web_search="disabled"' in out
+        assert 'wire_api = "responses"' in out
+        assert 'env_key = "OPENAI_API_KEY"' in out
+        assert "supports_websockets = false" in out
+        assert cli.gateway_secret(data_dir) in out
+        assert "ChatGPT subscription routing is not implemented" in out
+        assert "PreToolUse" not in out
 
 
 class TestForget:

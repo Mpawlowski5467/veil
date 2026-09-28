@@ -1,9 +1,8 @@
 """A local gateway that masks what a client sends to the model's API.
 
-A client such as Claude Code, pointed at the gateway with
-``ANTHROPIC_BASE_URL``, sends its Messages API requests here. Each request is
-masked (every text the model would read), forwarded, and the streamed reply
-restored before the client sees it.
+The default adapter serves Anthropic Messages for Claude Code. The experimental
+OpenAI adapter serves Responses for manually configured API-key clients such as
+Codex. Supported request text is masked and replies are restored locally.
 """
 
 from .config import (
@@ -15,13 +14,23 @@ from .config import (
     prepare_data_dir,
 )
 from .ledger import Ledger, MemoryLedger
+from .openai_request import ResponsesRequestMasker
+from .openai_response import ResponsesRestorer, ResponsesStreamRestorer
 from .request import DEFAULT_NOTE, WITHHELD_LINE, RequestMasker, UnsupportedRequestError
 from .response import ResponseRestorer, StreamError, restore_message
-from .server import SECRET_HEADER, SESSION_HEADER, Gateway, Session, Sessions
+from .server import (
+    OPENAI_SESSION_HEADER,
+    SECRET_HEADER,
+    SESSION_HEADER,
+    Gateway,
+    Session,
+    Sessions,
+)
 from .store import SQLiteLedger, open_sessions, shield_factory
 
 __all__ = [
     "DEFAULT_NOTE",
+    "OPENAI_SESSION_HEADER",
     "SECRET_HEADER",
     "SESSION_HEADER",
     "WITHHELD_LINE",
@@ -30,6 +39,9 @@ __all__ = [
     "MemoryLedger",
     "RequestMasker",
     "ResponseRestorer",
+    "ResponsesRequestMasker",
+    "ResponsesRestorer",
+    "ResponsesStreamRestorer",
     "SQLiteLedger",
     "Session",
     "Sessions",

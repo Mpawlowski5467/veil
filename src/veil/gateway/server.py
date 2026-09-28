@@ -23,12 +23,14 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
 from .hooks import PROOF_PATH, proof
 from .ledger import Ledger, MemoryLedger
+from .openai_request import ResponsesRequestMasker
+from .openai_response import ResponsesRestorer, ResponsesStreamRestorer
 from .request import RequestMasker, UnsupportedRequestError
 from .response import ResponseRestorer, restore_message
 
@@ -40,6 +42,9 @@ SECRET_HEADER = "x-gateway-secret"
 
 #: The header naming the client's conversation (sent by Claude Code).
 SESSION_HEADER = "x-claude-code-session-id"
+
+# Codex sends the thread id on each request. Manual API clients can send it too.
+OPENAI_SESSION_HEADER = "thread-id"
 
 # (method, path) pairs the gateway serves; everything else gets a 404.
 _MESSAGES = "/v1/messages"
@@ -115,6 +120,7 @@ class Sessions:
         *,
         make_session: Callable[[str], Session] | None = None,
         max_open: int = 32,
+        api: Literal["anthropic", "openai"] = "anthropic",
     ) -> None:
         """Create an empty set of sessions."""
         if (make_shield is None) == (make_session is None):
@@ -128,7 +134,8 @@ class Sessions:
             def in_memory(session_id: str) -> Session:
                 shield = shield_for(session_id)
                 ledger = MemoryLedger()
-                return Session(shield, ledger, RequestMasker(shield, ledger))
+                masker = ResponsesRequestMasker if api == "openai" else RequestMasker
+                return Session(shield, ledger, masker(shield, ledger))
 
             self._make_session = in_memory
         self._max_open = max_open
@@ -199,6 +206,8 @@ class Gateway:
         secure: Use HTTPS to the upstream. Only tests turn it off.
         keepalive: Seconds of silence after which a comment line is sent to
             the client while a tool call is held back.
+        api: The API protocol to serve. Defaults to Anthropic Messages;
+            ``openai`` selects the experimental Responses adapter.
     """
 
     def __init__(
@@ -211,11 +220,17 @@ class Gateway:
         secure: bool = True,
         keepalive: float = 10.0,
         timeout: float = 600.0,
+        api: Literal["anthropic", "openai"] = "anthropic",
     ) -> None:
         """Start listening on 127.0.0.1."""
+        if api not in {"anthropic", "openai"}:
+            raise ValueError("api must be anthropic or openai")
+        self.api = api
         self.sessions = sessions
         self.secret = secret or secrets.token_urlsafe(32)
-        self.upstream = upstream
+        self.upstream = (
+            "api.openai.com" if api == "openai" and upstream == UPSTREAM else upstream
+        )
         self.secure = secure
         self.keepalive = keepalive
         self.timeout = timeout
@@ -296,12 +311,19 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._prove(address.query)
                     return
                 self._check_access()
-                if (self.command, path) not in _ROUTES:
+                routes = (
+                    {("POST", "/v1/responses")} if gateway.api == "openai" else _ROUTES
+                )
+                if (self.command, path) not in routes:
                     raise _RefusedError(
                         404, "not_found_error", "not served by the gateway"
                     )
+                if gateway.api == "openai" and address.query:
+                    raise _RefusedError(
+                        400, "invalid_request_error", "query parameters are unsupported"
+                    )
                 body = self._read_body()
-                if path in _MASKED_PATHS:
+                if path in _MASKED_PATHS or gateway.api == "openai":
                     self._masked(path, body)
                 else:
                     self._forward(body, None)
@@ -374,10 +396,13 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             return self.rfile.read(size)
 
         def _masked(self, path: str, body: bytes) -> None:
-            session_id = self.headers.get(SESSION_HEADER)
+            session_header = (
+                OPENAI_SESSION_HEADER if gateway.api == "openai" else SESSION_HEADER
+            )
+            session_id = self.headers.get(session_header)
             if not session_id:
                 raise _RefusedError(
-                    400, "invalid_request_error", f"send {SESSION_HEADER}"
+                    400, "invalid_request_error", f"send {session_header}"
                 )
             try:
                 request = json.loads(body)
@@ -386,6 +411,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     400, "invalid_request_error", "the body isn't JSON"
                 ) from None
             with gateway.sessions.use(session_id) as session:
+                if (gateway.api == "openai") != isinstance(
+                    session.masker, ResponsesRequestMasker
+                ):
+                    raise _RefusedError(
+                        500, "api_error", "the session uses the wrong API adapter"
+                    )
                 try:
                     with session.lock:
                         masked = session.masker.mask(request)
@@ -398,7 +429,8 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         500, "api_error", "the gateway failed to mask", retry=True
                     ) from None
                 self._forward(
-                    json.dumps(masked).encode(), session if path == _MESSAGES else None
+                    json.dumps(masked).encode(),
+                    session if path == _MESSAGES or gateway.api == "openai" else None,
                 )
 
         def _forward(self, body: bytes, session: Session | None) -> None:
@@ -407,6 +439,24 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 for name, value in self.headers.items()
                 if name.lower() not in _HOP_HEADERS
             }
+            if gateway.api == "openai":
+                # Local Codex metadata can contain paths and user identity. Only
+                # forward authentication and protocol headers to the API.
+                allowed = {
+                    "authorization",
+                    "content-type",
+                    "accept",
+                    "openai-organization",
+                    "openai-project",
+                    "openai-beta",
+                    "x-codex-beta-features",
+                    "x-openai-internal-codex-responses-lite",
+                }
+                headers = {
+                    key: value
+                    for key, value in headers.items()
+                    if key.lower() in allowed
+                }
             headers["Host"] = gateway.upstream
             headers["Accept-Encoding"] = "identity"
             headers["Content-Length"] = str(len(body))
@@ -451,6 +501,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 self._send_head(response, chunked=True)
                 self._stream(response, session if restore else None)
                 return
+            if restore and gateway.api == "openai" and "json" not in content_type:
+                raise _RefusedError(
+                    502, "api_error", "the API reply is not JSON or SSE"
+                )
             try:
                 data = response.read()
             except (OSError, http.client.HTTPException):
@@ -461,11 +515,21 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 try:
                     message = json.loads(data)
                 except ValueError:
+                    if gateway.api == "openai":
+                        raise _RefusedError(
+                            502, "api_error", "the API reply is not valid JSON"
+                        ) from None
                     message = None
                 if message is not None:
                     with session.lock:
-                        restored = restore_message(
-                            session.shield, session.ledger, message
+                        restored = (
+                            ResponsesRestorer(session.shield, session.ledger).response(
+                                message
+                            )
+                            if gateway.api == "openai"
+                            else restore_message(
+                                session.shield, session.ledger, message
+                            )
                         )
                     data = json.dumps(restored).encode()
             # Restored before anything is sent, so a failure is a clean error.
@@ -477,8 +541,11 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self, response: http.client.HTTPResponse, session: Session | None
         ) -> None:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            restorer_class = (
+                ResponsesStreamRestorer if gateway.api == "openai" else ResponseRestorer
+            )
             restorer = (
-                ResponseRestorer(session.shield, session.ledger) if session else None
+                restorer_class(session.shield, session.ledger) if session else None
             )
             last_write = time.monotonic()
             while True:
@@ -529,6 +596,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 "type": "error",
                 "error": {"type": "api_error", "message": message},
             }
+            if gateway.api == "openai":
+                error = {
+                    "type": "error",
+                    "code": "veil_gateway_error",
+                    "message": message,
+                }
             self._chunk(f"event: error\ndata: {json.dumps(error)}\n\n")
             self._end_chunks()
             self.close_connection = True

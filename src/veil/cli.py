@@ -20,7 +20,7 @@ import time
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .gateway import (
     SECRET_HEADER,
@@ -280,10 +280,30 @@ def gateway_secret(data_dir: Path) -> str:
     return secret
 
 
-def run_gateway(*, data_dir: Path, port: int, stop: Any = None) -> int:
+def run_gateway(
+    *,
+    data_dir: Path,
+    port: int,
+    stop: Any = None,
+    api: Literal["anthropic", "openai"] = "anthropic",
+) -> int:
     """Run a gateway until interrupted, printing how to point clients at it."""
-    _, sessions = _open(data_dir, Path.cwd())
-    with Gateway(sessions, port=port, secret=gateway_secret(data_dir)) as gateway:
+    prepare_data_dir(data_dir)
+    settings = load_settings(data_dir / "config.json")
+    identity = git_identity(Path.cwd()) if settings.identity else {}
+    sessions = open_sessions(data_dir, settings, identity, api=api)
+    with Gateway(
+        sessions, port=port, secret=gateway_secret(data_dir), api=api
+    ) as gateway:
+        if api == "openai":
+            _print_openai_gateway(gateway)
+            sys.stdout.flush()
+            try:
+                while stop is None or not stop():
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                pass
+            return 0
         custom = claude_settings(gateway, data_dir=data_dir)
         custom["env"] = {k: v for k, v in custom["env"].items() if v}
         print(f"{APP} gateway listening at {gateway.url}")
@@ -304,6 +324,28 @@ def run_gateway(*, data_dir: Path, port: int, stop: Any = None) -> int:
         except KeyboardInterrupt:
             pass
     return 0
+
+
+def _print_openai_gateway(gateway: Gateway) -> None:
+    """Print an experimental API-key provider configuration for local Codex."""
+    print(f"{APP} experimental OpenAI gateway listening at {gateway.url}")
+    print("Add this provider to your user-level ~/.codex/config.toml:")
+    print("[model_providers.veil]")
+    print('name = "Veil (experimental)"')
+    print(f'base_url = "{gateway.url}/v1"')
+    print('wire_api = "responses"')
+    print('env_key = "OPENAI_API_KEY"')
+    print("supports_websockets = false")
+    print(f'http_headers = {{ "{SECRET_HEADER}" = "{gateway.secret}" }}')
+    print("Start a new Codex session with:")
+    print("codex --no-daemon -c 'model_provider=\"veil\"' -c 'web_search=\"disabled\"'")
+    print(
+        "Keep the configuration private and this gateway running. This path "
+        "requires an OpenAI API key; ChatGPT subscription routing is not "
+        "implemented. Only supported text in model requests is masked. Tool "
+        "execution, images, hosted tools, remote compaction, and other client "
+        "traffic are not covered. See docs/openai-integration.md."
+    )
 
 
 def forget(*, data_dir: Path, session: str | None) -> int:
@@ -367,6 +409,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
     gateway.add_argument("--port", type=int, default=8484)
+    gateway.add_argument("--api", choices=("anthropic", "openai"), default="anthropic")
     hook = commands.add_parser("hook", help="answer a Claude Code hook (internal)")
     hook.add_argument("event", choices=["pre-tool-use", "user-prompt-submit"])
     hook.add_argument("--expect-url")
@@ -403,7 +446,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if options.command == "claude":
             return run_claude(passed_on, data_dir=data_dir)
         if options.command == "gateway":
-            return run_gateway(data_dir=data_dir, port=options.port)
+            return run_gateway(data_dir=data_dir, port=options.port, api=options.api)
         if options.command == "hook":
             return _hook(options.event, data_dir, options.expect_url)
         prepare_data_dir(data_dir)
