@@ -94,6 +94,30 @@ class TestWhatLeftUnmasked:
             "required": ["email"],
         }
 
+    def test_a_cache_breakpoint_on_signed_thinking(self):
+        # Not part of what is signed, so masked like any other.
+        thinking = {
+            "type": "thinking",
+            "thinking": "t",
+            "signature": "s",
+            "cache_control": {"type": "ephemeral", "note": EMAIL},
+        }
+        body = {
+            "messages": [
+                USER,
+                {
+                    "role": "assistant",
+                    "content": [thinking, {"type": "text", "text": "ok"}],
+                },
+                USER,
+            ]
+        }
+        out = make_masker()[0].mask(body)["messages"][1]["content"][0]
+        assert out == {
+            **thinking,
+            "cache_control": {"type": "ephemeral", "note": "[EMAIL_1]"},
+        }
+
     def test_the_user_id_stays_json(self):
         user_id = json.dumps({"device_id": "d" * 64, "team": EMAIL})
         out = mask({"metadata": {"user_id": user_id}})
@@ -189,12 +213,57 @@ class TestWhatGoesAsItIs:
             "^\\d{3}-\\d{3}-\\d{4}$",
             "^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$",
             "^[A-Za-z0-9_=-]{1,4096}$",
+            "^[\\w.+-]+@[\\w-]+\\.[\\w.]+$",
+            "^[a-z]+@[a-z]+\\.com$",
+            "^[A-Z]{2}\\d+$",
+            "^(true|false)$",
+            "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "^#[0-9a-fA-F]{6}$",
+            # A domain alone is not an address.
+            "^[\\w.+-]+@acme\\.com$",
+            "^[a-z0-9._%+-]+@company\\.org$",
+            ".+@example\\.com$",
+            ".{1,64}@example\\.com$",
         ],
     )
     def test_a_pattern_without_data_is_kept(self, pattern):
         schema = {"type": "string", "pattern": pattern}
         out = mask(structured(schema), {"4096": "ACCOUNT"})
         assert out["tools"][0]["input_schema"] == schema
+
+    @pytest.mark.parametrize(
+        ("schema", "registered"),
+        [
+            # Claude Code's memory recall and prompt hooks.
+            ({"properties": {"selected_memories": {"type": "array"}}}, "ted"),
+            ({"properties": {"selected_memories": {"type": "array"}}}, "mem"),
+            ({"properties": {"ok": {}, "reason": {}, "impossible": {}}}, "pos"),
+            (
+                {"properties": {"patch": {}, "dispatch": {}}, "required": ["patch"]},
+                "pat",
+            ),
+            ({"properties": {"guidance": {}, "compatible": {}}}, "dan"),
+            ({"type": "string", "pattern": "^[a-z]+_selected$"}, "ted"),
+        ],
+    )
+    def test_a_short_value_inside_a_longer_name_is_chance(self, schema, registered):
+        format_ = {"format": {"type": "json_schema", "schema": schema}}
+        out = mask({"output_config": format_}, {registered: "USER"})
+        assert out["output_config"] == format_
+        tools = mask(structured(schema), {registered: "USER"})["tools"]
+        assert tools[0]["input_schema"] == schema
+
+    def test_the_user_ids_ids_are_kept(self):
+        user_id = json.dumps(
+            {
+                "device_id": "3f9ada0e" + "0" * 56,
+                "account_uuid": "",
+                "session_id": "1b2c3d4e-0000-4000-8000-0000000ada00",
+            },
+            separators=(",", ":"),
+        )
+        out = mask({"metadata": {"user_id": user_id}}, {"ada": "USER"})
+        assert out["metadata"]["user_id"] == user_id
 
     def test_schema_references_are_kept(self):
         schema = {
@@ -231,12 +300,25 @@ class TestWhatIsRefused:
                 }
             },
             {"output_config": {"effort": NAME}},
+            # A tool the request doesn't define, named with a value in it.
+            {"tool_choice": {"type": "tool", "name": "Read-4821"}},
+            {
+                "context_management": {
+                    "edits": [
+                        {
+                            "type": "clear_tool_uses_20250919",
+                            "exclude_tools": ["xada_quill"],
+                        }
+                    ]
+                }
+            },
         ],
     )
     def test_a_setting_holding_data_or_the_wrong_kind(self, body):
         with pytest.raises(UnsupportedRequestError) as info:
-            mask(body)
+            mask(body, {"4821": "ACCOUNT"})
         assert EMAIL not in str(info.value)
+        assert "4821" not in str(info.value)
         assert NAME not in str(info.value)
 
     @pytest.mark.parametrize(
@@ -250,7 +332,34 @@ class TestWhatIsRefused:
             {"properties": {HANDLE: {"type": "string"}}},
             {"required": [HANDLE]},
             {"patternProperties": {"^jan\\.n@example\\.com$": {}}},
+            # A value spelled the other ways a pattern can spell it.
+            *(
+                {"pattern": pattern}
+                for pattern in (
+                    "^jane[.]doe@example[.]com$",
+                    "^jane\\.doe@example\\.(com|org)$",
+                    "^(jane\\.doe|jd)@example\\.com$",
+                    "^jane\\.doe[@]example\\.com$",
+                    "^jane\\.doe@(example)\\.com$",
+                    "^Jan[ ]Nowak$",
+                    "^Jan.Nowak$",
+                    "^Jan +Nowak$",
+                    "^Jan[\\s]Nowak$",
+                    "^(Jan)\\s(Nowak)$",
+                    "^(?:Jan) (?:Nowak)$",
+                    "^[Jj]an [Nn]owak$",
+                    "^4111[ -]?1111[ -]?1111[ -]?1111$",
+                    "^4111 ?1111 ?1111 ?1111$",
+                    "^[(]555[)] 555-0100$",
+                    "^555[-. ]555[-. ]0100$",
+                    "^48[2]1$",
+                    "^ada[_]quill$",
+                    "^ada_qui(?:ll)$",
+                )
+            ),
             {"$ref": f"#/{EMAIL}"},
+            {"$id": "https://example.com/s/jane.doe%40example.com"},
+            {"$ref": "#/$defs/Jan%20Nowak"},
             {"type": "person"},
             {"enum": [4111111111111111]},
             {
@@ -261,7 +370,12 @@ class TestWhatIsRefused:
     )
     def test_a_schema_part_that_cant_be_masked(self, schema):
         with pytest.raises(UnsupportedRequestError):
-            mask(structured(schema))
+            mask(structured(schema), {"4821": "ACCOUNT"})
+
+    @pytest.mark.parametrize("kind", [{"a": 1}, [{"a": 1}], ["string", 1]])
+    def test_a_type_that_isnt_a_name_is_refused_by_name(self, kind):
+        with pytest.raises(UnsupportedRequestError, match=r"input_schema\.type"):
+            mask(structured({"type": kind}))
 
 
 def test_a_masked_enum_comes_back_as_the_users_value():

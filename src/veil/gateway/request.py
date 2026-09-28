@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import secrets
+import urllib.parse
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
@@ -574,7 +575,7 @@ class RequestMasker:
         known, extra = _split(block, _BLOCK_KEYS[kind])
         known = self._block_settings(known, path)
         if kind in ("thinking", "redacted_thinking"):
-            return self._signed(block, extra, path, role, kind)
+            return self._signed({**block, **known}, extra, path, role, kind)
         if kind == "text":
             text = _str(known.get("text"), f"{path}.text")
             masked = self._reply_text(text) if role == "assistant" else self._text(text)
@@ -798,6 +799,20 @@ class RequestMasker:
         if name in WORDS:
             return self._word_clean(name)
         return self._clean(name)
+
+    def _name_ok(self, name: str) -> bool:
+        """Whether a name that can't be masked may go out as it is.
+
+        It is read like an id the API makes: nothing a detector finds, no
+        registered value as a whole word, no known value of five or more
+        characters inside it. A shorter one inside a longer word (``ted`` in
+        ``selected_memories``) is there by chance.
+        """
+        if name in WORDS:
+            return self._word_clean(name)
+        return self._shield.mask(name).text == name and not self._known.found_in(
+            name, min_length=_CHANCE
+        )
 
     def _word_clean(self, word: str) -> bool:
         """No detector and no registered value finds ``word`` as a whole word.
@@ -1080,7 +1095,9 @@ class RequestMasker:
                 out[key] = value
             elif key == "type":
                 kinds = value if isinstance(value, list) else [value]
-                if not kinds or not all(kind in _JSON_TYPES for kind in kinds):
+                if not kinds or not all(
+                    isinstance(kind, str) and kind in _JSON_TYPES for kind in kinds
+                ):
                     raise UnsupportedRequestError(where, "not a JSON type")
                 out[key] = value
             elif key in _SCHEMA_REFERENCES:
@@ -1115,12 +1132,15 @@ class RequestMasker:
     def _schema_name(self, name: str, path: str, pattern: bool = False) -> None:
         """Check a name in a schema, which can't be masked without breaking it."""
         if pattern:
-            # Also as the text the pattern matches: jan\.n@example\.com.
-            # Counts like {1,4096} are limits, not data.
-            counted = _QUANTIFIER.sub("", name)
-            ok = self._clean(counted) and self._clean(_unregex(counted))
+            # Also as the texts the pattern matches: jan\.n@example\.com,
+            # ^Jan[ ]Nowak$. Counts like {1,4096} are limits, not data.
+            texts = {_QUANTIFIER.sub("", name), *_readings(name)}
+            ok = all(self._name_ok(text) for text in texts)
         else:
-            ok = self._ident_ok(name)
+            # A reference is a URI: jane.doe%40example.com is an address.
+            ok = self._name_ok(name) and (
+                "%" not in name or self._name_ok(urllib.parse.unquote(name))
+            )
         if not ok:
             raise UnsupportedRequestError(path, "a name that may hold personal data")
 
@@ -1177,7 +1197,7 @@ def _enum(masker: RequestMasker, value: Any, path: str) -> Any:
     if (
         isinstance(value, str)
         and _TYPE_NAME.fullmatch(value)
-        and masker._ident_ok(value)
+        and masker._name_ok(value)
     ):
         return value
     raise UnsupportedRequestError(path, "not one of the setting's names")
@@ -1246,9 +1266,34 @@ def _model(masker: RequestMasker, value: Any, path: str) -> Any:
 
 
 def _tool_reference(masker: RequestMasker, value: Any, path: str) -> Any:
-    """A tool's name referred to: it can't be masked, so it must hold no data."""
-    masker._tool_name(value, path)
-    return value
+    """A tool's name referred to: it can't be masked, so it must hold no data.
+
+    One the request defines goes as it is, like its definition; any other
+    must be a tool name that masking would leave as it is.
+    """
+    name = _str(value, path)
+    if name in masker._exposed or (
+        _TOOL_REFERENCE_NAME.fullmatch(name) and masker._name_ok(name)
+    ):
+        return name
+    raise UnsupportedRequestError(path, "a tool name that may hold personal data")
+
+
+def _user_id(masker: RequestMasker, value: Any, path: str) -> Any:
+    """Claude Code's user id: JSON of random ids, kept as they are, and the rest.
+
+    A short registered value can be in a random id by chance, so the ids are
+    read as ids (see `RequestMasker._id_ok`), not masked as text; the text
+    around them is masked. The bytes stay Claude Code's.
+    """
+    text = _str(value, path)
+    parts, at = [], 0
+    for match in _USER_ID_PART.finditer(text):
+        if masker._id_ok(match[1]):
+            parts += [masker._text(text[at : match.start(1)]), match[1]]
+            at = match.end(1)
+    parts.append(masker._text(text[at:]))
+    return "".join(parts)
 
 
 def _ttl(masker: RequestMasker, value: Any, path: str) -> Any:
@@ -1364,7 +1409,7 @@ _SETTINGS: dict[str, _Rule] = {
     "top_p": _number,
     "stream": _boolean,
     "service_tier": _enum,
-    "metadata": _fields(user_id=_masked_text),
+    "metadata": _fields(user_id=_user_id),
     "thinking": _fields(type=_enum, budget_tokens=_integer, display=_enum),
     "context_management": _fields(edits=_list_of(_EDIT)),
     "output_config": _fields(
@@ -1773,6 +1818,15 @@ _SUBSCHEMAS = frozenset(
         "contentSchema",
     }
 )
+# The parts of a regular expression that spell no text of their own.
+_REGEX_CLASS = re.compile(r"\[(\^?)((?:\\.|[^\]\\])*)\]")
+_REGEX_GROUP = re.compile(
+    r"\((?:\?(?:[:=!>|]|<[=!]|P?<[A-Za-z_][A-Za-z0-9_]*>|[a-zA-Z-]+[:)]))?"
+    r"|(?<!\\)[)^$]"
+)
+_REGEX_REPEAT = re.compile(r"(?<!\\)(?:[?*+]|\{[0-9]+(?:,[0-9]*)?\})[?+]?")
+# A wildcard repeated (.+, .*, .{1,64}) stands for no one text.
+_REGEX_ANY = re.compile(r"(?<!\\)\.(?:[?*+]|\{[0-9]+(?:,[0-9]*)?\})[?+]?")
 _JSON_TYPES = frozenset(
     {"string", "number", "integer", "boolean", "object", "array", "null"}
 )
@@ -1792,6 +1846,40 @@ def _unregex(pattern: str) -> str:
     text = re.sub(r"\\[bBAzZG]", "", text)
     text = re.sub(r"\\[sSdDwW](?:[*+?]|\{[0-9]+(?:,[0-9]*)?\})?", " ", text)
     return re.sub(r"\\(.)", r"\1", text)
+
+
+def _class_text(match: re.Match[str]) -> str:
+    """A character class as the character it matches first: ``[.]`` as ``.``.
+
+    One with a range or negated (``[a-z]``, ``[^@]``) stands for no one
+    character, so it reads as a space.
+    """
+    negated, members = match[1], match[2]
+    if negated or not members or re.search(r"[^\\]-.", members):
+        return " "
+    return _unregex(members[:2]) if members[0] == "\\" else members[0]
+
+
+def _readings(pattern: str) -> set[str]:
+    r"""The texts a regular expression spells, read a few ways.
+
+    Classes are read as their first character, and as a space; a group's
+    parentheses and the quantifiers are dropped, ``|`` reads as a space,
+    ``.+`` as a space and ``.`` as itself or a space. So ``^Jan[ ]Nowak$``,
+    ``^(Jan)\s(Nowak)$`` and ``^jane[.]doe@example\.(com|org)$`` read as
+    what they match.
+    """
+    texts: set[str] = set()
+    pattern = _REGEX_ANY.sub(" ", pattern)
+    for text in (
+        _REGEX_CLASS.sub(_class_text, pattern),
+        _REGEX_CLASS.sub(" ", pattern),
+    ):
+        text = _REGEX_GROUP.sub("", text)
+        text = re.sub(r"(?<!\\)\|", " ", text)
+        text = _REGEX_REPEAT.sub("", text)
+        texts.update(_unregex(re.sub(r"(?<!\\)\.", dot, text)) for dot in (".", " "))
+    return texts
 
 
 def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
@@ -1853,6 +1941,11 @@ _ENCODED_RUN = re.compile(r"[A-Za-z0-9+/_=%-]{16,}")
 # A URL a source may point to: on the web, not inline data.
 _WEB_URL = re.compile(r"https?://", re.IGNORECASE)
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}", re.ASCII)
+_TOOL_REFERENCE_NAME = re.compile(r"[A-Za-z0-9_-]{1,128}", re.ASCII)
+# The ids in Claude Code's metadata.user_id, a JSON object.
+_USER_ID_PART = re.compile(
+    r'"(?:device_id|account_uuid|session_id|parent_session_id)"\s*:\s*"([^"\\]*)"'
+)
 # Keys whose values are ids, names, settings, opaque data or file bytes.
 _ID_KEY = re.compile(r"id|.+_id|.+_ids")
 _NAME_KEY = re.compile(r"name|.+_name")
