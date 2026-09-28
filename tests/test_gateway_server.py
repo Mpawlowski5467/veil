@@ -949,3 +949,54 @@ class TestSessions:
             sessions.get("c")
             assert busy.shield.vault not in closed
         assert busy.users == 0
+
+
+def test_a_json_reply_is_restored_as_json(api):
+    # A title request asks for JSON; a name with a quote in it stays JSON.
+    odd = 'Ada "Q" Quill'
+
+    def shield_with_odd(session_id):
+        shield = make_shield(session_id)
+        shield.add_entity(odd, "PERSON")
+        return shield
+
+    body = {
+        **REQUEST,
+        "messages": [{"role": "user", "content": f"Title for {odd}"}],
+        "output_config": {"format": {"type": "json_schema", "schema": {}}},
+    }
+    with Gateway(Sessions(shield_with_odd), upstream=api.host, secure=False) as gw:
+        api.replies.append(text_reply('{"title": "Notes for ', '[PERSON_1]"}'))
+        _, payload = call(gw, body=body)
+    text = "".join(
+        e["delta"]["text"]
+        for e in events(payload)
+        if e["type"] == "content_block_delta"
+    )
+    assert json.loads(text) == {"title": f"Notes for {odd}"}
+
+
+def test_a_failure_of_the_gateway_mid_stream_is_final(api, gateway):
+    tool_start = sse(
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "tool_use", "id": "t", "name": "n", "input": {}},
+        }
+    )
+    part = sse(
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "input_text_delta", "text": "echo [PERSON_1]"},
+        }
+    )
+    api.replies.append(
+        stream_reply(tool_start, part, sse({"type": "content_block_stop", "index": 0}))
+    )
+    _, payload = call(gateway, body=REQUEST)
+    error = events(payload)[-1]["error"]
+    # Final: Claude Code shows why and doesn't run the model again.
+    assert error["type"] == "policy_blocked"
+    assert error["details"] == {"error_code": "dlp_request_denied"}
+    assert NAME.encode() not in payload

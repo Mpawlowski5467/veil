@@ -281,14 +281,45 @@ class TestFailures:
             }
         ]
 
-    def test_an_unexpected_part_of_a_tool_call_ends_the_stream(self):
+    def test_an_unknown_part_of_a_tool_call_follows_its_input(self):
+        # A kind of part without a rule is held, then sent after the input.
+        ledger = MemoryLedger()
         stream = (
             start(0, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}})
+            + delta(0, {"type": "input_json_delta", "partial_json": '{"c": "[PER'})
+            + delta(0, {"type": "tool_note_delta", "note": "checked"})
             + delta(0, {"type": "text_delta", "text": "x"})
+            + delta(0, {"type": "input_json_delta", "partial_json": 'SON_1]"}'})
             + stop(0)
         )
-        _, restorer = run(make_shield(), MemoryLedger(), stream)
-        assert restorer.failed == "a tool call had an unexpected part"
+        text, restorer = run(make_shield(), ledger, stream)
+        assert restorer.failed is None
+        deltas = [e["delta"] for e in parse(text) if e["type"] == "content_block_delta"]
+        assert deltas == [
+            {"type": "input_json_delta", "partial_json": json.dumps({"c": NAME})},
+            {"type": "tool_note_delta", "note": "checked"},
+            {"type": "text_delta", "text": "x"},
+        ]
+        assert ledger.masked_tool_input("t", {"c": NAME}) == {"c": "[PERSON_1]"}
+
+    def test_an_unknown_part_holding_a_placeholder_ends_the_stream(self):
+        # A newer client might act on that part as the call's input: a
+        # placeholder there would be used as is, so it isn't passed on.
+        from veil.gateway.config import APP
+
+        stream = (
+            start(0, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}})
+            + delta(0, {"type": "input_text_delta", "text": "echo [PERSON_1]"})
+            + stop(0)
+        )
+        text, restorer = run(make_shield(), MemoryLedger(), stream)
+        assert restorer.failed is not None
+        error = parse(text)[-1]
+        assert error["type"] == "error"
+        assert error["error"]["type"] == "policy_blocked"
+        assert error["error"]["details"] == {"error_code": "dlp_request_denied"}
+        assert error["error"]["message"].startswith(f"{APP}: a tool call came with")
+        assert NAME not in text
 
     def test_a_tool_call_is_announced_before_its_input_arrives(self):
         restorer = ResponseRestorer(make_shield(), MemoryLedger())
@@ -407,3 +438,152 @@ class TestToolInputKeys:
         }
         with pytest.raises(StreamError, match="two keys"):
             restore_message(shield, MemoryLedger(), message)
+
+
+class TestKeysOfTheirOwn:
+    """Keys an event or a delta carries without a rule are kept."""
+
+    def test_a_text_delta_keeps_its_keys(self):
+        event = {
+            "type": "content_block_delta",
+            "index": 0,
+            "seq": 7,
+            "delta": {"type": "text_delta", "text": "Hi [PERSON_1]", "lang": "pl"},
+        }
+        stream = start(0, {"type": "text", "text": ""}) + sse(event) + stop(0)
+        text, _ = run(make_shield(), MemoryLedger(), stream)
+        deltas = [e for e in parse(text) if e["type"] == "content_block_delta"]
+        assert deltas == [{**event, "delta": {**event["delta"], "text": f"Hi {NAME}"}}]
+
+    def test_held_pieces_keep_their_keys_in_order(self):
+        pieces = [("[EMA", {"k": 1}), ("IL_1]", {"k": 2}), (" ok", {})]
+        stream = start(0, {"type": "text", "text": ""})
+        for piece, keys in pieces:
+            stream += delta(0, {"type": "text_delta", "text": piece, **keys})
+        stream += stop(0)
+        for seed in range(30):
+            text, _ = run(make_shield(), MemoryLedger(), stream, sizes=seed)
+            deltas = [
+                e["delta"] for e in parse(text) if e["type"] == "content_block_delta"
+            ]
+            assert [d["k"] for d in deltas if "k" in d] == [1, 2]
+            assert "".join(d["text"] for d in deltas) == f"{EMAIL} ok"
+
+    def test_start_events_keep_their_keys(self):
+        text_start = sse(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "x": 1,
+                "content_block": {"type": "text", "text": "Hi [PERSON_1]"},
+            }
+        )
+        tool_start = sse(
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "y": 2,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "t",
+                    "name": "Bash",
+                    "input": {"c": "[PERSON_1]"},
+                    "caller": {"type": "direct"},
+                },
+            }
+        )
+        text, _ = run(
+            make_shield(), MemoryLedger(), text_start + stop(0) + tool_start + stop(1)
+        )
+        starts = [e for e in parse(text) if e["type"] == "content_block_start"]
+        assert starts[0]["x"] == 1
+        assert starts[0]["content_block"]["text"] == ""
+        assert starts[1]["y"] == 2
+        assert starts[1]["content_block"]["caller"] == {"type": "direct"}
+
+    def test_a_tool_calls_input_keeps_its_parts_keys(self):
+        stream = (
+            start(0, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}})
+            + delta(0, {"type": "input_json_delta", "partial_json": '{"c": ', "a": 1})
+            + delta(0, {"type": "input_json_delta", "partial_json": '"x"'})
+            + delta(0, {"type": "input_json_delta", "partial_json": "}", "b": 2})
+            + stop(0)
+        )
+        text, _ = run(make_shield(), MemoryLedger(), stream)
+        deltas = [e["delta"] for e in parse(text) if e["type"] == "content_block_delta"]
+        assert deltas == [
+            {"type": "input_json_delta", "partial_json": '{"c": "x"}', "a": 1},
+            {"type": "input_json_delta", "partial_json": "", "b": 2},
+        ]
+
+    def test_an_events_name_is_kept(self):
+        raw = (
+            "event: content_block_delta_v2\ndata: "
+            + json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": "x", "k": 1},
+                }
+            )
+            + "\n\n"
+        )
+        stream = start(0, {"type": "text", "text": ""}) + raw + stop(0)
+        text, _ = run(make_shield(), MemoryLedger(), stream)
+        assert "event: content_block_delta_v2\n" in text
+
+
+class TestJsonReplies:
+    """A reply whose text is JSON (a title, say) stays JSON when restored."""
+
+    def title(self):
+        return json.dumps({"title": "Fix the build for [PERSON_2]"})
+
+    def test_a_streamed_reply(self):
+        masked = self.title()
+        stream = text_block(0, [masked[:10], masked[10:25], masked[25:]])
+        restorer = ResponseRestorer(make_shield(), MemoryLedger(), json_text=True)
+        text = restorer.feed(stream) + restorer.finish()
+        restored = "".join(
+            e["delta"]["text"]
+            for e in parse(text)
+            if e["type"] == "content_block_delta"
+        )
+        # The name has a quote and a backslash in it: escaped, it stays JSON.
+        assert json.loads(restored) == {"title": f"Fix the build for {ODD}"}
+
+    def test_a_whole_reply(self):
+        message = {"content": [{"type": "text", "text": self.title()}]}
+        out = restore_message(make_shield(), MemoryLedger(), message, json_text=True)
+        assert json.loads(out["content"][0]["text"]) == {
+            "title": f"Fix the build for {ODD}"
+        }
+
+
+class TestFailingSafely:
+    def test_a_ledger_that_cant_write_doesnt_end_the_reply(self):
+        import sqlite3
+
+        class Broken(MemoryLedger):
+            def record_text(self, restored, masked):
+                raise sqlite3.OperationalError("database is locked")
+
+            def record_tool_input(self, tool_id, restored, masked):
+                raise sqlite3.OperationalError("database is locked")
+
+        text, restorer = run(make_shield(), Broken(), reply())
+        assert restorer.failed is None
+        assert parse(text)[-1]["type"] == "message_stop"
+
+    def test_input_nested_too_deeply_ends_the_stream_by_name(self):
+        deep = "[" * 5000 + "]" * 5000
+        stream = (
+            start(0, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}})
+            + delta(0, {"type": "input_json_delta", "partial_json": deep})
+            + stop(0)
+        )
+        text, restorer = run(make_shield(), MemoryLedger(), stream)
+        assert restorer.failed is not None
+        assert parse(text)[-1]["error"]["details"] == {
+            "error_code": "dlp_request_denied"
+        }

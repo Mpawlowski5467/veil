@@ -123,7 +123,7 @@ It names every part it couldn't handle and the Claude Code version that sent it.
 - **If it happens on every prompt**, the content is in the conversation, which Claude Code sends again with each prompt (and `/compact` too). Use `/rewind` to go back to before the prompt that brought it in, or start a new conversation; `--resume` of that conversation fails the same way. When the message says the part is sent with every request (a tool definition or a setting, not the conversation), `/rewind` won't help: update veil.
 - Requests Claude Code makes in the background, such as the one that names the session, can be refused without a message. When Claude Code exits, `veil claude` lists what it couldn't send.
 
-Refusals, and the gateway's own failures before a reply starts, are final: Claude Code doesn't send them again, on another model or otherwise. A refusal inside a feature Claude Code can do without (auto mode's safety checks, a turn's effort level) is the exception: Claude Code sends the request again without it. A busy data folder or an unreachable API is retried as usual.
+Refusals and the gateway's own failures are final: Claude Code doesn't send them again, on another model or otherwise. A refusal inside a feature Claude Code can do without (auto mode's safety checks, a turn's effort level) is the exception: Claude Code sends the request again without it. A busy data folder or an unreachable API is retried as usual.
 
 ## Usage
 

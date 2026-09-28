@@ -35,7 +35,7 @@ from .config import APP
 from .hooks import PROOF_PATH, proof
 from .ledger import Ledger, MemoryLedger
 from .request import RequestMasker, UnsupportedRequestError, billing_version
-from .response import ResponseRestorer, restore_message
+from .response import FINAL, ResponseRestorer, error_event, restore_message
 
 #: The API the gateway forwards to.
 UPSTREAM = "api.anthropic.com"
@@ -62,7 +62,7 @@ _MAX_BODY = 256 * 1024 * 1024
 
 # Claude Code (2.1.283) treats an error with this code as final for the
 # request: it doesn't send it again, on another model or without a feature.
-_FINAL = {"error_code": "dlp_request_denied"}
+_FINAL = FINAL
 # Problems Claude Code can get past by sending the request again without the
 # feature they are in: its per-turn effort, or auto mode's safeguards. A
 # plain 400 that names the feature lets it do that; any other refusal is
@@ -377,6 +377,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self._started = False  # whether a response has begun
             self._chunked = False  # whether it is a chunked stream
             self._forwarded = False  # whether the request went to the API
+            self._json_text = False  # whether the reply's text is JSON
             self._client = compat.from_user_agent(self.headers.get("User-Agent"))
             try:
                 address = urlsplit(self.path)
@@ -534,6 +535,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         "api_error",
                         compat.failure_message("failed while masking", client),
                     ) from None
+                self._json_text = _asks_for_json(request)
                 self._forward(
                     json.dumps(masked).encode(), session if path == _MESSAGES else None
                 )
@@ -604,7 +606,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     try:
                         with session.lock:
                             restored = restore_message(
-                                session.shield, session.ledger, message
+                                session.shield,
+                                session.ledger,
+                                message,
+                                json_text=self._json_text,
                             )
                     except Exception:
                         # The model already ran: don't have it run again.
@@ -623,7 +628,11 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         ) -> None:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             restorer = (
-                ResponseRestorer(session.shield, session.ledger) if session else None
+                ResponseRestorer(
+                    session.shield, session.ledger, json_text=self._json_text
+                )
+                if session
+                else None
             )
             last_write = time.monotonic()
             while True:
@@ -670,11 +679,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self.wfile.flush()
 
         def _end_stream_with_error(self, message: str, *, final: bool = False) -> None:
-            error: dict[str, Any] = {"type": "api_error", "message": _prefixed(message)}
-            if final:
-                error["details"] = _FINAL
-            error = {"type": "error", "error": error}
-            self._chunk(f"event: error\ndata: {json.dumps(error)}\n\n")
+            self._chunk(error_event(message, final=final))
             self._end_chunks()
             self.close_connection = True
 
@@ -756,6 +761,13 @@ def _busy(error: Exception) -> bool:
     return isinstance(error, sqlite3.OperationalError) and (
         "locked" in text or "busy" in text
     )
+
+
+def _asks_for_json(request: Any) -> bool:
+    """Whether a request asked for its reply's text to be JSON (a format)."""
+    config = request.get("output_config") if isinstance(request, dict) else None
+    legacy = request.get("output_format") if isinstance(request, dict) else None
+    return (isinstance(config, dict) and "format" in config) or isinstance(legacy, dict)
 
 
 def _no_constant(name: str) -> Any:
