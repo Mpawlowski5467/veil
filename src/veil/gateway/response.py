@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -24,6 +25,7 @@ from .ledger import Ledger
 from .request import _opaque
 
 _TEXT = "text"
+_DELTA = "content_block_delta"
 _TOOL_USE = "tool_use"
 _COMPACTION = "compaction"
 # Calls the API runs itself: it ran them with the masked input, which goes
@@ -39,6 +41,8 @@ _TEXT_DELTAS = frozenset({"text_delta", "input_json_delta", "thinking_delta"})
 # The keys of an event and of a delta the restorer rewrites; any other key
 # they carry is kept as it came.
 _EVENT_KEYS = frozenset({"type", "index", "delta"})
+# A string in JSON text.
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
 
 #: Tells Claude Code (2.1.283) a failure is final: it doesn't run the model
 #: again, without streaming or on another model.
@@ -69,6 +73,18 @@ def _event(name: str, data: dict[str, Any]) -> str:
     except UnicodeEncodeError:
         payload = json.dumps(data)
     return f"event: {name}\ndata: {payload}\n\n"
+
+
+def _text_event(name: str, index: int, text: str) -> str:
+    """A text delta of our own, under the name the block's deltas came under."""
+    return _event(
+        name,
+        {
+            "type": "content_block_delta",
+            "index": index,
+            "delta": {"type": "text_delta", "text": text},
+        },
+    )
 
 
 class _Event:
@@ -103,6 +119,8 @@ class _TextBlock:
         self.received = 0  # characters of masked text fed so far
         self.queued: list[tuple[int, str]] = []  # (text offset, raw event)
         self.first: _Event | None = None  # its first text delta, as a template
+        self.keyed: list[_Event] = []  # text deltas with keys of their own
+        self.name = _DELTA  # the event name its text deltas came under
 
 
 class _ToolBlock:
@@ -112,6 +130,7 @@ class _ToolBlock:
         self.template: _Event | None = None  # the first input delta with keys
         self.keyed: list[_Event] = []  # later input deltas with keys of their own
         self.held: list[_Event] = []  # deltas of kinds without a rule
+        self.name = _DELTA  # the event name its input deltas came under
 
 
 class _ServerCall:
@@ -282,6 +301,8 @@ class ResponseRestorer:
                 part = delta.get("partial_json")
                 if not isinstance(part, str):
                     raise StreamError("a tool call's input could not be read")
+                if not tool.parts:
+                    tool.name = event.name
                 tool.parts.append(part)
                 if event.extra("partial_json"):
                     if tool.template is None:
@@ -312,12 +333,16 @@ class ResponseRestorer:
     ) -> str:
         block.masked.append(piece)
         block.received += len(piece)
-        if block.first is None and event is not None:
-            block.first = event
+        keyed = event is not None and event.extra("text")
+        if event is not None:
+            block.name = event.name
+            if block.first is None:
+                block.first = event
+            if keyed:
+                block.keyed.append(event)
         if self._json_text:
             return ""  # restored once complete: see _stop
         restored = block.stream.feed(piece)
-        keyed = event is not None and event.extra("text")
         return self._emit_text(index, block, restored, event if keyed else None)
 
     def _emit_text(
@@ -330,16 +355,7 @@ class ResponseRestorer:
                 # Keys of its own stay on it, even with no text ready yet.
                 out.append(event.with_delta("text", restored))
             else:
-                out.append(
-                    _event(
-                        "content_block_delta",
-                        {
-                            "type": "content_block_delta",
-                            "index": index,
-                            "delta": {"type": "text_delta", "text": restored},
-                        },
-                    )
-                )
+                out.append(_text_event(block.name, index, restored))
         released = block.received - block.stream.held
         while block.queued and block.queued[0][0] <= released:
             out.append(block.queued.pop(0)[1])
@@ -449,21 +465,17 @@ class ResponseRestorer:
     def _text_stop(self, raw: str, index: int, text: _TextBlock) -> str:
         masked = "".join(text.masked)
         if self._json_text:
+            # The whole text in one delta, then each keyed delta's keys, as a
+            # tool call's input goes.
             restored = self._restore_json_text(masked)
             text.restored = [restored]
-            delta = (
-                text.first.with_delta("text", restored)
-                if text.first is not None
-                else _event(
-                    "content_block_delta",
-                    {
-                        "type": "content_block_delta",
-                        "index": index,
-                        "delta": {"type": "text_delta", "text": restored},
-                    },
-                )
-            )
-            out = (delta if restored else "") + "".join(e for _, e in text.queued)
+            template = text.keyed[0] if text.keyed else text.first
+            if template is not None and (restored or text.keyed):
+                out = template.with_delta("text", restored)
+            else:
+                out = _text_event(text.name, index, restored) if restored else ""
+            out += "".join(e.with_delta("text", "") for e in text.keyed[1:])
+            out += "".join(e for _, e in text.queued)
         else:
             out = self._emit_text(index, text, text.stream.finish(), None)
             out += "".join(event for _, event in text.queued)
@@ -497,7 +509,7 @@ class ResponseRestorer:
             first = tool.template.with_delta("partial_json", partial_json)
         else:
             first = _event(
-                "content_block_delta",
+                tool.name,
                 {
                     "type": "content_block_delta",
                     "index": index,
@@ -532,24 +544,26 @@ class ResponseRestorer:
             record(*args)
 
     def _restore_json_text(self, masked: str) -> str:
-        """Restore text that is JSON, escaping each restored value as JSON."""
-        try:
-            parsed = json.loads(masked)
-        except ValueError:
-            return self._shield.restore(masked).text
-        return json.dumps(self._restore_json(parsed), ensure_ascii=False)
+        """Restore text that is JSON: each string in it, escaped as JSON.
 
-    def _restore_json(self, value: Any) -> Any:
-        if isinstance(value, str):
-            return self._shield.restore(value).text
-        if isinstance(value, list):
-            return [self._restore_json(item) for item in value]
-        if isinstance(value, dict):
-            return {
-                self._shield.restore(key).text: self._restore_json(item)
-                for key, item in value.items()
-            }
-        return value
+        Only a string that holds a placeholder changes; every other byte
+        stays as the model wrote it. Text that isn't JSON is restored as
+        text.
+        """
+        try:
+            json.loads(masked)
+        except (ValueError, RecursionError):
+            return self._shield.restore(masked).text
+
+        def restore(match: re.Match[str]) -> str:
+            value = json.loads(match[0])
+            restored = self._shield.restore(value).text
+            if restored == value:
+                return match[0]
+            return json.dumps(restored, ensure_ascii=False)
+
+        # In JSON, every quote outside a string starts one.
+        return _JSON_STRING.sub(restore, masked)
 
     def _restore_value(self, value: Any) -> Any:
         """Restore exact placeholders in every string of a tool call's input.

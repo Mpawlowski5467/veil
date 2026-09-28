@@ -157,12 +157,14 @@ _EXACT = r"\[[A-Z][A-Z0-9_]{0,63}_[0-9]{1,9}\]"
 
 
 class _KnownValues:
-    """Masks every known value wherever it is, even glued to other text.
+    r"""Masks every known value wherever it is, even glued to other text.
 
     Masking finds a registered value only as a whole word, so "Jan Nowakem"
     (a restored "[PERSON_1]em") would go out as it is. This pass runs after
     masking, over everything that leaves: any value in the vault, or any
-    registered value, still present becomes its placeholder.
+    registered value, still present becomes its placeholder. A value is also
+    found as it is spelled inside a JSON string (``Ada \"Q\" Quill``), the
+    way a JSON reply gives it back restored.
     """
 
     #: Shorter values would be masked inside too many ordinary words.
@@ -178,6 +180,7 @@ class _KnownValues:
         self._registered_pattern: re.Pattern[str] | None = None
         self._size = -1
         self._types: dict[str, str] = {}
+        self._spelled: dict[str, str] = {}  # each spelling, to its value
         self._pattern: re.Pattern[str] | None = None
 
     def reset(self) -> None:
@@ -192,7 +195,10 @@ class _KnownValues:
                 if kind not in (None, "LITERAL") and len(value) >= self.MIN_LENGTH:
                     types.setdefault(value, kind)
             self._types = types
-            values = sorted(types, key=len, reverse=True)
+            self._spelled = {
+                spelling: value for value in types for spelling in _spellings(value)
+            }
+            values = sorted(self._spelled, key=len, reverse=True)
             self._pattern = (
                 re.compile(
                     f"(?P<ph>{_EXACT})|(?P<v>{'|'.join(map(re.escape, values))})"
@@ -210,9 +216,9 @@ class _KnownValues:
             return text
 
         def replace(match: re.Match[str]) -> str:
-            value = match["v"]
-            if value is None:
+            if match["v"] is None:
                 return match.group(0)
+            value = self._spelled[match["v"]]
             found = self._vault.get_placeholder(value)
             return found or self._vault.get_or_create(value, self._types[value])
 
@@ -225,7 +231,8 @@ class _KnownValues:
         learns values as a conversation goes on.
         """
         if self._registered_pattern is None and self._registered:
-            values = sorted(self._registered, key=len, reverse=True)
+            spelled = {s for value in self._registered for s in _spellings(value)}
+            values = sorted(spelled, key=len, reverse=True)
             self._registered_pattern = re.compile("|".join(map(re.escape, values)))
         pattern = self._registered_pattern
         return pattern is not None and pattern.search(text) is not None
@@ -1880,6 +1887,15 @@ def _readings(pattern: str) -> set[str]:
         text = _REGEX_REPEAT.sub("", text)
         texts.update(_unregex(re.sub(r"(?<!\\)\.", dot, text)) for dot in (".", " "))
     return texts
+
+
+def _spellings(value: str) -> set[str]:
+    """A value as written, and as written inside a JSON string."""
+    return {
+        value,
+        json.dumps(value, ensure_ascii=False)[1:-1],
+        json.dumps(value)[1:-1],
+    }
 
 
 def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:

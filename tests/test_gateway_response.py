@@ -2,6 +2,7 @@
 
 import json
 import random
+import sqlite3
 
 import pytest
 
@@ -27,8 +28,18 @@ def make_shield():
     return shield
 
 
-def sse(data):
-    return f"event: {data['type']}\ndata: {json.dumps(data)}\n\n"
+class BrokenLedger(MemoryLedger):
+    """A ledger whose file is locked: nothing can be recorded."""
+
+    def record_text(self, restored, masked):
+        raise sqlite3.OperationalError("database is locked")
+
+    def record_tool_input(self, tool_id, restored, masked):
+        raise sqlite3.OperationalError("database is locked")
+
+
+def sse(data, name=None):
+    return f"event: {name or data['type']}\ndata: {json.dumps(data)}\n\n"
 
 
 def start(index, block):
@@ -533,6 +544,32 @@ class TestKeysOfTheirOwn:
         assert "event: content_block_delta_v2\n" in text
 
 
+class TestEventNames:
+    """An event rebuilt keeps the name it came under (clients act on names)."""
+
+    NAME = "content_block_delta_v2"
+
+    def names(self, stream, json_text=False):
+        restorer = ResponseRestorer(make_shield(), MemoryLedger(), json_text=json_text)
+        out = restorer.feed(stream) + restorer.finish()
+        return [line[7:] for line in out.split("\n") if line.startswith("event: ")]
+
+    @pytest.mark.parametrize("json_text", [False, True])
+    def test_text(self, json_text):
+        body = {"type": "text_delta", "text": '"Hi [PERSON_1]"'}
+        data = {"type": "content_block_delta", "index": 0, "delta": body}
+        stream = start(0, {"type": "text", "text": ""}) + sse(data, self.NAME) + stop(0)
+        names = self.names(stream, json_text)
+        assert names == ["content_block_start", self.NAME, "content_block_stop"]
+
+    def test_a_tool_calls_input(self):
+        body = {"type": "input_json_delta", "partial_json": '{"a": "[PERSON_1]"}'}
+        data = {"type": "content_block_delta", "index": 0, "delta": body}
+        call = {"type": "tool_use", "id": "t", "name": "Bash", "input": {}}
+        names = self.names(start(0, call) + sse(data, self.NAME) + stop(0))
+        assert names == ["content_block_start", self.NAME, "content_block_stop"]
+
+
 class TestJsonReplies:
     """A reply whose text is JSON (a title, say) stays JSON when restored."""
 
@@ -559,21 +596,102 @@ class TestJsonReplies:
             "title": f"Fix the build for {ODD}"
         }
 
+    def restored(self, masked, pieces=None):
+        """The text of a JSON reply as the client gets it, streamed and whole."""
+        pieces = pieces or [masked[:7], masked[7:]]
+        restorer = ResponseRestorer(make_shield(), MemoryLedger(), json_text=True)
+        streamed = restorer.feed(text_block(0, pieces)) + restorer.finish()
+        assert restorer.failed is None
+        message = {"content": [{"type": "text", "text": masked}]}
+        whole = restore_message(make_shield(), MemoryLedger(), message, json_text=True)
+        text = "".join(
+            e["delta"]["text"]
+            for e in parse(streamed)
+            if e["type"] == "content_block_delta"
+        )
+        assert whole["content"][0]["text"] == text
+        return text
+
+    @pytest.mark.parametrize(
+        "masked",
+        [
+            '{"title":"Fix the build"}',
+            '{"title": "x", "n": 1e400, "score": 1.50, "u": "caf\\u00e9"}',
+            '{"a": ' + "[" * 3000 + "]" * 3000 + "}",
+        ],
+        ids=["title", "numbers", "deep"],
+    )
+    def test_nothing_to_restore_keeps_every_byte(self, masked):
+        assert self.restored(masked) == masked
+
+    def test_only_a_string_with_a_placeholder_changes(self):
+        masked = '{"title":"Notes for [PERSON_2]","n":1e400,"tags":["a"]}'
+        assert self.restored(masked) == (
+            '{"title":"Notes for Ada \\"Q\\" \\\\ Quill","n":1e400,"tags":["a"]}'
+        )
+
+    def test_deltas_with_keys_of_their_own_keep_them(self):
+        stream = (
+            start(0, {"type": "text", "text": ""})
+            + delta(0, {"type": "text_delta", "text": '{"title": '})
+            + delta(0, {"type": "text_delta", "text": '"Notes for', "k": 1})
+            + delta(0, {"type": "text_delta", "text": ' [PERSON_1]"}', "k": 2})
+            + stop(0)
+        )
+        restorer = ResponseRestorer(make_shield(), MemoryLedger(), json_text=True)
+        deltas = [
+            e["delta"]
+            for e in parse(restorer.feed(stream))
+            if e["type"] == "content_block_delta"
+        ]
+        # One whole text, on the first delta with keys; then the others' keys.
+        assert deltas == [
+            {"type": "text_delta", "text": f'{{"title": "Notes for {NAME}"}}', "k": 1},
+            {"type": "text_delta", "text": "", "k": 2},
+        ]
+        empty = (
+            start(0, {"type": "text", "text": ""})
+            + delta(0, {"type": "text_delta", "text": "", "k": 3})
+            + stop(0)
+        )
+        restorer = ResponseRestorer(make_shield(), MemoryLedger(), json_text=True)
+        assert [e.get("delta") for e in parse(restorer.feed(empty))][1] == {
+            "type": "text_delta",
+            "text": "",
+            "k": 3,
+        }
+
 
 class TestFailingSafely:
     def test_a_ledger_that_cant_write_doesnt_end_the_reply(self):
-        import sqlite3
-
-        class Broken(MemoryLedger):
-            def record_text(self, restored, masked):
-                raise sqlite3.OperationalError("database is locked")
-
-            def record_tool_input(self, tool_id, restored, masked):
-                raise sqlite3.OperationalError("database is locked")
-
-        text, restorer = run(make_shield(), Broken(), reply())
+        text, restorer = run(make_shield(), BrokenLedger(), reply())
         assert restorer.failed is None
         assert parse(text)[-1]["type"] == "message_stop"
+
+    def test_a_json_reply_sent_back_without_its_record_is_masked(self):
+        # Restored values are escaped inside the JSON; with no record of the
+        # reply, masking it afresh must still find them.
+        shield = make_shield()
+        address = "Quill Lane 5\n\tExample Town"
+        shield.add_entity(address, "ADDRESS")
+        shield.mask(address)  # [ADDRESS_1]
+        ledger = BrokenLedger()
+        masked = json.dumps({"title": "Notes for [PERSON_2]", "at": "[ADDRESS_1]"})
+        reply = {"content": [{"type": "text", "text": masked}]}
+        out = restore_message(shield, ledger, reply, json_text=True)
+        text = out["content"][0]["text"]
+        assert json.loads(text) == {"title": f"Notes for {ODD}", "at": address}
+        masker = RequestMasker(shield, ledger, note=None)
+        body = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": text},
+            ]
+        }
+        sent = masker.mask(body)["messages"][1]["content"]
+        assert "Quill" not in sent
+        assert "Example Town" not in sent
+        assert json.loads(sent) == json.loads(masked)
 
     def test_input_nested_too_deeply_ends_the_stream_by_name(self):
         deep = "[" * 5000 + "]" * 5000
