@@ -286,6 +286,8 @@ class TestWhatIsRefused:
             {"model": f"claude {EMAIL}"},
             {"model": NAME},
             {"service_tier": NAME},
+            {"speed": NAME},
+            {"speed": f"fast_{HANDLE}"},
             {"thinking": {"type": EMAIL}},
             {"thinking": {"type": "enabled", "budget_tokens": "lots"}},
             {"stream": "yes"},

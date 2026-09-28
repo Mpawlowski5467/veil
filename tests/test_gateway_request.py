@@ -702,6 +702,60 @@ class TestPerTurnEffort:
         assert "output_config" not in str(info.value)
 
 
+# With fast mode on (/fast, or the fastMode setting), Claude Code (2.1.283)
+# adds "speed": "fast" to every request on Opus 4.8, Opus 5 and Opus 5.5.
+class TestSpeed:
+    def test_the_speed_goes_out_as_it_is_and_the_text_masked(self):
+        masker, _, _ = make_masker(note=None)
+        body = {**opus_body(), "speed": "fast"}
+        out = masker.mask(body)
+        assert out["speed"] == "fast"
+        assert out["messages"][3]["content"] == "Now call [PHONE_1]."
+        assert body == {**opus_body(), "speed": "fast"}
+        sent = json.dumps(out)
+        for value in (NAME, EMAIL, PHONE):
+            assert value not in sent, value
+
+    @pytest.mark.parametrize("speed", ["standard", "fast"])
+    def test_every_speed_passes(self, speed):
+        masker, _, _ = make_masker(note=None)
+        assert masker.mask({"messages": [], "speed": speed}) == {
+            "messages": [],
+            "speed": speed,
+        }
+
+    @pytest.mark.parametrize("speed", ["turbo", "priority"])
+    def test_a_speed_the_api_may_add_goes_out_too(self, speed):
+        # A name holding no data, like any setting's: a new one doesn't break
+        # every request.
+        masker, _, _ = make_masker(note=None)
+        assert masker.mask({"messages": [], "speed": speed})["speed"] == speed
+
+    @pytest.mark.parametrize(
+        "speed",
+        [
+            " fast",
+            "fast\n",
+            NAME,
+            EMAIL,
+            "",
+            None,
+            True,
+            1,
+            1.5,
+            ["fast"],
+            {"speed": "fast"},
+        ],
+    )
+    def test_only_a_speed_is_sent(self, speed):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask({"messages": [], "speed": speed})
+        assert info.value.path == "speed"
+        assert NAME not in str(info.value)
+        assert EMAIL not in str(info.value)
+
+
 BAD_BODIES = [
     (
         {
@@ -931,6 +985,9 @@ def test_refusals_never_quote_a_value():
     with pytest.raises(UnsupportedRequestError) as info:
         masker.mask(body)
     assert EMAIL not in str(info.value)
+    with pytest.raises(UnsupportedRequestError) as info:
+        masker.mask({"messages": [], "speed": EMAIL})
+    assert EMAIL not in str(info.value)
 
 
 def test_every_recorded_field_and_block_type_has_a_rule():
@@ -945,6 +1002,7 @@ def test_every_recorded_field_and_block_type_has_a_rule():
         "messages",
         "stop_sequences",
         "safeguards",
+        "speed",
     }
     top_level = {
         path[2:] for path in census if path.count(".") == 1 and "[" not in path

@@ -1416,6 +1416,8 @@ _SETTINGS: dict[str, _Rule] = {
     "top_p": _number,
     "stream": _boolean,
     "service_tier": _enum,
+    # Fast mode (beta fast-mode-2026-02-01): "fast", or "standard".
+    "speed": _enum,
     "metadata": _fields(user_id=_user_id),
     "thinking": _fields(type=_enum, budget_tokens=_integer, display=_enum),
     "context_management": _fields(edits=_list_of(_EDIT)),
