@@ -416,6 +416,25 @@ def _parser() -> argparse.ArgumentParser:
         "args", nargs=argparse.REMAINDER, help="Codex arguments after --"
     )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
+    for operation in ("setup", "undo"):
+        configuration = commands.add_parser(
+            operation, help=f"{operation} a backed-up Codex desktop configuration"
+        )
+        configuration.add_argument("client", choices=("codex",))
+        configuration.add_argument("--config", type=Path, help="Codex config.toml path")
+        if operation == "setup":
+            configuration.add_argument("--port", type=int, default=8485)
+            configuration.add_argument(
+                "--auth", choices=("chatgpt", "api-key"), default="chatgpt"
+            )
+    for operation in ("status", "doctor"):
+        diagnostics = commands.add_parser(
+            operation, help="check saved Codex routing and local gateway readiness"
+        )
+        diagnostics.add_argument("--config", type=Path, help="Codex config.toml path")
+        diagnostics.add_argument(
+            "--json", action="store_true", help="machine-readable report"
+        )
     for operation in ("mask", "restore"):
         text_command = commands.add_parser(
             operation, help=f"{operation} local text for a chat"
@@ -466,6 +485,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command in {"setup", "undo"}:
+            from .codex_setup import config_path, setup_codex, undo_codex
+
+            target = config_path(options.config)
+            if options.command == "undo":
+                return undo_codex(target)
+            return setup_codex(data_dir, target, options.port, options.auth)
+        if options.command in {"status", "doctor"}:
+            from .diagnostics import run_diagnostics
+
+            return run_diagnostics(
+                config=options.config,
+                data_dir=data_dir if options.data_dir is not None else None,
+                doctor=options.command == "doctor",
+                json_output=options.json,
+            )
         if options.command == "claude":
             return run_claude(passed_on, data_dir=data_dir)
         if options.command == "codex":
@@ -497,4 +532,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except SettingsError as error:
         print(f"{APP}: {error}", file=sys.stderr)
+        return 2
+    except OSError:
+        if options.command not in {"setup", "undo", "status", "doctor"}:
+            raise
+        print(
+            f"{APP}: could not access setup/diagnostic files; check permissions "
+            "and available disk space. Preserve any existing backup and receipt.",
+            file=sys.stderr,
+        )
         return 2

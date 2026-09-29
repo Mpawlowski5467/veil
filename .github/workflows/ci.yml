@@ -61,3 +61,30 @@ jobs:
           assert restored.text == "Hi Jan Nowak, following up on the invoice...", restored
           print("ok")
           EOF
+      - name: Install desktop extra and smoke-test setup, status, and undo
+        run: |
+          for wheel in dist/*.whl; do
+            uv pip install --python /tmp/smoke/bin/python "${wheel}[desktop]"
+          done
+          /tmp/smoke/bin/python - <<'EOF'
+          import tempfile
+          from pathlib import Path
+          from veil import Shield
+          from veil.cli import main
+          from veil.gateway import Gateway, Sessions
+
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              data = root / "veil"
+              config = root / "codex" / "config.toml"
+              data.mkdir(mode=0o700)
+              (data / "gateway-secret").write_text("fictional-smoke-secret")
+              with Gateway(Sessions(lambda _: Shield(), api="openai"),
+                           secret="fictional-smoke-secret", api="openai",
+                           openai_auth="chatgpt") as gateway:
+                  assert main(["--data-dir", str(data), "setup", "codex",
+                               "--config", str(config), "--port", str(gateway.port)]) == 0
+                  assert main(["status", "--config", str(config)]) == 0
+                  assert main(["undo", "codex", "--config", str(config)]) == 0
+                  assert not config.exists()
+          EOF

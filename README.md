@@ -12,7 +12,7 @@ Keep working with real names, email addresses, and account details while the mod
 
 **[v0.4.1 · Alpha](CHANGELOG.md) · Python 3.10+ · No runtime dependencies · [MIT](LICENSE)**
 
-[Get started](#choose-your-workflow) · [Python guide](docs/python-guide.md) · [Coverage and limits](#understand-the-boundaries) · [Contributing](#contributing)
+[Get started](#choose-your-workflow) · [Python guide](docs/python-guide.md) · [Roadmap to 1.0](ROADMAP.md) · [Coverage and limits](#understand-the-boundaries) · [Contributing](#contributing)
 
 > Detection has limits. Names need registration, and images and PDFs are not scrubbed by the gateway. Veil reduces exposure of supported text; it does not guarantee that all sensitive data stays on your machine.
 
@@ -34,7 +34,7 @@ Names in this example are registered in advance. Email detection is built in. A 
 | Python scripts and AI applications | Mask text before your provider call and restore the reply. The library is independent of any model SDK. |
 | Claude Code in a terminal | `veil claude` starts a local gateway and launches Claude Code through it. |
 | Codex CLI | Experimental `veil codex` launcher with ChatGPT login or `--auth api-key`. ChatGPT routing has passed a live test. |
-| Codex desktop (local tasks) | Manual provider setup; the bundled app-server runtime has passed local and live tests. Desktop UI activation is still manual. See the [integration guide](docs/openai-integration.md). |
+| Codex desktop (local tasks) | Backed-up `veil setup codex`, readiness checks, and undo. A basic desktop text round trip was manually verified; broader workflows remain experimental. See the [integration guide](docs/openai-integration.md). |
 | Other coding assistants | Automatic coverage needs an integration with that tool's request and response path. |
 | ChatGPT app, browser chats, other chat apps | Explicit `veil mask` / `veil restore` commands, including optional clipboard mode. These do not intercept the app automatically. |
 
@@ -191,6 +191,35 @@ veil codex -- exec "Explain this project"
 The launcher starts a private gateway, pins Codex's provider, disables hosted search, apps and subagents for that invocation, then stops the gateway when Codex exits. The default uses your existing ChatGPT login. `--auth api-key` requires `OPENAI_API_KEY` in the launching shell. Text requests and replies, local function/custom tool calls, and conversation replay are supported; unsupported request shapes are refused.
 
 Returned tool inputs containing known private values are blocked except direct local `apply_patch` calls. This check happens before the gateway delivers executable input; it does not inspect what a command later reads or sends. Images, file attachments, hosted tools, and remote compaction are refused. The [OpenAI integration guide](docs/openai-integration.md) covers desktop setup, API clients, tested versions, and limits. Live API-key validation is still pending.
+
+## Set up Codex desktop
+
+From the checkout, install the optional TOML editor used by setup and diagnostics:
+
+```bash
+python -m pip install '.[desktop]'
+veil setup codex
+veil gateway --api openai --auth chatgpt --port 8485
+```
+
+Setup preserves unrelated settings and comments, saves a private backup, and
+selects the Veil provider. It disables hosted search, apps, subagents, and
+analytics in those saved settings. Keep the gateway running, restart Codex,
+and start a fresh local task. In another terminal:
+
+```bash
+veil status
+veil doctor
+veil doctor --json
+```
+
+These commands check saved settings and the local gateway; they do not prove
+that an already-open task used Veil. Doctor also checks local masking/restoration
+and credential environment without making a model call. `veil undo codex`
+restores the settings from before setup while preserving unrelated later edits.
+See [setup and recovery](docs/openai-integration.md#codex-desktop-setup-and-recovery).
+Background service management and per-task verification are next on the
+[roadmap](ROADMAP.md).
 
 ## Use Veil with the ChatGPT app
 

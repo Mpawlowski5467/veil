@@ -4,6 +4,9 @@
 
 ### Added
 
+- `veil setup codex` and `veil undo codex` for private backups, comment-preserving configuration edits, and conflict-aware rollback. `veil status` and `veil doctor` check local readiness without model calls or private-value logging; `--json` provides structured results. The optional `desktop` extra supplies the TOML editor while the base library stays dependency-free.
+- Authenticated loopback gateway status metadata reports API/auth mode without conversation data. Readiness explicitly does not prove active task coverage.
+- A [roadmap to 1.0](ROADMAP.md) with scoped milestones, acceptance criteria, and later features.
 - Experimental OpenAI Responses gateway, `veil codex` launcher, and manual desktop configuration. Supports API-key authentication and Codex's existing ChatGPT login. Masks supported text, restores JSON and streamed replies, and preserves masked history. Unknown request shapes, media, hosted tools, stored conversation references, and remote compaction are refused. Returned tool inputs containing known private values are blocked except direct local patches. See [setup and limits](docs/openai-integration.md).
 - `veil mask` and `veil restore` for explicit chat workflows, with persistent session labels, stdin/stdout, and optional clipboard access. Warnings prevent output and clipboard replacement.
 - Opt-in local and live tests for Codex CLI and the desktop app's isolated app-server runtime. ChatGPT-authenticated live checks passed; live API-key validation remains pending.

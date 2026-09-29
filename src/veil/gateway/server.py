@@ -27,7 +27,7 @@ from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
-from .hooks import PROOF_PATH, proof
+from .hooks import PROOF_PATH, STATUS_PATH, proof
 from .ledger import Ledger, MemoryLedger
 from .openai_request import ResponsesRequestMasker
 from .openai_response import ResponsesRestorer, ResponsesStreamRestorer
@@ -231,7 +231,7 @@ class Gateway:
         self.api = api
         if openai_auth not in {"api-key", "chatgpt"}:
             raise ValueError("openai_auth must be api-key or chatgpt")
-        self.openai_auth = openai_auth
+        self.openai_auth: Literal["api-key", "chatgpt"] = openai_auth
         self.guard_tools = guard_tools
         self.sessions = sessions
         self.secret = secret or secrets.token_urlsafe(32)
@@ -318,6 +318,17 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._prove(address.query)
                     return
                 self._check_access()
+                if self.command == "GET" and path == STATUS_PATH:
+                    data = json.dumps(
+                        {"api": gateway.api, "auth": gateway.openai_auth}
+                    ).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self._started = True
+                    self.wfile.write(data)
+                    return
                 if gateway.api == "openai":
                     self._check_openai_auth()
                 routes = (

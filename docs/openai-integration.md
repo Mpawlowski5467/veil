@@ -5,7 +5,7 @@ Veil has a Responses gateway, a managed Codex CLI launcher, and configuration fo
 | Interface | Implemented and verified |
 | --- | --- |
 | Codex CLI | Managed launcher; local fixtures and a live round trip using ChatGPT login passed. |
-| Codex desktop | Private provider configuration; the bundled app-server passed local and live tests in an isolated ephemeral session. The active desktop UI was not reconfigured or restarted. |
+| Codex desktop | Backed-up setup/undo and local readiness checks. The bundled app-server passed isolated local/live tests; a basic text round trip was also manually verified in the desktop UI. Broader desktop workflows remain unverified. |
 | OpenAI Responses API | JSON/SSE adapter and API-key routing tested against local fixtures. Live API-key validation remains pending. |
 | ChatGPT app / website | Explicit local mask/restore commands. No automatic interception of ordinary chats. |
 
@@ -33,7 +33,79 @@ Pass Codex options after `--`; choose a model with `--model` if needed. Provider
 
 OpenAI documents [custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers) and [using existing OpenAI authentication for a proxy](https://learn.chatgpt.com/docs/auth#alternative-model-providers).
 
-## Codex desktop: manual setup for local tasks
+## Codex desktop: setup and recovery
+
+Install the optional desktop tools from the checkout:
+
+```bash
+python -m pip install '.[desktop]'
+veil setup codex
+```
+
+The base library still has no runtime dependencies. The `desktop` extra adds
+`tomlkit` to parse and edit TOML without discarding unrelated settings/comments,
+including on Python 3.10. Development checkouts installed with `uv sync` also
+include it; use `uv run veil ...` for the commands below.
+
+Setup chooses `~/.codex/config.toml`, or `$CODEX_HOME/config.toml` when set.
+`--config PATH` selects another configuration for setup, undo, status, or doctor.
+`veil --data-dir PATH setup codex` selects the Veil storage/configuration folder.
+Use the same data folder for the gateway. Defaults are port 8485 and ChatGPT
+sign-in; `--port` and `--auth api-key` are available on setup.
+
+Setup merges the provider and supported feature settings, creates owner-only
+backup/receipt files next to the Codex configuration, then replaces the
+configuration atomically. It does not start the gateway, restart Codex, change
+your login, or modify detector registrations. A selected Codex profile is
+refused because it could override the saved route. Repeated setup preserves
+the original backup. Change an existing managed setup by undoing it first.
+
+Start the gateway with the command printed by setup, keep it running, restart
+Codex, and start a new local task. Then check readiness in another terminal:
+
+```bash
+veil status
+veil doctor
+veil doctor --json
+```
+
+Status checks saved provider/feature settings, the gateway's cryptographic
+identity proof, and authenticated API/auth-mode metadata. It probes only
+`http://127.0.0.1` endpoints. Doctor adds private-storage checks, a local fictional
+email round trip, data-folder/secret consistency, and CLI login or API-key
+environment checks. It neither sends a model request nor prints credentials,
+registered values, mappings, or raw client logs. An older gateway without the
+metadata endpoint produces a restart warning, not a full readiness pass.
+
+Exit status is 0 when every check passes, 1 when readiness needs attention, and
+2 for command/setup errors. JSON output includes individual checks and remedies.
+The setup receipt supplies the data folder automatically unless `--data-dir` is
+explicit. For an older manual setup, provide its data folder to doctor.
+
+These are **readiness checks**, not proof of an active task's route. Existing
+tasks, CLI overrides, profiles, cloud tasks, and other client traffic may use a
+different route. CLI login/key checks describe this shell; the desktop process
+may have a different environment. The base URL and a reachable port alone are
+not reported as proof of protection.
+
+To undo setup:
+
+```bash
+veil undo codex
+```
+
+Undo restores only the fields managed by setup. Unrelated later edits are kept;
+a conflicting edit to a managed field stops undo with an explanation. Backups
+are retained privately. Restart Codex afterward. Undo restores the state just
+before **that setup command**; it cannot reverse earlier manual configuration
+changes, stop a separately running gateway, or erase session mappings. Preserve
+any older manual backup if you want to return to a pre-Veil configuration.
+
+If a crash leaves `config.toml.veil-setup.lock`, confirm no setup/undo process is
+running before removing that lock. Keep the private backup and receipt. For an
+interrupted setup, undo can restore the original settings before trying again.
+
+### Manual configuration alternative
 
 Run a persistent gateway in a terminal:
 
@@ -45,9 +117,9 @@ The command writes an owner-only configuration fragment to `~/.veil/codex-provid
 
 Merge the fragment into **user-level** `~/.codex/config.toml`, preserving unrelated settings. Root keys such as `model_provider` must appear before any table header. Merge existing `[features]` and `[model_providers.veil]` tables rather than adding duplicates. The fragment selects Veil, disables hosted search/apps/subagents, and configures HTTP/SSE with `requires_openai_auth = true`.
 
-Restart the desktop app when ready, keep the gateway running, and start a fresh **local Codex** task using the Veil provider. This configuration is not applied to cloud tasks or ordinary ChatGPT chats. It affects shared local Codex settings, so Veil deliberately does not change them or restart an active app automatically.
+Restart the desktop app when ready, keep the gateway running, and start a fresh **local Codex** task using the Veil provider. This configuration is not applied to cloud tasks or ordinary ChatGPT chats. It affects shared local Codex settings. The gateway command only writes the fragment; use `veil setup codex` to opt into a backed-up merge. Neither command restarts the app.
 
-The bundled runtime was exercised via its [app-server interface](https://learn.chatgpt.com/docs/app-server) in a temporary session. That validates the request/response path, not every desktop UI feature, plugin, attachment, or existing task. Full UI activation and verification remain a setup step.
+The bundled runtime was exercised via its [app-server interface](https://learn.chatgpt.com/docs/app-server) in a temporary session. A subsequent manual desktop text test was matched to Veil's mappings and masked response ledger. These validate those text paths, not every desktop UI feature, plugin, attachment, or existing task.
 
 For manual CLI use, the persistent gateway also prints an invocation selecting the provider explicitly. For an API-key desktop setup, use `--auth api-key` and ensure `OPENAI_API_KEY` is available to the desktop process, not only an unrelated terminal.
 

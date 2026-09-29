@@ -38,20 +38,32 @@ def toml_value(value: Any) -> str:
 
 def provider(gateway: Gateway, *, environment_secret: bool = False) -> dict[str, Any]:
     """Return a provider table for the gateway's selected authentication mode."""
+    return provider_configuration(
+        gateway.url,
+        gateway.secret,
+        gateway.openai_auth,
+        environment_secret=environment_secret,
+    )
+
+
+def provider_configuration(
+    url: str, secret: str, auth: Auth, *, environment_secret: bool = False
+) -> dict[str, Any]:
+    """Build settings without starting a gateway or changing a user's files."""
     result: dict[str, Any] = {
         "name": "Veil",
-        "base_url": gateway.url + "/v1",
+        "base_url": url + "/v1",
         "wire_api": "responses",
         "supports_websockets": False,
         "supports_standalone_web_search": False,
-        "requires_openai_auth": gateway.openai_auth == "chatgpt",
+        "requires_openai_auth": auth == "chatgpt",
     }
-    if gateway.openai_auth == "api-key":
+    if auth == "api-key":
         result["env_key"] = "OPENAI_API_KEY"
     if environment_secret:
         result["env_http_headers"] = {SECRET_HEADER: "VEIL_GATEWAY_SECRET"}
     else:
-        result["http_headers"] = {SECRET_HEADER: gateway.secret}
+        result["http_headers"] = {SECRET_HEADER: secret}
     return result
 
 
