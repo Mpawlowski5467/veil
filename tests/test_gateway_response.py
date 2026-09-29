@@ -10,6 +10,7 @@ from veil.gateway import (
     MemoryLedger,
     RequestMasker,
     ResponseRestorer,
+    StreamError,
     restore_message,
 )
 
@@ -144,6 +145,31 @@ class TestStreaming:
             "file_path": "/work/out.txt",
             "content": f"To {EMAIL} from {ODD}, [person 1]",
         }
+
+    def test_placeholders_in_tool_input_keys_are_restored(self):
+        shield, ledger = make_shield(), MemoryLedger()
+        masked = {"[EMAIL_1]": {"type": "[PERSON_1]", "[person 1]": 2}, "limit": 5}
+        stream = tool_block(0, "toolu_1", [json.dumps(masked)])
+        out, _ = run(shield, ledger, stream)
+        restored = json.loads(blocks(parse(out))[0]["deltas"][0]["partial_json"])
+        # Exact placeholders only, as for values.
+        assert restored == {EMAIL: {"type": NAME, "[person 1]": 2}, "limit": 5}
+        assert ledger.masked_tool_input("toolu_1", restored) == masked
+
+    def test_tool_input_keys_that_restore_alike_end_the_stream(self):
+        shield, ledger = make_shield(), MemoryLedger()
+        colliding = json.dumps({"to": {"[EMAIL_1]": 1, EMAIL: 2}})
+        out, restorer = run(shield, ledger, tool_block(0, "toolu_1", [colliding]))
+        assert restorer.failed == "a tool call's input could not be restored"
+        assert parse(out)[-1] == {
+            "type": "error",
+            "error": {
+                "type": "api_error",
+                "message": "a tool call's input could not be restored",
+            },
+        }
+        assert EMAIL not in out
+        assert ledger.masked_tool_input("toolu_1", {"to": {EMAIL: 2}}) is None
 
     def test_thinking_passes_through_byte_for_byte(self):
         out, _ = run(make_shield(), MemoryLedger(), reply())
@@ -373,6 +399,34 @@ class TestWholeMessages:
         assert ledger.masked_tool_input("t1", restored["content"][2]["input"]) == {
             "command": "echo [PERSON_1] [person 1]"
         }
+
+    def test_restore_message_restores_tool_input_keys(self):
+        shield, ledger = make_shield(), MemoryLedger()
+        masked = {"[PERSON_1]": {"type": "[EMAIL_1]"}}
+        message = {
+            "content": [
+                {"type": "tool_use", "id": "t1", "name": "Log", "input": masked}
+            ]
+        }
+        restored = restore_message(shield, ledger, message)["content"][0]["input"]
+        assert restored == {NAME: {"type": EMAIL}}
+        assert ledger.masked_tool_input("t1", restored) == masked
+
+    def test_restore_message_refuses_keys_that_restore_alike(self):
+        shield, ledger = make_shield(), MemoryLedger()
+        message = {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "Log",
+                    "input": {"[PERSON_1]": 1, NAME: 2},
+                }
+            ]
+        }
+        with pytest.raises(StreamError):
+            restore_message(shield, ledger, message)
+        assert ledger.masked_tool_input("t1", {NAME: 2}) is None
 
     @pytest.mark.parametrize("message", [None, "text", {"content": "plain"}, {"id": 1}])
     def test_other_bodies_pass_unchanged(self, message):

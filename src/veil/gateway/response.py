@@ -272,18 +272,35 @@ class ResponseRestorer:
         )
 
     def _restore_value(self, value: Any) -> Any:
-        """Restore exact placeholders in every string of a tool call's input."""
+        """Restore exact placeholders in every string of a tool call's input.
+
+        Keys are restored too, since the model saw them masked. Two keys that
+        restore to the same text can't both be kept, so such a call fails.
+        """
         if isinstance(value, str):
-            return self._shield.restore(value, tolerant=False).text
+            return self._restore_text(value)
         if isinstance(value, list):
             return [self._restore_value(item) for item in value]
         if isinstance(value, dict):
-            return {key: self._restore_value(item) for key, item in value.items()}
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                restored = self._restore_text(key)
+                if restored in out:
+                    raise StreamError("a tool call's input could not be restored")
+                out[restored] = self._restore_value(item)
+            return out
         return value
+
+    def _restore_text(self, text: str) -> str:
+        return self._shield.restore(text, tolerant=False).text
 
 
 def restore_message(shield: Shield, ledger: Ledger, message: Any) -> Any:
-    """Restore a whole (not streamed) Messages API reply the same way."""
+    """Restore a whole (not streamed) Messages API reply the same way.
+
+    Raises:
+        StreamError: If a tool call's input can't be restored safely.
+    """
     if not isinstance(message, dict) or not isinstance(message.get("content"), list):
         return message
     content = []
