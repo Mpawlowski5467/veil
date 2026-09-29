@@ -71,6 +71,8 @@ class ResponseRestorer:
         self._text: dict[int, _TextBlock] = {}
         self._tools: dict[int, _ToolBlock] = {}
         self.failed: str | None = None
+        self.completed = False
+        self.terminal_error = False
 
     def feed(self, data: str) -> str:
         """Add the next part of the reply; return the events to send on."""
@@ -104,6 +106,8 @@ class ResponseRestorer:
     def finish(self) -> str:
         """End of the reply: pass on anything left, unchanged."""
         rest, self._buffer = self._buffer + self._carry, ""
+        if rest.strip() or self._text or self._tools:
+            self.completed = False
         self._carry = ""
         return "" if self.failed is not None else rest
 
@@ -129,6 +133,12 @@ class ResponseRestorer:
         if not isinstance(data, dict):
             return raw
         kind = data.get("type")
+        if self.completed and kind != "ping":
+            self.terminal_error = True
+        if kind == "message_stop":
+            self.completed = not self._text and not self._tools
+        elif kind == "error":
+            self.terminal_error = True
         index = data.get("index")
         if kind == "content_block_start" and isinstance(index, int):
             return self._start(raw, index, data.get("content_block"))

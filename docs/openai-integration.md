@@ -96,6 +96,11 @@ different route. CLI login/key checks describe this shell; the desktop process
 may have a different environment. The base URL and a reachable port alone are
 not reported as proof of protection.
 
+To collect evidence for a particular conversation, use `veil verify`, send its
+fictional prompt in that conversation, then check the returned ID after the
+reply. `veil status --activity` shows bounded metadata from the current gateway.
+See [request verification and activity](verification.md) for scope and limits.
+
 To undo setup:
 
 ```bash

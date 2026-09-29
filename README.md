@@ -67,6 +67,15 @@ conversation.** Use the gateway launch/setup workflow for automatic masking, and
 give the skill file paths rather than private text in an unprotected prompt.
 See [installation, examples, updates, and removal](docs/assistant-skills.md).
 
+### Verify a conversation
+
+With a gateway running, `veil verify` prints a one-time fictional test prompt.
+Send it in the conversation you want to check, then run `veil verify --check ID`
+after its reply. `veil status --activity` shows recent request times and counts
+without retaining original values in activity logs. A pass proves that test
+request used the gateway, not future requests or other traffic. See
+[verification and activity](docs/verification.md).
+
 ## Use Veil in Python
 
 ### Mask and restore

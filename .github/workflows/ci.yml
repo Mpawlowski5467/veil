@@ -85,10 +85,14 @@ jobs:
       - name: Smoke-test background controls without desktop dependencies
         run: |
           /tmp/smoke/bin/python - <<'EOF'
+          import contextlib
+          import io
+          import json
           import socket
           import tempfile
           from pathlib import Path
           from veil.service import run_service, service_status
+          from veil.cli import main
 
           with tempfile.TemporaryDirectory() as tmp:
               data = Path(tmp) / "veil"
@@ -99,6 +103,16 @@ jobs:
                   assert run_service("start", data_dir=data,
                                      api="anthropic", port=port) == 0
                   assert service_status(data)["state"] == "running"
+                  output = io.StringIO()
+                  options = ["--data-dir", str(data)]
+                  endpoint = ["--gateway-url", f"http://127.0.0.1:{port}"]
+                  with contextlib.redirect_stdout(output):
+                      assert main([*options, "verify", *endpoint, "--json"]) == 0
+                  probe = json.loads(output.getvalue())
+                  assert probe["state"] == "pending"
+                  assert main([*options, "verify", *endpoint,
+                               "--check", probe["verification_id"]]) == 1
+                  assert main([*options, "status", "--activity", *endpoint]) == 0
               finally:
                   run_service("stop", data_dir=data, remove=True)
           EOF

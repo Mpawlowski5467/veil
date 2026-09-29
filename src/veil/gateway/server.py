@@ -27,6 +27,7 @@ from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
+from .activity import ACTIVITY_PATH, VERIFY_PATH, Activity, Observation, ObservedLedger
 from .hooks import PROOF_PATH, STATUS_PATH, proof
 from .ledger import Ledger, MemoryLedger
 from .openai_request import ResponsesRequestMasker
@@ -234,6 +235,7 @@ class Gateway:
         self.openai_auth: Literal["api-key", "chatgpt"] = openai_auth
         self.guard_tools = guard_tools
         self.sessions = sessions
+        self.activity = Activity()
         self.secret = secret or secrets.token_urlsafe(32)
         if api == "openai" and upstream == UPSTREAM:
             upstream = "chatgpt.com" if openai_auth == "chatgpt" else "api.openai.com"
@@ -310,6 +312,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         def _serve(self) -> None:
             self._started = False  # whether a response has begun
             self._chunked = False  # whether it is a chunked stream
+            self._observation: Observation | None = None
             try:
                 address = urlsplit(self.path)
                 path = address.path
@@ -318,6 +321,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._prove(address.query)
                     return
                 self._check_access()
+                if path in {ACTIVITY_PATH, VERIFY_PATH}:
+                    self._activity(path, address.query)
+                    return
                 if self.command == "GET" and path == STATUS_PATH:
                     data = json.dumps(
                         {"api": gateway.api, "auth": gateway.openai_auth}
@@ -400,6 +406,47 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self._started = True
             self.wfile.write(data)
 
+        def _activity(self, path: str, query: str) -> None:
+            if self.command == "POST" and path == VERIFY_PATH and not query:
+                body = self._read_body()
+                if body not in {b"", b"{}"}:
+                    raise _RefusedError(
+                        400, "invalid_request_error", "empty body required"
+                    )
+                result = gateway.activity.create_probe()
+            elif self.command == "GET" and path == ACTIVITY_PATH and not query:
+                result = gateway.activity.summary()
+            elif self.command == "GET" and path == VERIFY_PATH:
+                params = parse_qs(query, keep_blank_values=True)
+                values = params.get("id", [])
+                if (
+                    set(params) != {"id"}
+                    or len(values) != 1
+                    or not re.fullmatch(r"[0-9a-f]{32}", values[0])
+                ):
+                    raise _RefusedError(
+                        400, "invalid_request_error", "invalid verification ID"
+                    )
+                result = gateway.activity.probe(values[0])
+            else:
+                raise _RefusedError(
+                    400, "invalid_request_error", "unsupported activity request"
+                )
+            data = json.dumps(
+                {
+                    **result,
+                    "api": gateway.api,
+                    "gateway_instance": gateway.activity.instance,
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self._started = True
+            self.wfile.write(data)
+
         def _check_access(self, *, secret: bool = True) -> None:
             port = gateway.port
             if self.headers.get("Host", "") not in (
@@ -477,6 +524,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 try:
                     with session.lock:
                         masked = session.masker.mask(request)
+                        if path == _MESSAGES or gateway.api == "openai":
+                            self._observation = gateway.activity.begin(
+                                session_id, request, masked, session.shield, gateway.api
+                            )
                 except UnsupportedRequestError as error:
                     raise _RefusedError(
                         400, "invalid_request_error", f"the gateway can't mask {error}"
@@ -485,12 +536,19 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     raise _RefusedError(
                         500, "api_error", "the gateway failed to mask", retry=True
                     ) from None
-                self._forward(
-                    json.dumps(masked).encode(),
-                    session if path == _MESSAGES or gateway.api == "openai" else None,
-                )
+                completed = False
+                try:
+                    completed = self._forward(
+                        json.dumps(masked).encode(),
+                        session
+                        if path == _MESSAGES or gateway.api == "openai"
+                        else None,
+                    )
+                finally:
+                    if self._observation is not None:
+                        gateway.activity.finish(self._observation, completed)
 
-        def _forward(self, body: bytes, session: Session | None) -> None:
+        def _forward(self, body: bytes, session: Session | None) -> bool:
             headers = {
                 name: value
                 for name, value in self.headers.items()
@@ -527,12 +585,14 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             try:
                 try:
                     upstream.request(self.command, path, body=body, headers=headers)
+                    if self._observation is not None:
+                        self._observation.forwarded = True
                     response = upstream.getresponse()
                 except (OSError, http.client.HTTPException):
                     raise _RefusedError(
                         502, "api_error", "the API couldn't be reached", retry=True
                     ) from None
-                self._relay(response, session)
+                return self._relay(response, session)
             finally:
                 upstream.close()
 
@@ -559,7 +619,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
 
         def _relay(
             self, response: http.client.HTTPResponse, session: Session | None
-        ) -> None:
+        ) -> bool:
             content_type = response.getheader("Content-Type") or ""
             restore = session is not None and response.status == 200
             # The subscription endpoint can omit Content-Type on an SSE reply.
@@ -572,8 +632,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             )
             if "text/event-stream" in content_type or subscription_stream:
                 self._send_head(response, chunked=True)
-                self._stream(response, session if restore else None)
-                return
+                return self._stream(response, session if restore else None)
             if restore and gateway.api == "openai" and "json" not in content_type:
                 raise _RefusedError(
                     502, "api_error", "the API reply is not JSON or SSE"
@@ -584,6 +643,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 raise _RefusedError(
                     502, "api_error", "the API connection was lost", retry=True
                 ) from None
+            completed = False
             if restore and session is not None and "json" in content_type:
                 try:
                     message = json.loads(data)
@@ -598,32 +658,47 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         restored = (
                             ResponsesRestorer(
                                 session.shield,
-                                session.ledger,
+                                self._ledger(session),
                                 guard_tools=gateway.guard_tools,
                             ).response(message)
                             if gateway.api == "openai"
                             else restore_message(
-                                session.shield, session.ledger, message
+                                session.shield, self._ledger(session), message
                             )
                         )
                     data = json.dumps(restored).encode()
+                    completed = isinstance(message, dict) and (
+                        message.get("status") == "completed"
+                        if gateway.api == "openai"
+                        else message.get("type") == "message"
+                        and message.get("stop_reason")
+                        in {"end_turn", "tool_use", "max_tokens", "stop_sequence"}
+                    )
             # Restored before anything is sent, so a failure is a clean error.
             self._send_head(response, chunked=False, length=len(data))
             if self.command != "HEAD":
                 self.wfile.write(data)
+            return completed
+
+        def _ledger(self, session: Session) -> Ledger:
+            if self._observation is not None:
+                return ObservedLedger(session.ledger, self._observation)
+            return session.ledger
 
         def _stream(
             self, response: http.client.HTTPResponse, session: Session | None
-        ) -> None:
+        ) -> bool:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             restorer: ResponseRestorer | None = None
             if session is not None:
                 restorer = (
                     ResponsesStreamRestorer(
-                        session.shield, session.ledger, guard_tools=gateway.guard_tools
+                        session.shield,
+                        self._ledger(session),
+                        guard_tools=gateway.guard_tools,
                     )
                     if gateway.api == "openai"
-                    else ResponseRestorer(session.shield, session.ledger)
+                    else ResponseRestorer(session.shield, self._ledger(session))
                 )
             last_write = time.monotonic()
             while True:
@@ -631,7 +706,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     chunk = response.read1(65536)
                 except (OSError, http.client.HTTPException):
                     self._end_stream_with_error("the API connection was lost")
-                    return
+                    return False
                 if not chunk:
                     break
                 text = decoder.decode(chunk)
@@ -651,7 +726,7 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     last_write = time.monotonic()
                 if restorer is not None and restorer.failed is not None:
                     self._end_chunks()
-                    return
+                    return False
             rest = decoder.decode(b"", final=True)
             if restorer is not None and session is not None:
                 with session.lock:
@@ -659,6 +734,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             if rest:
                 self._chunk(rest)
             self._end_chunks()
+            return bool(
+                restorer is not None
+                and restorer.completed
+                and restorer.failed is None
+                and not restorer.terminal_error
+            )
 
         def _chunk(self, text: str) -> None:
             data = text.encode("utf-8")

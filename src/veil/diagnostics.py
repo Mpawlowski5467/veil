@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
@@ -467,6 +468,19 @@ def run_diagnostics(
         )
         if service["state"] == "unsupported":
             service_command = None
+    activity = None
+    if endpoint and any(
+        check.name == "gateway" and check.state == "pass" for check in checks
+    ):
+        from .gateway.activity import ACTIVITY_PATH
+        from .verification import Endpoint, local_request
+
+        # Older gateways can pass readiness without activity support.
+        with contextlib.suppress(SettingsError):
+            activity = local_request(
+                Endpoint(endpoint, provider["http_headers"][SECRET_HEADER]),
+                ACTIVITY_PATH,
+            )
     report = {
         "ready": ready,
         "config": str(target),
@@ -475,6 +489,7 @@ def run_diagnostics(
         "gateway_command": command,
         "service_command": service_command,
         "service": service,
+        "activity": activity,
         "checks": [asdict(check) for check in checks],
         "scope": (
             "Saved user settings and local gateway only. "
@@ -491,6 +506,12 @@ def run_diagnostics(
         print("Veil readiness: " + ("checks passed" if ready else "needs attention"))
         print(f"Codex settings: {target}")
         print(f"Background gateway: {service['state']}")
+        if activity is not None:
+            print(
+                f"Recent sessions observed: {len(activity['sessions'])}; "
+                "use status --activity for counts or --verification ID "
+                "for test evidence."
+            )
         if doctor:
             print(f"Veil data folder: {directory}")
         for check in checks:

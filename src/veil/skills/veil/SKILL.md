@@ -1,6 +1,6 @@
 ---
 name: veil
-description: Use the installed Veil package to check local gateway readiness, guide Codex or Claude Code setup, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
+description: Use the installed Veil package to check gateway readiness and request evidence, verify a client test request, guide Codex or Claude Code setup, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
 ---
 
 # Veil
@@ -44,17 +44,48 @@ doctor, start, stop, restart, or undo; it is not the detector config.
 
 - For Codex desktop readiness: `VEIL status --json`. For more detail:
   `VEIL doctor --json`. These check saved routing, gateway identity, and local
-  settings; they do not verify the active task or make model calls. Exit 1 means
+  settings and recent activity; they do not verify the active task or make model calls. Exit 1 means
   readiness needs attention, and exit 2 means a command/configuration error.
 - For a managed background worker: `VEIL status --service --json`. This is a
   worker check only. An `unmanaged` result does not rule out a foreground gateway.
-- For a Claude Code or Codex CLI session, do not treat Codex desktop configuration
-  or a managed worker as evidence of that session's route. There is no command
-  here that proves the current CLI session is protected. Report that uncertainty
-  and offer the appropriate launcher below. Run a worker check only when relevant.
+- For gateway activity, use `VEIL status --activity --json`. Launchers pass the
+  local endpoint privately to their child tools; outside a launcher, this uses
+  saved Codex settings. Never print environment variables to find the secret.
+  A custom manual gateway can be selected with `--gateway-url URL` and the
+  matching `--data-dir` holding its secret. Missing/old gateways need setup or
+  an upgrade/restart, not a fallback to another route.
+- If a verification ID from this conversation is known, use `VEIL status
+  --verification ID --json`. Describe its evidence and opaque session reference.
+  Otherwise, report readiness and activity only. Do not assume the newest or
+  most recently verified session in the report is this conversation. Counts
+  include repeated history, not unique people or newly masked values.
 - Report failed checks and their remedies without dumping underlying files.
   Do not automatically change routes, restart a client, or repair configuration
   just because a diagnostic failed.
+
+### Verify a conversation's request
+
+Only create a test when the user asks to verify. Run `VEIL verify --json` to
+register a one-use, ten-minute challenge with the intended gateway. Show the
+returned fictional prompt and ask the user to send it as a new message in the
+conversation they want to test. Sending that prompt uses the client's normal
+model account. Creating/checking the challenge only contacts the local gateway.
+
+Do not simulate the client with curl, launch a separate client, or put the prompt
+into a tool result as a substitute: that would not verify the user's intended
+conversation. Only its latest plain user message can consume the challenge.
+If the user sends the generated "Do not use tools" test prompt, answer it as
+requested; check evidence on their subsequent request, after the reply finishes.
+
+After that reply, use `VEIL verify --check ID --json` with the same endpoint, or
+`VEIL status --verification ID --json`. A `verified` result means this gateway
+observed the fictional email masked in an outbound request, forwarded it, then
+restored it in a successfully completed response for the reported session.
+It proves that test request, not future routing, all sensitive data, UI rendering,
+or other tool traffic. A model merely echoing text is not proof without evidence.
+`pending` means not observed yet; `in_progress` means wait for the reply;
+`incomplete` means some checks failed. `expired` and `unknown` need a new probe.
+Never call any of those states verified. Evidence resets on gateway restart.
 
 ### Enable or start
 

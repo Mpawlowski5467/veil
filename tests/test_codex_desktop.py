@@ -17,7 +17,7 @@ from veil.codex import provider, toml_value
 from veil.gateway import Gateway, Sessions
 
 
-def app_round_trip(binary, gateway, tmp_path, email):
+def app_round_trip(binary, gateway, tmp_path, email, *, prompt=None):
     config = provider(gateway, environment_secret=True)
     config.update(request_max_retries=0, stream_max_retries=0)
     if gateway.openai_auth == "api-key":
@@ -103,7 +103,8 @@ def app_round_trip(binary, gateway, tmp_path, email):
                 "input": [
                     {
                         "type": "text",
-                        "text": f"Reply with exactly {email}. Do not use tools.",
+                        "text": prompt
+                        or f"Reply with exactly {email}. Do not use tools.",
                     }
                 ],
             },
@@ -157,10 +158,17 @@ def test_desktop_runtime_against_local_fixture(tmp_path):
             upstream=api.host,
             secure=False,
         ) as gateway:
-            app_round_trip(binary_path(), gateway, tmp_path, "jane.doe@example.com")
+            probe = gateway.activity.create_probe()
+            email = probe["prompt"].splitlines()[-1]
+            app_round_trip(
+                binary_path(), gateway, tmp_path, email, prompt=probe["prompt"]
+            )
+            assert (
+                gateway.activity.probe(probe["verification_id"])["state"] == "verified"
+            )
         assert api.received
         for _, _, _, body in api.received:
-            assert b"jane.doe@example.com" not in body
+            assert email.encode() not in body
     finally:
         api.close()
 

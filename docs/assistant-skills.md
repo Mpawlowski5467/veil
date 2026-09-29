@@ -68,10 +68,11 @@ cannot switch the route of the current conversation. See the
 [Codex integration guide](openai-integration.md) and
 [background gateway controls](background-gateway.md).
 
-`status` checks Codex's saved settings or a managed background worker when those
-are relevant. Neither proves the current task is routed through Veil. There is
-no active Claude-session verification command yet; the skill reports that limit
-instead of using a Codex readiness result as evidence about Claude.
+`status` checks relevant readiness and recent activity. Neither alone proves
+that this conversation used Veil. Ask `$veil verify` or `/veil verify` to create
+a fictional test prompt, send it in the intended conversation, then ask the
+skill to check its verification ID. A pass supplies evidence for that particular
+request and opaque session reference. See [verification and activity](verification.md).
 
 ## Keep file contents local
 

@@ -49,12 +49,15 @@ and undoes setup without manually editing TOML or losing unrelated settings.
 - [ ] Add automatic login/reboot startup and supervised crash recovery after
   defining installation/removal behavior for each OS. Windows background
   management remains unsupported; the foreground gateway remains available.
-- [ ] Provide an opt-in verification request that proves a fresh client task
-  reached Veil, instead of inferring that from saved configuration.
-- [ ] Show recent request activity and counts by entity type. Avoid original
-  values, prompts, authentication headers, and unnecessary retained history.
-- [ ] Distinguish stopped, ready, recently verified, and unknown states. A green
-  readiness result must not imply every client, tool, or existing task is covered.
+- [x] Provide an opt-in, one-use verification prompt that proves a particular
+  client request reached Veil, was masked, and had its reply restored. Evidence
+  identifies the observed session and expires; it does not prove future routing.
+- [x] Show bounded in-memory activity with request times and placeholder counts.
+  Include replayed history in counts, group custom types, salt session IDs, and
+  exclude original values, prompts, and authentication headers from reports.
+- [x] Distinguish worker states, gateway readiness, recent test evidence, and
+  unknown/expired probes without implying every client or task is covered.
+  See [verification and activity](docs/verification.md).
 
 **Exit:** users can tell whether their intended task used Veil, recover after a
 restart, and troubleshoot without keeping a terminal open or sharing raw requests.

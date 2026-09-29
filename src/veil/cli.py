@@ -20,7 +20,7 @@ import time
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from .gateway import (
     SECRET_HEADER,
@@ -91,6 +91,8 @@ def claude_settings(
         "ANTHROPIC_BASE_URL": gateway.url,
         "ANTHROPIC_CUSTOM_HEADERS": f"{headers}\n{custom}" if headers else custom,
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "VEIL_GATEWAY_URL": gateway.url,
+        "VEIL_GATEWAY_SECRET": gateway.secret,
     }
     # An empty value means unset: no other provider, hooks on.
     env.update(dict.fromkeys(hooks.OTHER_PROVIDERS, ""))
@@ -403,6 +405,15 @@ def _parser() -> argparse.ArgumentParser:
         help=f"where mappings and config.json live (default: ~/.{APP})",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    verify = commands.add_parser(
+        "verify", help="create or check a client verification prompt"
+    )
+    verify.add_argument("--check", help="verification ID to inspect")
+    verify.add_argument("--config", type=Path, help="Codex config.toml path")
+    verify.add_argument(
+        "--gateway-url", help="explicit loopback gateway; secret from --data-dir"
+    )
+    verify.add_argument("--json", action="store_true")
     skill = commands.add_parser("skill", help="install or remove assistant skills")
     skill.add_argument("operation", choices=("install", "uninstall"))
     skill.add_argument(
@@ -467,6 +478,18 @@ def _parser() -> argparse.ArgumentParser:
         )
         if operation == "status":
             diagnostics.add_argument(
+                "--activity",
+                action="store_true",
+                help="inspect recent gateway activity",
+            )
+            diagnostics.add_argument(
+                "--verification", help="check evidence for a verification ID"
+            )
+            diagnostics.add_argument(
+                "--gateway-url",
+                help="explicit loopback gateway; secret from --data-dir",
+            )
+            diagnostics.add_argument(
                 "--service",
                 action="store_true",
                 help="check the background worker only",
@@ -521,6 +544,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command == "verify":
+            from .verification import run_verify
+
+            return run_verify(
+                check=options.check,
+                json_output=options.json,
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+            )
+        if options.command == "status" and (
+            options.activity or options.verification or options.gateway_url
+        ):
+            from .verification import run_activity
+
+            if options.service:
+                raise SettingsError(
+                    "choose --service or activity/verification status, not both"
+                )
+            return run_activity(
+                verification=options.verification,
+                json_output=options.json,
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+            )
         if options.command == "skill":
             from .skill import run_skill
 
@@ -531,7 +580,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .service import run_service
 
             return run_service(
-                options.command,
+                cast("Literal['start', 'stop', 'restart']", options.command),
                 data_dir=options.data_dir,
                 config=options.config,
                 port=getattr(options, "port", None),
@@ -610,6 +659,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "start",
             "stop",
             "restart",
+            "verify",
         }:
             raise
         print(
