@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable, Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from ..detectors.literal import LiteralPlaceholderDetector
 from ..detectors.regex import RegexDetector
@@ -20,6 +20,7 @@ from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
 from .config import Settings
 from .ledger import canonical
+from .openai_request import ResponsesRequestMasker
 from .request import DEFAULT_NOTE, RequestMasker
 from .server import Session, Sessions
 
@@ -204,7 +205,11 @@ def shield_factory(
 
 
 def open_sessions(
-    data_dir: Path, settings: Settings, identity: Mapping[str, str]
+    data_dir: Path,
+    settings: Settings,
+    identity: Mapping[str, str],
+    *,
+    api: Literal["anthropic", "openai"] = "anthropic",
 ) -> Sessions:
     """Open the conversations kept in ``data_dir``, purging old ones first."""
     vault_path = data_dir / "vault.db"
@@ -227,7 +232,8 @@ def open_sessions(
     def make_session(session_id: str) -> Session:
         shield = make_shield(session_id)
         session_ledger = SQLiteLedger(ledger_path, session_id)
-        masker = RequestMasker(shield, session_ledger, note=note, registered=registered)
+        masker_type = ResponsesRequestMasker if api == "openai" else RequestMasker
+        masker = masker_type(shield, session_ledger, note=note, registered=registered)
         return Session(shield, session_ledger, masker)
 
     make_shield = shield_factory(settings, vault_path, identity)

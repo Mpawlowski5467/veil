@@ -23,12 +23,15 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from ..shield import Shield
-from .hooks import PROOF_PATH, proof
+from .hooks import PROOF_PATH, STATUS_PATH, proof
 from .ledger import Ledger, MemoryLedger
+from .openai_request import ResponsesRequestMasker
+from .openai_response import ResponsesRestorer, ResponsesStreamRestorer
+from .openai_tools import PrivateToolError
 from .request import RequestMasker, UnsupportedRequestError
 from .response import ResponseRestorer, restore_message
 
@@ -40,6 +43,9 @@ SECRET_HEADER = "x-gateway-secret"
 
 #: The header naming the client's conversation (sent by Claude Code).
 SESSION_HEADER = "x-claude-code-session-id"
+
+# Codex sends the thread id on each request. Manual API clients can send it too.
+OPENAI_SESSION_HEADER = "thread-id"
 
 # (method, path) pairs the gateway serves; everything else gets a 404.
 _MESSAGES = "/v1/messages"
@@ -115,6 +121,7 @@ class Sessions:
         *,
         make_session: Callable[[str], Session] | None = None,
         max_open: int = 32,
+        api: Literal["anthropic", "openai"] = "anthropic",
     ) -> None:
         """Create an empty set of sessions."""
         if (make_shield is None) == (make_session is None):
@@ -128,7 +135,8 @@ class Sessions:
             def in_memory(session_id: str) -> Session:
                 shield = shield_for(session_id)
                 ledger = MemoryLedger()
-                return Session(shield, ledger, RequestMasker(shield, ledger))
+                masker = ResponsesRequestMasker if api == "openai" else RequestMasker
+                return Session(shield, ledger, masker(shield, ledger))
 
             self._make_session = in_memory
         self._max_open = max_open
@@ -199,6 +207,8 @@ class Gateway:
         secure: Use HTTPS to the upstream. Only tests turn it off.
         keepalive: Seconds of silence after which a comment line is sent to
             the client while a tool call is held back.
+        api: The API protocol to serve. Defaults to Anthropic Messages;
+            ``openai`` selects the experimental Responses adapter.
     """
 
     def __init__(
@@ -211,10 +221,22 @@ class Gateway:
         secure: bool = True,
         keepalive: float = 10.0,
         timeout: float = 600.0,
+        api: Literal["anthropic", "openai"] = "anthropic",
+        openai_auth: Literal["api-key", "chatgpt"] = "api-key",
+        guard_tools: bool = True,
     ) -> None:
         """Start listening on 127.0.0.1."""
+        if api not in {"anthropic", "openai"}:
+            raise ValueError("api must be anthropic or openai")
+        self.api = api
+        if openai_auth not in {"api-key", "chatgpt"}:
+            raise ValueError("openai_auth must be api-key or chatgpt")
+        self.openai_auth: Literal["api-key", "chatgpt"] = openai_auth
+        self.guard_tools = guard_tools
         self.sessions = sessions
         self.secret = secret or secrets.token_urlsafe(32)
+        if api == "openai" and upstream == UPSTREAM:
+            upstream = "chatgpt.com" if openai_auth == "chatgpt" else "api.openai.com"
         self.upstream = upstream
         self.secure = secure
         self.keepalive = keepalive
@@ -296,17 +318,64 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._prove(address.query)
                     return
                 self._check_access()
-                if (self.command, path) not in _ROUTES:
+                if self.command == "GET" and path == STATUS_PATH:
+                    data = json.dumps(
+                        {"api": gateway.api, "auth": gateway.openai_auth}
+                    ).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self._started = True
+                    self.wfile.write(data)
+                    return
+                if gateway.api == "openai":
+                    self._check_openai_auth()
+                routes = (
+                    {("POST", "/v1/responses"), ("GET", "/v1/models")}
+                    if gateway.api == "openai"
+                    else _ROUTES
+                )
+                if (self.command, path) not in routes:
                     raise _RefusedError(
                         404, "not_found_error", "not served by the gateway"
                     )
+                if gateway.api == "openai" and path == "/v1/models":
+                    query = parse_qs(address.query, keep_blank_values=True)
+                    if set(query) - {"client_version"} or (
+                        "client_version" in query
+                        and (
+                            len(query["client_version"]) != 1
+                            or not re.fullmatch(
+                                r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9]+)*",
+                                query["client_version"][0],
+                            )
+                        )
+                    ):
+                        raise _RefusedError(
+                            400, "invalid_request_error", "unsupported model-list query"
+                        )
+                    if self._read_body():
+                        raise _RefusedError(
+                            400,
+                            "invalid_request_error",
+                            "model-list requests have no body",
+                        )
+                    self._forward(b"", None)
+                    return
+                if gateway.api == "openai" and address.query:
+                    raise _RefusedError(
+                        400, "invalid_request_error", "query parameters are unsupported"
+                    )
                 body = self._read_body()
-                if path in _MASKED_PATHS:
+                if path in _MASKED_PATHS or gateway.api == "openai":
                     self._masked(path, body)
                 else:
                     self._forward(body, None)
             except _RefusedError as refusal:
                 self._fail(refusal.status, refusal.kind, refusal.message, refusal.retry)
+            except PrivateToolError as error:
+                self._fail(400, "invalid_request_error", str(error), False)
             except (BrokenPipeError, ConnectionResetError):
                 self.close_connection = True  # the client went away
             except Exception:
@@ -373,11 +442,24 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 )
             return self.rfile.read(size)
 
+        def _check_openai_auth(self) -> None:
+            subscription = bool(self.headers.get("chatgpt-account-id"))
+            if subscription != (gateway.openai_auth == "chatgpt"):
+                raise _RefusedError(
+                    400,
+                    "invalid_request_error",
+                    "the client authentication does not match "
+                    "the gateway's --auth mode",
+                )
+
         def _masked(self, path: str, body: bytes) -> None:
-            session_id = self.headers.get(SESSION_HEADER)
+            session_header = (
+                OPENAI_SESSION_HEADER if gateway.api == "openai" else SESSION_HEADER
+            )
+            session_id = self.headers.get(session_header)
             if not session_id:
                 raise _RefusedError(
-                    400, "invalid_request_error", f"send {SESSION_HEADER}"
+                    400, "invalid_request_error", f"send {session_header}"
                 )
             try:
                 request = json.loads(body)
@@ -386,6 +468,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     400, "invalid_request_error", "the body isn't JSON"
                 ) from None
             with gateway.sessions.use(session_id) as session:
+                if (gateway.api == "openai") != isinstance(
+                    session.masker, ResponsesRequestMasker
+                ):
+                    raise _RefusedError(
+                        500, "api_error", "the session uses the wrong API adapter"
+                    )
                 try:
                     with session.lock:
                         masked = session.masker.mask(request)
@@ -398,7 +486,8 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         500, "api_error", "the gateway failed to mask", retry=True
                     ) from None
                 self._forward(
-                    json.dumps(masked).encode(), session if path == _MESSAGES else None
+                    json.dumps(masked).encode(),
+                    session if path == _MESSAGES or gateway.api == "openai" else None,
                 )
 
         def _forward(self, body: bytes, session: Session | None) -> None:
@@ -407,15 +496,37 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 for name, value in self.headers.items()
                 if name.lower() not in _HOP_HEADERS
             }
+            if gateway.api == "openai":
+                # Local Codex metadata can contain paths and user identity. Only
+                # forward authentication and protocol headers to the API.
+                allowed = {
+                    "authorization",
+                    "content-type",
+                    "accept",
+                    "openai-organization",
+                    "openai-project",
+                    "openai-beta",
+                    "x-codex-beta-features",
+                }
+                if gateway.openai_auth == "chatgpt":
+                    allowed.add("chatgpt-account-id")
+                headers = {
+                    key: value
+                    for key, value in headers.items()
+                    if key.lower() in allowed
+                }
             headers["Host"] = gateway.upstream
             headers["Accept-Encoding"] = "identity"
             headers["Content-Length"] = str(len(body))
+            path = self.path
+            if gateway.api == "openai" and gateway.openai_auth == "chatgpt":
+                path = "/backend-api/codex" + self.path.removeprefix("/v1")
+                headers["originator"] = "codex_cli_rs"
+                headers["User-Agent"] = "veil"
             upstream = gateway._connect()
             try:
                 try:
-                    upstream.request(
-                        self.command, self.path, body=body, headers=headers
-                    )
+                    upstream.request(self.command, path, body=body, headers=headers)
                     response = upstream.getresponse()
                 except (OSError, http.client.HTTPException):
                     raise _RefusedError(
@@ -433,7 +544,11 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 lowered = name.lower()
                 if lowered in _HOP_HEADERS or lowered.startswith("access-control-"):
                     continue
+                if chunked and lowered == "content-type" and not value:
+                    continue
                 self.send_header(name, value)
+            if chunked and not response.getheader("Content-Type"):
+                self.send_header("Content-Type", "text/event-stream")
             if chunked:
                 self.send_header("Transfer-Encoding", "chunked")
             else:
@@ -447,10 +562,22 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
         ) -> None:
             content_type = response.getheader("Content-Type") or ""
             restore = session is not None and response.status == 200
-            if "text/event-stream" in content_type:
+            # The subscription endpoint can omit Content-Type on an SSE reply.
+            # Still run the strict frame parser; never relay an unparsed body.
+            subscription_stream = (
+                restore
+                and gateway.api == "openai"
+                and gateway.openai_auth == "chatgpt"
+                and not content_type
+            )
+            if "text/event-stream" in content_type or subscription_stream:
                 self._send_head(response, chunked=True)
                 self._stream(response, session if restore else None)
                 return
+            if restore and gateway.api == "openai" and "json" not in content_type:
+                raise _RefusedError(
+                    502, "api_error", "the API reply is not JSON or SSE"
+                )
             try:
                 data = response.read()
             except (OSError, http.client.HTTPException):
@@ -461,11 +588,23 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 try:
                     message = json.loads(data)
                 except ValueError:
+                    if gateway.api == "openai":
+                        raise _RefusedError(
+                            502, "api_error", "the API reply is not valid JSON"
+                        ) from None
                     message = None
                 if message is not None:
                     with session.lock:
-                        restored = restore_message(
-                            session.shield, session.ledger, message
+                        restored = (
+                            ResponsesRestorer(
+                                session.shield,
+                                session.ledger,
+                                guard_tools=gateway.guard_tools,
+                            ).response(message)
+                            if gateway.api == "openai"
+                            else restore_message(
+                                session.shield, session.ledger, message
+                            )
                         )
                     data = json.dumps(restored).encode()
             # Restored before anything is sent, so a failure is a clean error.
@@ -477,9 +616,15 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             self, response: http.client.HTTPResponse, session: Session | None
         ) -> None:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-            restorer = (
-                ResponseRestorer(session.shield, session.ledger) if session else None
-            )
+            restorer: ResponseRestorer | None = None
+            if session is not None:
+                restorer = (
+                    ResponsesStreamRestorer(
+                        session.shield, session.ledger, guard_tools=gateway.guard_tools
+                    )
+                    if gateway.api == "openai"
+                    else ResponseRestorer(session.shield, session.ledger)
+                )
             last_write = time.monotonic()
             while True:
                 try:
@@ -529,6 +674,12 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 "type": "error",
                 "error": {"type": "api_error", "message": message},
             }
+            if gateway.api == "openai":
+                error = {
+                    "type": "error",
+                    "code": "veil_gateway_error",
+                    "message": message,
+                }
             self._chunk(f"event: error\ndata: {json.dumps(error)}\n\n")
             self._end_chunks()
             self.close_connection = True

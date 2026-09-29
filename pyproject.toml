@@ -29,6 +29,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+desktop = ["tomlkit>=0.13.3,<1"]
+
 [project.scripts]
 veil = "veil.cli:main"
 
@@ -38,6 +41,7 @@ dev = [
     "pyright>=1.1.414",
     "pytest>=8",
     "ruff>=0.6",
+    "tomlkit>=0.13.3,<1",
 ]
 
 [tool.hatch.version]
@@ -48,7 +52,7 @@ testpaths = ["tests", "src"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--doctest-modules"]
 filterwarnings = ["error"]
 markers = [
-    "live: runs the real Claude Code CLI (set VEIL_LIVE_CLAUDE=1; makes model calls)",
+    "live: opt-in tests that make real model calls through Claude Code or Codex",
 ]
 
 [tool.ruff]

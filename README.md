@@ -6,13 +6,13 @@
 
 **A local masking layer for your AI workflows.**
 
-Veil replaces detected personal information with placeholders before you send text to an AI model, then restores the original values in the reply. Use it in Python scripts and applications, or run Claude Code through the included local gateway.
+Veil replaces detected personal information with placeholders before you send text to an AI model, then restores the original values in the reply. Use it in Python scripts, run Claude Code or Codex CLI through a local gateway, or explicitly mask and restore text for chat apps.
 
 Keep working with real names, email addresses, and account details while the model works with placeholders for the values Veil detects.
 
 **[v0.4.1 · Alpha](CHANGELOG.md) · Python 3.10+ · No runtime dependencies · [MIT](LICENSE)**
 
-[Get started](#choose-your-workflow) · [Python guide](docs/python-guide.md) · [Coverage and limits](#understand-the-boundaries) · [Contributing](#contributing)
+[Get started](#choose-your-workflow) · [Python guide](docs/python-guide.md) · [Roadmap to 1.0](ROADMAP.md) · [Coverage and limits](#understand-the-boundaries) · [Contributing](#contributing)
 
 > Detection has limits. Names need registration, and images and PDFs are not scrubbed by the gateway. Veil reduces exposure of supported text; it does not guarantee that all sensitive data stays on your machine.
 
@@ -33,10 +33,12 @@ Names in this example are registered in advance. Email detection is built in. A 
 | --- | --- |
 | Python scripts and AI applications | Mask text before your provider call and restore the reply. The library is independent of any model SDK. |
 | Claude Code in a terminal | `veil claude` starts a local gateway and launches Claude Code through it. |
-| Codex and other coding assistants | No bundled adapter yet. Automatic coverage needs an integration with that tool's request and response path. |
-| Browser chats and desktop AI apps | No bundled copy-and-paste commands or desktop integration yet. |
+| Codex CLI | Experimental `veil codex` launcher with ChatGPT login or `--auth api-key`. ChatGPT routing has passed a live test. |
+| Codex desktop (local tasks) | Backed-up `veil setup codex`, readiness checks, and undo. A basic desktop text round trip was manually verified; broader workflows remain experimental. See the [integration guide](docs/openai-integration.md). |
+| Other coding assistants | Automatic coverage needs an integration with that tool's request and response path. |
+| ChatGPT app, browser chats, other chat apps | Explicit `veil mask` / `veil restore` commands, including optional clipboard mode. These do not intercept the app automatically. |
 
-The Python library can be used with different AI providers wherever you control the text sent and received. The included gateway targets Anthropic's API; it is not a general proxy for other providers.
+The Python library can be used with different AI providers wherever you control the text sent and received. The gateway has separate adapters for Anthropic Messages and an experimental subset of OpenAI Responses.
 
 ## Install
 
@@ -176,6 +178,65 @@ These commands delete Veil's stored session mappings and ledger entries. They do
 
 The repository's live tests record compatibility checks against Claude Code 2.1.283. Re-run the live tests after client updates.
 
+## Try Veil with Codex CLI
+
+From a checkout containing the experimental adapter, with Codex already signed in:
+
+```bash
+veil codex
+veil codex --auth api-key
+veil codex -- exec "Explain this project"
+```
+
+The launcher starts a private gateway, pins Codex's provider, disables hosted search, apps and subagents for that invocation, then stops the gateway when Codex exits. The default uses your existing ChatGPT login. `--auth api-key` requires `OPENAI_API_KEY` in the launching shell. Text requests and replies, local function/custom tool calls, and conversation replay are supported; unsupported request shapes are refused.
+
+Returned tool inputs containing known private values are blocked except direct local `apply_patch` calls. This check happens before the gateway delivers executable input; it does not inspect what a command later reads or sends. Images, file attachments, hosted tools, and remote compaction are refused. The [OpenAI integration guide](docs/openai-integration.md) covers desktop setup, API clients, tested versions, and limits. Live API-key validation is still pending.
+
+## Set up Codex desktop
+
+From the checkout, install the optional TOML editor used by setup and diagnostics:
+
+```bash
+python -m pip install '.[desktop]'
+veil setup codex
+veil gateway --api openai --auth chatgpt --port 8485
+```
+
+Setup preserves unrelated settings and comments, saves a private backup, and
+selects the Veil provider. It disables hosted search, apps, subagents, and
+analytics in those saved settings. Keep the gateway running, restart Codex,
+and start a fresh local task. In another terminal:
+
+```bash
+veil status
+veil doctor
+veil doctor --json
+```
+
+These commands check saved settings and the local gateway; they do not prove
+that an already-open task used Veil. Doctor also checks local masking/restoration
+and credential environment without making a model call. `veil undo codex`
+restores the settings from before setup while preserving unrelated later edits.
+See [setup and recovery](docs/openai-integration.md#codex-desktop-setup-and-recovery).
+Background service management and per-task verification are next on the
+[roadmap](ROADMAP.md).
+
+## Use Veil with the ChatGPT app
+
+Copy your prompt, mask the clipboard, then paste the masked text into ChatGPT:
+
+```bash
+veil mask --session chatgpt-notes --clipboard
+```
+
+Ask the model to keep bracketed placeholders unchanged. Copy its reply, then restore it locally:
+
+```bash
+veil restore --session chatgpt-notes --clipboard
+```
+
+Use the same session label for both operations and a different label for each conversation. Without `--clipboard`, the commands read stdin and write stdout. Warnings stop output instead of replacing the clipboard with a partial result. This is an explicit text workflow; attachments, voice, and messages sent directly in the app are not intercepted. See the [chat workflow guide](docs/chat-workflow.md).
+
 ## What Veil detects
 
 | Type | Examples and scope |
@@ -243,9 +304,9 @@ See the [Python guide](docs/python-guide.md) for detection rules, opt-in normali
 ## Understand the boundaries
 
 - **Only detected text is masked.** Unregistered names, unsupported formats, and sensitive context can remain visible.
-- **Images and PDFs pass through the gateway.** Tool definitions and server-side web-search results are also outside its masking coverage.
+- **Coverage depends on the adapter.** Images and PDFs pass through the Anthropic adapter; the OpenAI adapter refuses them. Tool definitions are not scrubbed. Hosted search results are outside the Anthropic adapter's coverage, and OpenAI hosted tools are refused.
 - **Masking is reversible.** The vault holds original values; placeholders still reveal types, counts, and repeated references. Surrounding context may reveal identity.
-- **Tool checks cover arguments containing known values.** A command can read and send a file without including its contents in the arguments. Veil is not a sandbox or a network firewall.
+- **Tool checks cover arguments containing known values.** Claude uses hooks; the OpenAI gateway checks restored tool inputs before delivery. A command can read and send a file without including its contents in the arguments. Veil is not a sandbox or a network firewall.
 - **Your provider still authenticates you.** Masking prompt content does not hide your account or prevent local transcripts.
 - **Restoration depends on placeholders surviving.** Unknown placeholders remain unchanged and produce warnings. Use exact restoration (`tolerant=False`) for library output that will be executed or written as tool arguments.
 - **Warnings need handling.** Direct `mask()` and `restore()` calls return warnings; `wrap()` emits them by default. Use `strict=True` to raise and `redact_warnings=True` to avoid quoting leaked values in warnings.

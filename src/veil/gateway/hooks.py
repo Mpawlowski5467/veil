@@ -81,6 +81,9 @@ OTHER_PROVIDERS = (
 #: The gateway route that proves it holds the secret, without being told it.
 PROOF_PATH = "/_gateway/proof"
 
+#: Authenticated local metadata; never returns prompts, mappings, or credentials.
+STATUS_PATH = "/_gateway/status"
+
 
 def proof(secret: str, nonce: str) -> str:
     """The gateway's answer to ``nonce``: only a holder of ``secret`` knows it."""
