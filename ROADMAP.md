@@ -39,6 +39,9 @@ and undoes setup without manually editing TOML or losing unrelated settings.
 
 ## 2. Everyday operation and visible evidence — in progress
 
+- [x] Ship an installable assistant skill for Codex and Claude Code, with setup,
+  readiness, and local file workflows that distinguish skill invocation from
+  gateway protection. See [assistant skills](docs/assistant-skills.md).
 - [x] Manage a detached gateway on macOS/Linux with `start`, `stop`, `restart`,
   and `stop --remove`. Check startup, preserve client settings/mappings, refuse
   occupied ports, and recover from stale state without signalling saved PIDs.

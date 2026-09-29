@@ -50,6 +50,23 @@ python -m pip install .
 
 Use a virtual environment if your Python installation requires one. This installs both the `veil` Python package and the `veil` command.
 
+### Add the assistant skill
+
+From a checkout containing the unreleased skill support:
+
+```bash
+veil skill install
+```
+
+This installs a personal skill for both clients: use `/veil` in Claude Code or
+`$veil` / the skills picker in Codex. Ask it to check readiness, help with setup,
+or mask a local text file. The skill calls your installed Veil package.
+
+**Installing or invoking the skill does not activate masking for the current
+conversation.** Use the gateway launch/setup workflow for automatic masking, and
+give the skill file paths rather than private text in an unprotected prompt.
+See [installation, examples, updates, and removal](docs/assistant-skills.md).
+
 ## Use Veil in Python
 
 ### Mask and restore

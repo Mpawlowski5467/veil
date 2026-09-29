@@ -403,6 +403,14 @@ def _parser() -> argparse.ArgumentParser:
         help=f"where mappings and config.json live (default: ~/.{APP})",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    skill = commands.add_parser("skill", help="install or remove assistant skills")
+    skill.add_argument("operation", choices=("install", "uninstall"))
+    skill.add_argument(
+        "client", choices=("codex", "claude", "all"), nargs="?", default="all"
+    )
+    skill.add_argument(
+        "--skills-dir", type=Path, help="custom skills directory for one client"
+    )
     commands.add_parser(
         "claude",
         help="run Claude Code through a private gateway",
@@ -513,6 +521,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command == "skill":
+            from .skill import run_skill
+
+            return run_skill(
+                options.operation, options.client, skills_dir=options.skills_dir
+            )
         if options.command in {"start", "stop", "restart"}:
             from .service import run_service
 
@@ -581,6 +595,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{APP}: {error}", file=sys.stderr)
         return 2
     except OSError:
+        if options.command == "skill":
+            print(
+                f"{APP}: could not access skill files; check permissions and "
+                "available disk space. Preserve any .veil-skill-previous-* folder.",
+                file=sys.stderr,
+            )
+            return 2
         if options.command not in {
             "setup",
             "undo",

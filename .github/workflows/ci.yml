@@ -63,6 +63,25 @@ jobs:
           assert restored.text == "Hi Jan Nowak, following up on the invoice...", restored
           print("ok")
           EOF
+      - name: Smoke-test bundled skill from the installed wheel
+        run: |
+          /tmp/smoke/bin/python - <<'EOF'
+          import json
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          from veil.cli import main
+
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              assert main(["skill", "install", "codex", "--skills-dir", tmp]) == 0
+              text = (root / "veil" / "runtime.md").read_text()
+              argv = json.loads(text.split("```json\n", 1)[1].split("\n```", 1)[0])
+              subprocess.run([*argv, "--help"], cwd=tmp, check=True)
+              assert (root / "veil" / "SKILL.md").is_file()
+              assert main(["skill", "uninstall", "codex", "--skills-dir", tmp]) == 0
+              assert not (root / "veil").exists()
+          EOF
       - name: Smoke-test background controls without desktop dependencies
         run: |
           /tmp/smoke/bin/python - <<'EOF'

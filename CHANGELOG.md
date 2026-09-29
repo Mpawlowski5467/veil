@@ -4,6 +4,7 @@
 
 ### Added
 
+- Bundled Codex and Claude Code skill with `veil skill install [codex|claude|all]` and conflict-aware removal. The skill calls the installed Python environment for readiness, setup guidance, and local file masking/restoration. Installation does not change routing or enable masking. See [assistant skills](docs/assistant-skills.md).
 - Background gateway controls on macOS/Linux: `veil start`, `stop`, `restart`, and `stop --remove`, plus `status --service` and lifecycle state in diagnostics. Starts verify the local gateway, port conflicts leave existing processes alone, and stop requests use private generation records instead of signalling saved PIDs. Codex setup supplies the data folder and provider settings. No automatic login/reboot startup or supervised crash restart is installed. See [operation and recovery](docs/background-gateway.md).
 - `veil setup codex` and `veil undo codex` for private backups, comment-preserving configuration edits, and conflict-aware rollback. `veil status` and `veil doctor` check local readiness without model calls or private-value logging; `--json` provides structured results. The optional `desktop` extra supplies the TOML editor while the base library stays dependency-free.
 - Authenticated loopback gateway status metadata reports API/auth mode without conversation data. Readiness explicitly does not prove active task coverage.
