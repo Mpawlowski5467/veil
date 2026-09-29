@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from . import _windows
 from .codex import Auth, provider_configuration
 from .gateway.config import SettingsError, load_settings, prepare_data_dir
 
@@ -96,11 +97,22 @@ def receipt_path(config: Path) -> Path:
 
 @contextmanager
 def _locked(config: Path) -> Iterator[None]:
-    config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if _windows.is_windows() and not config.parent.exists():
+        config.parent.parent.mkdir(parents=True, exist_ok=True)
+        _windows.create_private(config.parent, directory=True)
+    else:
+        config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if config.parent.is_symlink():
         raise SettingsError("the Codex configuration folder must not be a symlink")
     info = config.parent.stat()
-    if info.st_mode & 0o022 or (hasattr(os, "getuid") and info.st_uid != os.getuid()):
+    if _windows.is_windows():
+        try:
+            _windows.check_private(config.parent)
+        except OSError:
+            raise SettingsError(
+                "the Codex configuration folder needs a private Windows ACL"
+            ) from None
+    elif info.st_mode & 0o022 or (hasattr(os, "getuid") and info.st_uid != os.getuid()):
         raise SettingsError(
             "the Codex configuration folder must be owned by you "
             "and not writable by others"

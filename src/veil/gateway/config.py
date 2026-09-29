@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .. import _windows
 from ..detectors.regex import RegexDetector
 from ..placeholders import validate_entity_type
 
@@ -183,6 +184,17 @@ def prepare_data_dir(path: Path) -> Path:
         SettingsError: If the folder is a symlink, isn't owned by this user,
             or other users can read or write it.
     """
+    if _windows.is_windows():
+        try:
+            _windows.create_private(path, directory=True)
+            if not path.is_dir():
+                raise OSError("not a directory")
+        except OSError:
+            raise SettingsError(
+                f"{path}: needs a private Windows folder owned by you; "
+                "allow access only to your account, SYSTEM, and Administrators"
+            ) from None
+        return path
     try:
         path.mkdir(mode=0o700, exist_ok=True)
         info = os.lstat(path)

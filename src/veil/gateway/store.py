@@ -13,6 +13,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
+from .. import _windows
 from ..detectors.literal import LiteralPlaceholderDetector
 from ..detectors.regex import RegexDetector
 from ..placeholders import placeholder_type
@@ -45,6 +46,9 @@ def _digest(value: str) -> str:
 
 def _create_private(path: Path) -> None:
     """Create ``path`` readable and writable by its owner only, if missing."""
+    if _windows.is_windows():
+        _windows.create_private(path)
+        return
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:

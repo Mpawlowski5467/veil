@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from . import Shield
+from . import Shield, _windows
 from .codex_setup import config_path, parse_toml, read_private_file, read_receipt
 from .gateway import SECRET_HEADER, SettingsError, default_data_dir, load_settings
 from .gateway.hooks import STATUS_PATH, _gateway_answers
@@ -230,6 +230,16 @@ def inspect_configuration(config: Path) -> tuple[list[Check], dict[str, Any]]:
     return checks, provider
 
 
+def _private_permissions(path: Path, mask: int = 0o077) -> bool:
+    try:
+        if _windows.is_windows():
+            _windows.check_private(path)
+            return True
+        return not bool(stat.S_IMODE(path.stat().st_mode) & mask)
+    except OSError:
+        return False
+
+
 def _doctor_checks(
     config: Path, directory: Path, provider: dict[str, Any]
 ) -> list[Check]:
@@ -246,7 +256,7 @@ def _doctor_checks(
     elif (
         directory.is_symlink()
         or not directory.is_dir()
-        or directory.stat().st_mode & 0o077
+        or not _private_permissions(directory)
     ):
         checks.append(
             Check(
@@ -265,8 +275,7 @@ def _doctor_checks(
         unsafe = [
             path.name
             for path in files
-            if path.is_symlink()
-            or (path.exists() and stat.S_IMODE(path.stat().st_mode) & 0o077)
+            if path.is_symlink() or (path.exists() and not _private_permissions(path))
         ]
         checks.append(
             Check(

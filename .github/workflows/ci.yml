@@ -145,3 +145,44 @@ jobs:
               assert main(["undo", "codex", "--config", str(config)]) == 0
               assert not config.exists()
           EOF
+
+  native:
+    name: Native workflows (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python: ["3.10", "3.14"]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - name: Native storage, CLI, setup, recovery, and protocol regressions
+        run: >-
+          uv run pytest -q tests/test_platform_workflows.py
+          tests/test_verification.py tests/test_gateway_response.py
+          tests/test_gateway_request.py tests/test_gateway_blocks.py
+          tests/test_gateway_golden.py tests/test_gateway_leaks.py
+          tests/test_gateway_request_fuzz.py tests/test_openai_gateway.py
+          tests/test_ssn.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
+          tests/test_masker.py tests/test_restorer.py tests/test_stream.py
+          tests/test_fuzz.py tests/test_readme.py
+      - name: Install native Linux clipboard tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xclip xvfb
+      - name: Native clipboard (macOS and Windows)
+        if: runner.os != 'Linux'
+        run: uv run pytest -q tests/test_platform_workflows.py -k clipboard
+        env:
+          VEIL_NATIVE_CLIPBOARD: "1"
+      - name: Native clipboard (Linux X11)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run pytest -q tests/test_platform_workflows.py -k clipboard
+        env:
+          VEIL_NATIVE_CLIPBOARD: "1"
+      - run: uv build
