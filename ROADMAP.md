@@ -64,9 +64,9 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
 
 ## 3. Detection that matches everyday documents
 
-- [ ] Add a tested built-in US SSN detector with explicit supported formats and
+- [x] Add a tested built-in US SSN detector with explicit supported formats and
   false-positive rules; replace the ad hoc demo regex for normal use.
-- [ ] Add easy commands to register, list, and remove names, organizations, and
+- [x] Add easy commands to register, list, and remove names, organizations, and
   custom values, with private storage and clear case/variant behavior.
 - [ ] Evaluate opt-in secret/token detection against realistic examples before
   promising API-key or password coverage.

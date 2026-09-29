@@ -1,6 +1,6 @@
 ---
 name: veil
-description: Use the installed Veil package to check gateway readiness and request evidence, verify a client test request, guide Codex or Claude Code setup, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
+description: Use the installed Veil package to check gateway readiness and request evidence, verify a client test request, guide Codex or Claude Code setup, manage private registrations, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
 ---
 
 # Veil
@@ -25,8 +25,9 @@ Restore into a local file or clipboard without returning restored contents in
 tool output. A tool result containing original values can enter the next model
 request when the session is not routed through Veil.
 
-Veil covers supported, detected text. Email and phone detection are built in;
-names need registration, and SSNs need a custom pattern. Undetected values can
+Veil covers supported, detected text. Email, phone, and supported US SSN formats
+have built-in detection; names need registration. Compact/space-separated SSNs
+need an explicit SSN label, and impossible SSN ranges are rejected. Undetected values can
 remain in masked output. Do not promise complete anonymization. Local file access
 and other tool/network traffic are not automatically covered by the gateway.
 
@@ -113,6 +114,23 @@ Never call any of those states verified. Evidence resets on gateway restart.
 - Stop/restart only when requested. They can interrupt active model calls.
   `VEIL undo codex` reverses managed setup; stopping the worker alone leaves
   Codex pointing at it. Never use `forget` as a setup or troubleshooting step.
+
+### Register or remove private values
+
+- `VEIL entities list --json` reports counts by type without the values. It
+  covers manual registrations, not git identity, pattern matches, or mappings.
+- For interactive entry, give the user `VEIL entities add PERSON` (or another
+  type) to run in their local terminal. It prompts without echoing the value.
+  Never ask them to send the value through chat or command arguments.
+- With an authorized local file containing one value, run
+  `VEIL --data-dir DATA entities add PERSON --stdin < INPUT`, using the installed
+  runtime and shell-quoted paths. Pass the file directly without inspecting it.
+  `remove` uses the same hidden prompt or stdin workflow and exact spelling.
+- Matching is case-sensitive; register variants separately. Settings are stored
+  locally in plaintext with owner-only permissions. Changes require restarting
+  the relevant gateway or relaunching the client; explain this without restarting
+  an active client unless the user authorized it. Removal does not erase existing
+  vault mappings or client history.
 
 ### Mask or restore a file
 

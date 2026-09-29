@@ -44,6 +44,7 @@ def test_builtin_types(detector):
         "IPV6",
         "CREDIT_CARD",
         "IBAN",
+        "SSN",
     )
 
 
@@ -796,6 +797,7 @@ class TestCustomPatterns:
             "IPV6",
             "CREDIT_CARD",
             "IBAN",
+            "SSN",
             "ORDER",
         )
 
@@ -830,6 +832,7 @@ class TestCustomPatterns:
             "IPV6",
             "CREDIT_CARD",
             "IBAN",
+            "SSN",
             "PHONE",
         )
 
@@ -896,7 +899,7 @@ class TestGeneral:
     def test_repr(self, detector):
         assert repr(detector) == (
             "RegexDetector(entity_types=('EMAIL', 'PHONE', 'IPV4', 'IPV6', "
-            "'CREDIT_CARD', 'IBAN'))"
+            "'CREDIT_CARD', 'IBAN', 'SSN'))"
         )
 
 

@@ -272,6 +272,7 @@ class TestSessions:
             "IPV6",
             "CREDIT_CARD",
             "IBAN",
+            "SSN",
             "ORDER",
             "PERSON",
         } <= types

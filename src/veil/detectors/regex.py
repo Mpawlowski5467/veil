@@ -1,4 +1,4 @@
-"""Regex detection for emails, phones, IP addresses, cards, IBANs, and custom patterns.
+"""Regex detection for personal data and custom patterns.
 
 The built-in patterns are pragmatic, not exhaustive: they aim to catch the
 formats people actually type while rejecting look-alikes such as dates, version
@@ -474,6 +474,28 @@ def _iban_end(match: re.Match[str]) -> int | None:
     return None
 
 
+# SSNs use ASCII digits. Reject the area/group/serial ranges the SSA never
+# assigns; this checks the shape, not whether a number was issued. Consistent
+# hyphens stand alone; spaces and bare nine-digit runs need an explicit label
+# so ordinary order numbers, routing numbers and dates aren't treated as SSNs.
+_SSN_AREA = r"(?!000|666|9[0-9]{2})[0-9]{3}"
+_SSN_GROUP = r"(?!00)[0-9]{2}"
+_SSN_SERIAL = r"(?!0000)[0-9]{4}"
+_SSN_LEFT = rf"(?<![A-Za-z\d+{MARK_CLASS}])(?<!\d[.\-\u2011\u2013])"
+_SSN_RIGHT = rf"(?![A-Za-z\d{MARK_CLASS}]|[.\-\u2011\u2013]\d)"
+SSN_PATTERN = re.compile(
+    rf"{_SSN_LEFT}{_SSN_AREA}(?P<dash>[-\u2011\u2013])"
+    rf"{_SSN_GROUP}(?P=dash){_SSN_SERIAL}{_SSN_RIGHT}"
+)
+_LABELLED_SSN_PATTERN = re.compile(
+    rf"(?<![\w{MARK_CLASS}])(?i:ssn|social[ \t]+security(?:[ \t]+number)?)\b"
+    rf"[ \t]*(?:[:=#][ \t]*)?"
+    rf"(?P<number>{_SSN_AREA}(?P<space>[{_SPACES}]){_SSN_GROUP}"
+    rf"(?P=space){_SSN_SERIAL}|{_SSN_AREA}{_SSN_GROUP}{_SSN_SERIAL})"
+    rf"{_SSN_RIGHT}"
+)
+
+
 @dataclass(frozen=True, slots=True)
 class _Rule:
     entity_type: str
@@ -492,10 +514,10 @@ class _Rule:
 
 
 class RegexDetector:
-    r"""Detects emails, phones, IP addresses, cards, IBANs, and custom patterns.
+    r"""Detects emails, phones, IP addresses, cards, IBANs, SSNs, and custom patterns.
 
     Built-in entity types are ``EMAIL``, ``PHONE``, ``IPV4``, ``IPV6``,
-    ``CREDIT_CARD``, and ``IBAN``. Custom
+    ``CREDIT_CARD``, ``IBAN``, and ``SSN``. Custom
     patterns add new types, or replace a built-in type when they reuse its
     name. On a tie between spans of equal length, custom patterns win over
     built-in ones.
@@ -651,4 +673,6 @@ _BUILTIN_RULES: tuple[_Rule, ...] = (
         "CREDIT_CARD", CARD_PATTERN, RegexDetector.BUILTIN_PRIORITY, refine=_card_end
     ),
     _Rule("IBAN", IBAN_PATTERN, RegexDetector.BUILTIN_PRIORITY, refine=_iban_end),
+    _Rule("SSN", SSN_PATTERN, RegexDetector.BUILTIN_PRIORITY),
+    _Rule("SSN", _LABELLED_SSN_PATTERN, RegexDetector.BUILTIN_PRIORITY, group="number"),
 )

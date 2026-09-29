@@ -82,6 +82,14 @@ def load_settings(path: Path) -> Settings:
         raise SettingsError(f"{path}: can't be read ({error.strerror})") from None
     except UnicodeDecodeError:
         raise SettingsError(f"{path}: not UTF-8 text") from None
+    return parse_settings(text, path)
+
+
+def parse_settings(text: str, path: Path) -> Settings:
+    """Validate a settings snapshot without rereading the file.
+
+    The path is used only for diagnostics, which never include private values.
+    """
     try:
         raw = json.loads(text)
     except ValueError:

@@ -91,9 +91,20 @@ available when explicitly requested.
 
 These are instructions an assistant follows, not a deterministic execution
 boundary. The gateway is the mechanism for automatic masking of supported
-model requests. Email and phone detection are built in; names need registration
-and SSNs need a custom pattern. Undetected values can remain in output. Neither
+model requests. Email, phone, and supported US SSN detection are built in; names
+need registration. Compact or space-separated SSNs need an explicit label, and
+impossible SSN ranges are rejected. Undetected values can remain in output. Neither
 the skill nor the gateway is a sandbox for every local tool or network action.
+
+## Register private values
+
+Ask the skill to register a value **from a local file path**, or ask for the
+`veil entities add PERSON` command to run yourself with a hidden terminal prompt.
+Do not paste the value into chat. `veil entities list --json` reports counts
+without exposing the values. Removal uses `veil entities remove PERSON` with
+the same private input options. Changes apply after restarting the relevant
+gateway or relaunching the client; removal keeps existing conversation mappings.
+See [registration and storage](entities.md).
 
 ## Update or remove
 

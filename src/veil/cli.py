@@ -405,6 +405,23 @@ def _parser() -> argparse.ArgumentParser:
         help=f"where mappings and config.json live (default: ~/.{APP})",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    entities = commands.add_parser("entities", help="manage exact private values")
+    entity_commands = entities.add_subparsers(dest="operation", required=True)
+    for operation in ("add", "remove"):
+        entity_command = entity_commands.add_parser(operation)
+        entity_command.add_argument(
+            "entity_type", help="type such as PERSON or ORGANIZATION"
+        )
+        entity_command.add_argument(
+            "--stdin",
+            action="store_true",
+            help="read one private value from stdin instead of a hidden prompt",
+        )
+    entity_list = entity_commands.add_parser(
+        "list", help="show counts, without private values"
+    )
+    entity_list.add_argument("entity_type", nargs="?")
+    entity_list.add_argument("--json", action="store_true")
     verify = commands.add_parser(
         "verify", help="create or check a client verification prompt"
     )
@@ -544,6 +561,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command == "entities":
+            from .entities_cli import run_entities
+
+            return run_entities(
+                options.operation,
+                data_dir=data_dir,
+                entity_type=options.entity_type,
+                stdin=getattr(options, "stdin", False),
+                json_output=getattr(options, "json", False),
+            )
         if options.command == "verify":
             from .verification import run_verify
 
@@ -644,6 +671,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{APP}: {error}", file=sys.stderr)
         return 2
     except OSError:
+        if options.command == "entities":
+            print(
+                f"{APP}: could not access private input or configuration; "
+                "check permissions and available disk space",
+                file=sys.stderr,
+            )
+            return 2
         if options.command == "skill":
             print(
                 f"{APP}: could not access skill files; check permissions and "

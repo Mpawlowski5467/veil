@@ -149,14 +149,32 @@ Claude Code arguments are forwarded, except `--settings`, `--bare`, and `--safe-
 
 ### Register names and other private values
 
-Create a private configuration folder:
+Register a value from a hidden terminal prompt:
+
+```bash
+veil entities add PERSON
+veil entities add ORGANIZATION
+veil entities list
+veil entities remove PERSON
+```
+
+Type the private value when prompted; it is not echoed or placed in shell history.
+`list` shows counts by type, never the values. Commands save registrations in
+`~/.veil/config.json` with owner-only permissions and preserve other settings.
+Use `veil --data-dir /path/to/private-data entities add PERSON` for another gateway's
+data folder. Restart running gateways or relaunch Veil clients after changes.
+Values match exact, case-sensitive spellings; register variants separately.
+See [registration and removal](docs/entities.md) for file input and storage details.
+
+For custom patterns or other settings, you can also edit the configuration directly.
+Create a private configuration folder if needed:
 
 ```bash
 mkdir -p ~/.veil
 chmod 700 ~/.veil
 ```
 
-Save the following as `~/.veil/config.json`:
+Merge the settings you need into `~/.veil/config.json`:
 
 ```json
 {
@@ -280,6 +298,7 @@ Use the same session label for both operations and a different label for each co
 | `IPV4` / `IPV6` | Supported IPv4 and IPv6 address forms. |
 | `CREDIT_CARD` | Supported layouts checked against issuer prefixes, lengths, and the Luhn checksum. |
 | `IBAN` | Supported country codes and layouts with checksum validation. |
+| `SSN` | US numbers with hyphens; compact or space-separated numbers require an explicit SSN label. Invalid area/group/serial ranges are rejected. |
 | Your types | Exact registered values or custom regular expressions. |
 
 Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible.
