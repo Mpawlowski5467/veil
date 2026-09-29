@@ -102,6 +102,8 @@ The CLI launchers keep a private gateway running for that client process and sto
 
 Use `veil restart` after changing a desktop gateway's detector settings or upgrading Veil. For CLI workflows, exit and relaunch through Veil. If you chose a custom `--data-dir`, use it consistently for setup, registration, masking, and verification.
 
+Veil was tested with Claude Code 2.1.283. After a client update, run verification again and check the [compatibility guidance](docs/claude-code.md#when-a-request-is-refused).
+
 [Codex setup, supported features, and undo →](docs/openai-integration.md) · [Background controls and recovery →](docs/background-gateway.md) · [Claude Code details →](docs/claude-code.md)
 
 ### 4. Verify your conversation
@@ -288,7 +290,7 @@ Detection is based on patterns and explicit registration. Names, organizations, 
 ## Understand the boundaries
 
 - **Only detected text is masked.** Unregistered names, unsupported formats, and sensitive context can remain visible.
-- **Coverage depends on the adapter.** Images and PDFs pass through the Anthropic adapter; the OpenAI adapter refuses them. Tool definitions are not scrubbed. Hosted search results are outside the Anthropic adapter's coverage, and OpenAI hosted tools are refused.
+- **Coverage depends on the adapter.** Images and PDFs pass through the Anthropic adapter; the OpenAI adapter refuses them. Tool definitions are not scrubbed, except the schema you give `claude -p --json-schema` (its descriptions and example values are masked; a property name or `pattern` holding personal data is refused). Hosted search results come back from Anthropic and go back to it as they came, and OpenAI hosted tools are refused.
 - **Masking is reversible.** The vault holds original values; placeholders still reveal types, counts, and repeated references. Surrounding context may reveal identity.
 - **Tool checks cover arguments containing known values.** Claude uses hooks; the OpenAI gateway checks restored tool inputs before delivery. A command can read and send a file without including its contents in the arguments. Veil is not a sandbox or a network firewall.
 - **Your provider still authenticates you.** Masking prompt content does not hide your account or prevent local transcripts.
@@ -335,6 +337,15 @@ Live integration tests require an authenticated Claude Code CLI and make real mo
 ```bash
 VEIL_LIVE_CLAUDE=1 uv run pytest -m live
 ```
+
+After a Claude Code update, run the census. It runs Claude Code through the gateway on four models, one scenario at a time (about 80-90 real model calls; `--models haiku` is a quick check), and drives an interactive session under GNU screen (`/usr/bin/screen`). It reports what Claude Code sends that `tests/gateway_payloads/` doesn't list yet, and every failure: a request refused, a real value in what left, a reply key the gateway dropped. It exits 0 when all is known and clean, 1 when something is new, 2 on a failure.
+
+```bash
+uv run python -m tests.live.census            # report only
+uv run python -m tests.live.census --update   # also refresh the census after a clean run
+```
+
+With `--update`, a run without failures refreshes the census and the protocol words (`src/veil/gateway/vocab.py`); new paths go in only with `--accept-new`, after you've checked the gateway handles them. Once `-p`, `/compact` and an interactive session ran clean on all four models, with nothing new (or with `--accept-new`), it also moves the tested Claude Code version forward. A failed run is kept: `--from DIR` analyzes it again, and `--resume DIR` reruns what the harness couldn't finish.
 
 ## Contributing
 

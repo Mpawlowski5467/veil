@@ -19,7 +19,7 @@ from ..placeholders import placeholder_type
 from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
 from .config import Settings
-from .ledger import canonical
+from .ledger import canonical, seen_digest
 from .openai_request import ResponsesRequestMasker
 from .request import DEFAULT_NOTE, RequestMasker
 from .server import Session, Sessions
@@ -31,7 +31,12 @@ _SCHEMA = (
     "CREATE TABLE IF NOT EXISTS ledger_tools ("
     " session TEXT NOT NULL, tool_use_id TEXT NOT NULL, digest TEXT NOT NULL,"
     " masked TEXT NOT NULL, used REAL NOT NULL, PRIMARY KEY (session, tool_use_id))",
+    # Digests of blocks and opaque values the API sent (see seen_digest).
+    "CREATE TABLE IF NOT EXISTS ledger_seen ("
+    " session TEXT NOT NULL, digest TEXT NOT NULL, used REAL NOT NULL,"
+    " PRIMARY KEY (session, digest))",
 )
+_TABLES = ("ledger_texts", "ledger_tools", "ledger_seen")
 
 
 def _digest(value: str) -> str:
@@ -132,26 +137,57 @@ class SQLiteLedger:
             return None
         return json.loads(row[1])
 
+    def record_seen(self, value: Any) -> None:
+        """Remember a block or an opaque value the API sent, by its digest."""
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO ledger_seen VALUES (?, ?, ?)",
+                (self._session, seen_digest(value), time.time()),
+            )
+
+    def was_seen(self, value: Any) -> bool:
+        """Whether the API sent exactly this block or value."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT 1 FROM ledger_seen WHERE session = ? AND digest = ?",
+                (self._session, seen_digest(value)),
+            ).fetchone()
+        return row is not None
+
     def forget(self) -> None:
         """Delete this conversation's entries."""
         with self._lock:
-            for table in ("ledger_texts", "ledger_tools"):
+            for table in _TABLES:
                 self._db.execute(
-                    f"DELETE FROM {table} WHERE session = ?",  # two fixed names
+                    f"DELETE FROM {table} WHERE session = ?",  # fixed names
                     (self._session,),
                 )
 
     def purge(self, older_than: timedelta) -> int:
-        """Delete every conversation's entries not written for ``older_than``."""
+        """Delete the conversations not written to for ``older_than``.
+
+        A conversation goes as a whole: an entry written long ago in one
+        still in use is kept, since its history is still sent back.
+        """
         cutoff = time.time() - older_than.total_seconds()
+        latest = " UNION ALL ".join(f"SELECT session, used FROM {t}" for t in _TABLES)
         with self._lock:
-            deleted = 0
-            for table in ("ledger_texts", "ledger_tools"):
-                cursor = self._db.execute(
-                    f"DELETE FROM {table} WHERE used < ?",  # two fixed names
+            stale = [
+                row[0]
+                for row in self._db.execute(
+                    f"SELECT session FROM ({latest})"  # fixed names
+                    " GROUP BY session HAVING MAX(used) < ?",
                     (cutoff,),
                 )
-                deleted += cursor.rowcount
+            ]
+            deleted = 0
+            for session in stale:
+                for table in _TABLES:
+                    cursor = self._db.execute(
+                        f"DELETE FROM {table} WHERE session = ?",  # fixed names
+                        (session,),
+                    )
+                    deleted += cursor.rowcount
         return deleted
 
 

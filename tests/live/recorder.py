@@ -17,7 +17,7 @@ import http.client
 import json
 import re
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -58,6 +58,17 @@ HOP_HEADERS = frozenset(
 # Keys that are ids rather than field names, such as the tool-use ids that
 # key auto mode's review results; they are all written as ``<id>``.
 _ID_KEY = re.compile(r"^(?:srv)?toolu_[A-Za-z0-9_-]+$")
+# Keys and type values that look like names are kept; any other (a path, an
+# address) is written ``<key>`` or ``type=<value>``, since shapes are
+# committed.
+_NAME_KEY = re.compile(r"[A-Za-z_$][A-Za-z0-9_-]{0,63}")
+_TYPE_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}")
+
+
+def _key(key: str) -> str:
+    if _ID_KEY.match(key):
+        return "<id>"
+    return key if _NAME_KEY.fullmatch(key) else "<key>"
 
 
 def shape(value: Any, path: str = "$") -> Iterator[tuple[str, str]]:
@@ -70,9 +81,10 @@ def shape(value: Any, path: str = "$") -> Iterator[tuple[str, str]]:
     if isinstance(value, dict):
         yield path, "object"
         for key, item in value.items():
-            child = f"{path}.{'<id>' if _ID_KEY.match(key) else key}"
+            child = f"{path}.{_key(key)}"
             if key == "type" and isinstance(item, str):
-                yield child, f"type={item}"
+                shown = item if _TYPE_VALUE.fullmatch(item) else "<value>"
+                yield child, f"type={shown}"
             else:
                 yield from shape(item, child)
     elif isinstance(value, list):
@@ -102,16 +114,24 @@ class Recorder:
     """A running pass-through gateway; use as a context manager."""
 
     def __init__(
-        self, folder: Path, *, upstream: str = UPSTREAM, secure: bool = True
+        self,
+        folder: Path,
+        *,
+        upstream: str = UPSTREAM,
+        secure: bool = True,
+        rewrite: Callable[[Any], Any] | None = None,
     ) -> None:
         """Start listening on a free port; bodies go under ``folder``.
 
         ``upstream`` and ``secure`` exist for tests, which use a local
-        plain-HTTP server in place of the API.
+        plain-HTTP server in place of the API. ``rewrite`` may change a JSON
+        body before it is forwarded: it returns the new body, or None to
+        leave it; what is forwarded is what gets recorded.
         """
         self.folder = folder
         self.upstream = upstream
         self.secure = secure
+        self.rewrite = rewrite
         self.folder.mkdir(parents=True, exist_ok=True)
         self.records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
@@ -215,6 +235,13 @@ def _handler(recorder: Recorder) -> type[BaseHTTPRequestHandler]:
                     parsed = json.loads(body)
                 except ValueError:
                     record["body_kind"] = "not json"
+            if parsed is not None and recorder.rewrite is not None:
+                changed = recorder.rewrite(parsed)
+                if changed is not None:
+                    parsed = changed
+                    body = json.dumps(parsed).encode()
+                    record["rewritten"] = True
+                    record["body_bytes"] = len(body)
             if parsed is not None:
                 record["body_shape"] = census([parsed])
             rid = recorder._add(record)
@@ -278,6 +305,8 @@ def _handler(recorder: Recorder) -> type[BaseHTTPRequestHandler]:
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+                if data:  # a refusal's message, say; for local inspection only
+                    (recorder.folder / f"response-{rid}.json").write_bytes(data)
                 try:
                     record["response_shape"] = census([json.loads(data)])
                 except ValueError:

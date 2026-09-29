@@ -30,6 +30,17 @@ def canonical(value: Any) -> str:
     return json.dumps(_as_javascript(value), sort_keys=True, separators=(",", ":"))
 
 
+def seen_digest(value: Any) -> str:
+    """The digest a ledger keeps for a block or value the API sent.
+
+    A block is compared as the client sends it back: without the cache
+    breakpoint or the caller it adds or drops.
+    """
+    if isinstance(value, dict):
+        value = {k: v for k, v in value.items() if k not in ("cache_control", "caller")}
+    return _digest(canonical(value))
+
+
 def _as_javascript(value: Any) -> Any:
     if isinstance(value, bool) or value is None or isinstance(value, str):
         return value
@@ -82,6 +93,7 @@ class MemoryLedger:
         """Create an empty ledger."""
         self._texts: dict[str, str] = {}
         self._tools: dict[str, tuple[str, Any]] = {}
+        self._seen: set[str] = set()
 
     def record_text(self, restored: str, masked: str) -> None:
         """Remember that ``masked`` model text was restored as ``restored``."""
@@ -95,10 +107,19 @@ class MemoryLedger:
         """Remember the masked input of a tool call restored as ``restored``."""
         self._tools[tool_use_id] = (_digest(canonical(restored)), masked)
 
+    def record_seen(self, value: Any) -> None:
+        """Remember a block or an opaque value the API sent, by its digest."""
+        self._seen.add(seen_digest(value))
+
+    def was_seen(self, value: Any) -> bool:
+        """Whether the API sent exactly this block or value (see `seen_digest`)."""
+        return seen_digest(value) in self._seen
+
     def forget(self) -> None:
         """Forget every entry."""
         self._texts.clear()
         self._tools.clear()
+        self._seen.clear()
 
     def masked_tool_input(self, tool_use_id: str, restored: Any) -> Any | None:
         """Return the masked input of a tool call, if it still matches."""

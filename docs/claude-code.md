@@ -18,7 +18,10 @@ Supported text in prompts, system instructions, file contents, and tool results
 is masked. Replies are restored locally, including tool arguments, so file edits
 can use real values. See [coverage and limits](../README.md#understand-the-boundaries).
 
-The gateway rejects request fields it does not understand. Hooks check routing
+New text fields and block types are masked generically. Keys, types, numbers,
+file bytes, and opaque values that cannot safely be masked are refused.
+Provider-origin blocks can be replayed unchanged, unless they contain registered
+private text. Hooks check routing
 before each prompt and inspect tool arguments for known real values. Shell calls
 containing those values request approval; other outbound tools containing them
 are refused unless explicitly allowed. These checks do not inspect every action
@@ -31,9 +34,31 @@ for manually configured clients; `veil claude` manages its own gateway lifecycle
 
 The repository's live tests record compatibility checks against Claude Code
 2.1.283. Re-run live tests after client updates; this document describes the
-current checkout rather than pending compatibility changes on other branches.
+current checkout. Another version produces a one-line startup warning once per
+client/Veil version pair; it does not prevent startup.
 
 The installed [Veil skill](assistant-skills.md) can guide setup and verify a test
 request from inside the launched session. Use the same [data folder and detector
 settings](configuration.md) when registering values. Exit and relaunch after
 upgrading Veil or changing settings. Session mappings survive relaunches.
+
+## When a request is refused
+
+A request the gateway cannot mask is not sent. For example:
+
+```
+API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.5.0 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].attestation.signature (opaque data that can't be masked)
+```
+
+Update Veil when Claude Code is newer than the tested version. If a refused
+block is already in history, use `/rewind` to return before it or start a new
+conversation. A tool definition or setting sent with every request needs a
+Veil update; rewinding cannot remove it. Background refusals are summarized
+when Claude Code exits without printing request contents.
+
+Privacy refusals and gateway failures are final. Features Claude can drop,
+such as an effort setting or auto-mode safety check, may be retried without that
+feature. Temporary storage contention and unreachable upstream APIs can retry.
+On models that retain earlier thinking, adding a registration before resuming
+may cost one rejected request; Claude then drops that thinking and continues
+without its prompt cache for that turn.

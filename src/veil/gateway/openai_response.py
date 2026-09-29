@@ -245,7 +245,7 @@ class ResponsesStreamRestorer(ResponseRestorer):
             return raw
         if all(not line or line.startswith(":") for line in raw.splitlines()):
             return raw
-        data = _parse(raw)
+        _, data = _parse(raw)  # its event name isn't used: its type is
         if not isinstance(data, dict) or not isinstance(data.get("type"), str):
             raise StreamError("invalid Responses event")
         kind = data["type"]

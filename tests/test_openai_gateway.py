@@ -297,6 +297,19 @@ class TestRequests:
                 sessions.get("s2").masker.mask({"input": [reasoning]})
 
 
+def test_a_refusal_never_names_a_known_value():
+    # A single-word registered name used as a key is shown as <key>.
+    shield = shield_for()
+    shield.add_entity("Quillsby", "PERSON")
+    masker = ResponsesRequestMasker(
+        shield, MemoryLedger(), registered={NAME: "PERSON", "Quillsby": "PERSON"}
+    )
+    for body in ({"input": "hi", "Quillsby": 1}, {"input": [{"Quillsby": 1}]}):
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert "Quillsby" not in str(info.value)
+
+
 class TestRestoration:
     @pytest.mark.parametrize(
         "name", ["exec_command", "functions.exec", "mcp__remote__write", None]
@@ -653,6 +666,22 @@ class TestHTTP:
     def test_unknown_model_queries_are_not_forwarded(self, api, gateway, path):
         response, _ = call(gateway, method="GET", path=path)
         assert response.status == 400
+        assert api.received == []
+
+    def test_a_refusal_speaks_to_codex_not_claude_code(self, api, gateway):
+        response, payload = call(
+            gateway,
+            path="/v1/responses",
+            headers={"thread-id": "s1"},
+            body={"input": EMAIL, "future_field": 1},
+        )
+        assert response.status == 400
+        error = json.loads(payload)["error"]
+        assert error["type"] == "invalid_request_error"
+        assert "future_field" in error["message"]
+        assert "Claude Code" not in error["message"]
+        assert "/rewind" not in error["message"]
+        assert EMAIL not in payload.decode()
         assert api.received == []
 
     @pytest.mark.parametrize(

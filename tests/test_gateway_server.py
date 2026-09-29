@@ -8,11 +8,19 @@ import time
 
 import pytest
 
+import gateway_bodies
 from veil import LiteralPlaceholderDetector, MemoryVault, RegexDetector, Shield
 from veil.gateway import SECRET_HEADER, SESSION_HEADER, Gateway, Sessions
+from veil.gateway.compat import TESTED_CLAUDE_CODE
+from veil.gateway.config import APP
 
 EMAIL = "jane.doe@example.com"
 NAME = "Jan Nowak"
+
+
+class _QuietServer(http.server.ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        pass  # a connection the gateway closed early isn't a failure here
 
 
 class FakeAPI:
@@ -63,7 +71,7 @@ class FakeAPI:
 
             do_GET = do_POST = do_HEAD = _any  # noqa: N815
 
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = _QuietServer(("127.0.0.1", 0), Handler)
         threading.Thread(
             target=self.server.serve_forever,
             kwargs={"poll_interval": 0.05},
@@ -133,6 +141,9 @@ def sse(data):
 def stream_reply(*parts):
     return (200, "text/event-stream", list(parts))
 
+
+# Thinking in a message of the user's: the gateway can't vouch for it.
+USER_THINKING = {"type": "thinking", "thinking": "x", "signature": "s"}
 
 REQUEST = {
     "model": "claude-haiku-4-5-20251001",
@@ -315,10 +326,24 @@ class TestRoundTrip:
         assert response.status == 429
         assert json.loads(payload) == error
 
-    def test_the_connectivity_check_is_forwarded(self, api, gateway):
-        response, _ = call(gateway, method="HEAD", path="/api/hello", body=None)
+    @pytest.mark.parametrize("method", ["HEAD", "GET"])
+    def test_the_connection_check_is_answered_here(self, api, gateway, method):
+        # Claude Code's startup check carries no secret; it is never forwarded.
+        response, payload = call(
+            gateway, method=method, path="/api/hello", headers={SECRET_HEADER: None}
+        )
         assert response.status == 200
-        assert api.received[0][:2] == ("HEAD", "/api/hello")
+        assert response.getheader("Content-Type") == "application/json"
+        assert payload == (b"{}" if method == "GET" else b"")
+        call(gateway, method=method, path="/api/hello")  # with the secret too
+        assert api.received == []
+
+    def test_the_connection_check_still_refuses_browsers(self, api, gateway):
+        for headers in ({"Host": "evil.example.com"}, {"Sec-Fetch-Site": "none"}):
+            response, _ = call(
+                gateway, method="GET", path="/api/hello", headers=headers
+            )
+            assert response.status == 403
 
     def test_sessions_keep_separate_placeholders(self, api, gateway):
         api.replies += [text_reply("a"), text_reply("b")]
@@ -342,18 +367,31 @@ REFUSALS = [
         403,
         "browser requests are refused",
     ),
-    (
-        {"Sec-Fetch-Site": "cross-site"},
-        "POST",
-        "/v1/messages",
-        403,
-        "browser requests are refused",
-    ),
+    *[
+        (headers, "POST", "/v1/messages", 403, "browser requests are refused")
+        for headers in (
+            {"Sec-Fetch-Site": "cross-site"},
+            {"Sec-Fetch-Site": "same-site"},
+            {"Sec-Fetch-Site": "same-origin"},
+            {"Sec-Fetch-Site": "none"},
+            {"Sec-Fetch-Dest": "empty"},
+            {"Sec-Fetch-User": "?1"},
+            {"Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "cross-site"},
+            {"Origin": "null"},
+        )
+    ],
     ({SECRET_HEADER: None}, "POST", "/v1/messages", 401, "missing or wrong secret"),
     ({SECRET_HEADER: "guess"}, "POST", "/v1/messages", 401, "missing or wrong secret"),
-    ({}, "POST", "/v1/complete", 404, "not served by the gateway"),
-    ({}, "GET", "/v1/messages", 404, "not served by the gateway"),
-    ({SESSION_HEADER: None}, "POST", "/v1/messages", 400, f"send {SESSION_HEADER}"),
+    ({}, "POST", "/v1/complete", 404, "POST /v1/complete isn't served by the gateway"),
+    ({}, "GET", "/v1/messages", 404, "GET /v1/messages isn't served by the gateway"),
+    ({}, "POST", "/v1/files/f_Jan-Nowak.txt", 404, "POST this path isn't served"),
+    (
+        {SESSION_HEADER: None},
+        "POST",
+        "/v1/messages",
+        400,
+        f"the request has no {SESSION_HEADER}, so nothing was sent",
+    ),
     (
         {"Content-Encoding": "gzip"},
         "POST",
@@ -372,10 +410,12 @@ def test_refused_requests_never_reach_the_api(
         gateway, method=method, path=path, body=REQUEST, headers=headers
     )
     assert response.status == status
-    assert json.loads(payload) == {
-        "type": "error",
-        "error": {"type": json.loads(payload)["error"]["type"], "message": message},
-    }
+    error = json.loads(payload)["error"]
+    assert error["message"].startswith(f"{APP}: {message}")
+    # Final: Claude Code doesn't send it again, on another model or without
+    # some feature.
+    assert error["details"] == {"error_code": "dlp_request_denied"}
+    assert "Jan-Nowak" not in error["message"]
     assert response.getheader("x-should-retry") == "false"
     assert api.received == []
 
@@ -387,17 +427,20 @@ def test_options_is_refused(api, gateway):
 
 
 def test_an_unmaskable_request_is_refused_by_path(api, gateway):
-    body = {
-        **REQUEST,
-        "messages": [
-            {"role": "user", "content": [{"type": "server_tool_use", "id": "x"}]}
-        ],
-    }
+    body = {**REQUEST, "messages": [{"role": "user", "content": [USER_THINKING]}]}
     response, payload = call(gateway, body=body)
     assert response.status == 400
-    assert json.loads(payload)["error"]["message"] == (
-        "the gateway can't mask messages[0].content[0].type: unknown block type"
+    error = json.loads(payload)["error"]
+    assert error["type"] == "policy_blocked"
+    # Claude Code takes this code as final: no retry on another model, and no
+    # retry without some unrelated feature.
+    assert error["details"] == {"error_code": "dlp_request_denied"}
+    assert error["message"].startswith(f"{APP}: can't mask this request")
+    assert error["message"].endswith(
+        "Not handled: messages[0].content[0].type "
+        "(only the model's own messages have thinking)"
     )
+    assert response.getheader("x-should-retry") == "false"
     assert api.received == []
 
 
@@ -428,13 +471,14 @@ def test_a_refused_effort_is_named_so_the_client_can_drop_it(api, gateway):
     body = {**REQUEST, "messages": [*REQUEST["messages"], effort]}
     response, payload = call(gateway, body=body)
     assert response.status == 400
-    assert json.loads(payload)["error"] == {
-        "type": "invalid_request_error",
-        "message": (
-            "the gateway can't mask messages[1].output_config.effort: "
-            "not an effort level"
-        ),
-    }
+    error = json.loads(payload)["error"]
+    # A plain 400 naming output_config: Claude Code sends the conversation
+    # again without its per-turn effort.
+    assert error["type"] == "invalid_request_error"
+    assert "details" not in error
+    assert error["message"].endswith(
+        "Not handled: messages[1].output_config.effort (not an effort level)"
+    )
     assert response.getheader("x-should-retry") == "false"
     assert api.received == []
 
@@ -479,7 +523,7 @@ def test_errors_print_nothing(api, capfd):
 def test_a_masker_error_is_refused_without_details(api, gateway):
     session = gateway.sessions.get("session-1")
 
-    def explode(_body):
+    def explode(_body, **_):
         raise RuntimeError(f"boom {EMAIL}")
 
     session.masker.mask = explode
@@ -493,7 +537,9 @@ def test_an_unreachable_api_is_a_502(gateway):
     gateway.upstream = "127.0.0.1:9"
     response, payload = call(gateway, body=REQUEST)
     assert response.status == 502
-    assert json.loads(payload)["error"]["message"] == "the API couldn't be reached"
+    assert json.loads(payload)["error"]["message"] == (
+        f"{APP}: the API couldn't be reached"
+    )
 
 
 def test_the_gateway_listens_on_loopback_only(gateway):
@@ -546,7 +592,10 @@ def test_an_api_reset_mid_stream_ends_the_stream_with_an_error():
     assert response.status == 200
     assert events(payload)[-1] == {
         "type": "error",
-        "error": {"type": "api_error", "message": "the API connection was lost"},
+        "error": {
+            "type": "api_error",
+            "message": f"{APP}: the API connection was lost",
+        },
     }
 
 
@@ -575,16 +624,285 @@ def test_a_failure_while_restoring_a_whole_reply_is_a_clean_500(
     api.replies.append((200, "application/json", [json.dumps(message).encode()]))
     response, payload = call(gateway, body={**REQUEST, "stream": False})
     assert response.status == 500
-    assert json.loads(payload)["error"]["message"] == "the gateway failed"
+    error = json.loads(payload)["error"]
+    assert error["message"].startswith(
+        f"{APP}: failed while restoring the reply (a bug), the masked request "
+        "reached the API."
+    )
+    # Final, so Claude Code doesn't run the model again.
+    assert error["details"] == {"error_code": "dlp_request_denied"}
+    assert response.getheader("x-should-retry") == "false"
 
 
-def test_only_refusals_ask_the_client_not_to_retry(api, gateway):
+def test_only_failures_on_the_way_are_left_to_the_clients_retries(api, gateway):
     refused, _ = call(gateway, body=REQUEST, headers={SECRET_HEADER: "wrong"})
     assert refused.getheader("x-should-retry") == "false"
+    session = gateway.sessions.get("session-1")
+    real_mask = session.masker.mask
+    session.masker.mask = lambda body, **_: 1 / 0
+    bug, _ = call(gateway, body=REQUEST)
+    assert (bug.status, bug.getheader("x-should-retry")) == (500, "false")
+    session.masker.mask = real_mask
     gateway.upstream = "127.0.0.1:9"
     unreachable, _ = call(gateway, body=REQUEST)
     assert unreachable.status == 502
     assert unreachable.getheader("x-should-retry") is None
+
+
+def test_nodes_fetch_is_let_in(api, gateway):
+    # Node's fetch (undici) sends Sec-Fetch-Mode alone; a browser never does.
+    api.replies.append(text_reply("ok"))
+    response, _ = call(
+        gateway,
+        body=REQUEST,
+        headers={"Sec-Fetch-Mode": "cors", "Accept-Language": "*"},
+    )
+    assert response.status == 200
+    assert len(api.received) == 1
+
+
+@pytest.mark.parametrize(
+    ("agent", "kept"),
+    [
+        ("claude-cli/2.1.283 (external, cli)", True),  # the client's own version
+        ("claude-cli/2.1.300 (external, cli)", False),  # not its version
+        (None, True),  # no version to check: kept where Claude Code puts it
+    ],
+)
+def test_the_billing_line_keeps_the_clients_own_version(api, gateway, agent, kept):
+    prompt = REQUEST["messages"][0]["content"]
+    billing = gateway_bodies.billing(prompt).split(" cch=")[0]
+    body = {**REQUEST, "system": [{"type": "text", "text": f"{billing} to {EMAIL}"}]}
+    api.replies.append(text_reply("ok"))
+    call(gateway, body=body, headers={"User-Agent": agent})
+    sent = json.loads(api.received[-1][3])
+    text = sent["system"][0]["text"]
+    assert EMAIL not in text
+    if kept:
+        # The hash is made again from the prompt as the API gets it.
+        masked_prompt = sent["messages"][0]["content"]
+        new_hash = gateway_bodies.fingerprint(masked_prompt)
+        assert text == (
+            f"x-anthropic-billing-header: cc_version=2.1.283.{new_hash}; "
+            "cc_entrypoint=cli; to [EMAIL_1]"
+        )
+    else:
+        assert text == f"{billing} to [EMAIL_1]"  # masked like any text
+
+
+UNMASKABLE = {
+    **REQUEST,
+    "brand_new_field": {"type": NAME},
+    "messages": [
+        {"role": "user", "content": "hi"},
+        {"role": "user", "content": [USER_THINKING]},
+        {"role": "user", "content": [USER_THINKING]},
+    ],
+}
+
+
+class TestRefusals:
+    def test_a_refusal_names_the_app_every_problem_and_what_to_do(self, api, gateway):
+        agent = "claude-cli/2.1.290 (external, cli)"
+        response, payload = call(
+            gateway, body=UNMASKABLE, headers={"User-Agent": agent}
+        )
+        assert response.status == 400
+        assert response.getheader("x-should-retry") == "false"
+        error = json.loads(payload)["error"]
+        assert error["type"] == "policy_blocked"
+        assert error["details"] == {"error_code": "dlp_request_denied"}
+        message = error["message"]
+        assert message.startswith(
+            f"{APP}: can't mask this request, so nothing was sent."
+        )
+        assert f"This is Claude Code 2.1.290, and {APP} " in message
+        assert f"was tested with {TESTED_CLAUDE_CODE}: update {APP}." in message
+        # Not everything is in the conversation, so /rewind won't help.
+        assert "/rewind won't help" in message
+        assert "brand_new_field.type (a type that may hold personal data)" in message
+        assert (
+            "messages[1].content[0].type (only the model's own messages have "
+            "thinking) 2 times" in message
+        )
+        assert "\n" not in message
+        assert api.received == []
+
+    def test_a_problem_in_the_conversation_suggests_rewind(self, api, gateway):
+        body = {**UNMASKABLE}
+        del body["brand_new_field"]
+        _, payload = call(gateway, body=body)
+        message = json.loads(payload)["error"]["message"]
+        assert "/rewind to before the prompt that brought it in" in message
+
+    def test_the_client_version_can_come_from_the_billing_line(self, api, gateway):
+        body = {
+            **UNMASKABLE,
+            "system": [
+                {
+                    "type": "text",
+                    "text": "x-anthropic-billing-header: cc_version=2.0.1.a1b; "
+                    "cc_entrypoint=cli;",
+                }
+            ],
+        }
+        _, payload = call(gateway, body=body, headers={"User-Agent": "curl/8"})
+        message = json.loads(payload)["error"]["message"]
+        assert "This is Claude Code 2.0.1" in message
+        assert "update Claude Code, or" in message
+
+    def test_a_refusal_never_quotes_a_value(self, api, gateway):
+        body = {
+            **REQUEST,
+            EMAIL: 1,
+            "messages": [
+                {"role": NAME, "content": "x"},
+                {"role": "user", "content": [{"type": EMAIL}, {"type": NAME}]},
+            ],
+        }
+        agent = f"claude-cli/2.1.290 (external, cli, client-app/{EMAIL})"
+        _, payload = call(gateway, body=body, headers={"User-Agent": agent})
+        assert EMAIL.encode() not in payload
+        assert NAME.encode() not in payload
+        message = json.loads(payload)["error"]["message"]
+        assert "<key> (a field name that may hold personal data)" in message
+        assert "messages[0].role (unknown role)" in message
+
+    def test_a_registered_value_shaped_like_a_name_is_not_named(self, api):
+        def shield_with_handle(session_id):
+            shield = make_shield(session_id)
+            shield.add_entity("ada_quill", "USER")
+            return shield
+
+        body = {**REQUEST, "ada_quill": 1}
+        with Gateway(
+            Sessions(shield_with_handle), upstream=api.host, secure=False
+        ) as gw:
+            _, payload = call(gw, body=body)
+        assert b"ada_quill" not in payload
+        message = json.loads(payload)["error"]["message"]
+        assert "<key> (a field name that may hold personal data)" in message
+
+    def test_a_masker_bug_is_final_and_names_no_value(self, api, gateway):
+        session = gateway.sessions.get("session-1")
+
+        def explode(_body, **_):
+            raise RuntimeError(f"boom {EMAIL}")
+
+        session.masker.mask = explode
+        response, payload = call(gateway, body=REQUEST)
+        assert response.status == 500
+        assert response.getheader("x-should-retry") == "false"
+        error = json.loads(payload)["error"]
+        assert error["message"].startswith(
+            f"{APP}: failed while masking (a bug), so nothing was sent."
+        )
+        assert error["details"] == {"error_code": "dlp_request_denied"}
+        assert EMAIL.encode() not in payload
+        assert api.received == []
+
+    def test_a_busy_data_folder_is_left_to_retries(self, api, gateway):
+        import sqlite3
+
+        session = gateway.sessions.get("session-1")
+
+        def locked(_body, **_):
+            raise sqlite3.OperationalError("database is locked")
+
+        session.masker.mask = locked
+        response, payload = call(gateway, body=REQUEST)
+        assert response.status == 500
+        assert response.getheader("x-should-retry") is None
+        assert "details" not in json.loads(payload)["error"]
+        assert api.received == []
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            b'{"messages": [], "max_tokens": NaN}',
+            b'{"messages": [], "x": -Infinity}',
+            b'{"messages": [], "max_tokens": 1e400}',
+            b'{"messages": [], "temperature": -1e999}',
+            b"[" * 100_000 + b"]" * 100_000,
+        ],
+    )
+    def test_a_body_that_cant_be_read_is_refused(self, api, gateway, body):
+        response, payload = call(gateway, body=body)
+        assert response.status == 400
+        assert json.loads(payload)["error"]["details"] == {
+            "error_code": "dlp_request_denied"
+        }
+        assert api.received == []
+
+    def test_a_deeply_nested_value_is_refused(self, api, gateway):
+        deep = {}
+        for _ in range(200):
+            deep = {"a": deep}
+        body = {
+            **REQUEST,
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "tool_use", "id": "t", "name": "n", "input": deep}
+                    ],
+                }
+            ],
+        }
+        response, payload = call(gateway, body=body)
+        assert response.status == 400
+        message = json.loads(payload)["error"]["message"]
+        # Named where it is, so the advice is to /rewind past it.
+        assert "messages[0] (nested too deeply)" in message
+        assert "/rewind to before the prompt" in message
+        assert api.received == []
+
+    def test_refusals_are_counted_once_per_request(self, api, gateway):
+        call(gateway, body=UNMASKABLE)
+        call(gateway, body=UNMASKABLE)  # sent again: the same request
+        body = {**REQUEST, "other_field": {"type": NAME}}
+        call(gateway, body=body, headers={"User-Agent": "claude-cli/2.1.290 (x)"})
+        assert gateway.refusals.requests == 2
+        lines = gateway.refusals.summary()
+        assert lines[0] == (
+            f"{APP}: 2 requests couldn't be masked, so they weren't sent. Not handled:"
+        )
+        assert "  brand_new_field.type (a type that may hold personal data)" in lines
+        assert "  other_field.type (a type that may hold personal data)" in lines
+        assert lines[-1].startswith(f"{APP}: This is Claude Code 2.1.290")
+
+    def test_nothing_refused_means_no_summary(self, gateway):
+        assert gateway.refusals.summary() == []
+
+    def test_a_refusal_the_client_gets_past_isnt_counted(self, api, gateway):
+        effort = {"role": "user", "content": "x", "output_config": {"effort": "high"}}
+        response, _ = call(gateway, body={**REQUEST, "messages": [effort]})
+        assert response.status == 400
+        assert gateway.refusals.summary() == []
+
+    @pytest.mark.parametrize("handle", ["con", "sage", "mess", "ten"])
+    def test_a_short_registered_value_doesnt_hide_the_gateways_words(self, api, handle):
+        # A git user.name like these is registered by default; it sits inside
+        # words like output_config and messages, which must still be shown.
+        def shield_with_handle(session_id):
+            shield = make_shield(session_id)
+            shield.add_entity(handle, "PERSON")
+            return shield
+
+        effort = {"role": "user", "content": "x", "output_config": {"effort": "high"}}
+        future = {"role": "user", "content": [USER_THINKING]}
+        with Gateway(
+            Sessions(shield_with_handle), upstream=api.host, secure=False
+        ) as gw:
+            droppable, payload = call(gw, body={**REQUEST, "messages": [effort]})
+            error = json.loads(payload)["error"]
+            assert error["type"] == "invalid_request_error"
+            assert "messages[0].output_config" in error["message"]
+            _, payload = call(gw, body={**REQUEST, "messages": [future]})
+            message = json.loads(payload)["error"]["message"]
+            assert "messages[0].content[0].type" in message
+            assert "/rewind to before the prompt" in message
+        assert droppable.status == 400
 
 
 @pytest.mark.parametrize(
@@ -634,3 +952,54 @@ class TestSessions:
             sessions.get("c")
             assert busy.shield.vault not in closed
         assert busy.users == 0
+
+
+def test_a_json_reply_is_restored_as_json(api):
+    # A title request asks for JSON; a name with a quote in it stays JSON.
+    odd = 'Ada "Q" Quill'
+
+    def shield_with_odd(session_id):
+        shield = make_shield(session_id)
+        shield.add_entity(odd, "PERSON")
+        return shield
+
+    body = {
+        **REQUEST,
+        "messages": [{"role": "user", "content": f"Title for {odd}"}],
+        "output_config": {"format": {"type": "json_schema", "schema": {}}},
+    }
+    with Gateway(Sessions(shield_with_odd), upstream=api.host, secure=False) as gw:
+        api.replies.append(text_reply('{"title": "Notes for ', '[PERSON_1]"}'))
+        _, payload = call(gw, body=body)
+    text = "".join(
+        e["delta"]["text"]
+        for e in events(payload)
+        if e["type"] == "content_block_delta"
+    )
+    assert json.loads(text) == {"title": f"Notes for {odd}"}
+
+
+def test_a_failure_of_the_gateway_mid_stream_is_final(api, gateway):
+    tool_start = sse(
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "tool_use", "id": "t", "name": "n", "input": {}},
+        }
+    )
+    part = sse(
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "input_text_delta", "text": "echo [PERSON_1]"},
+        }
+    )
+    api.replies.append(
+        stream_reply(tool_start, part, sse({"type": "content_block_stop", "index": 0}))
+    )
+    _, payload = call(gateway, body=REQUEST)
+    error = events(payload)[-1]["error"]
+    # Final: Claude Code shows why and doesn't run the model again.
+    assert error["type"] == "policy_blocked"
+    assert error["details"] == {"error_code": "dlp_request_denied"}
+    assert NAME.encode() not in payload

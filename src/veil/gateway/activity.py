@@ -99,6 +99,17 @@ class ObservedLedger:
         """Look up replay input through the original ledger."""
         return self.ledger.masked_tool_input(tool_use_id, restored)
 
+    def record_seen(self, value: Any) -> None:
+        """Preserve optional tracking of unchanged provider blocks."""
+        record = getattr(self.ledger, "record_seen", None)
+        if record is not None:
+            record(value)
+
+    def was_seen(self, value: Any) -> bool:
+        """Look up provider blocks without observing their contents."""
+        lookup = getattr(self.ledger, "was_seen", None)
+        return bool(lookup is not None and lookup(value))
+
 
 class Activity:
     """Track at most 128 recent sessions and 64 ten-minute, one-use probes."""

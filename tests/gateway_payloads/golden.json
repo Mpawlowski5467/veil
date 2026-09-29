@@ -1,0 +1,2714 @@
+{
+ "auto_mode/name": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file path and pattern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "safeguards": [
+    {
+     "classifier_context": {
+      "artifact_consent_holdback": false,
+      "case_insensitive_paths": true,
+      "classify_all_shell": false,
+      "git_state": {
+       "branch": null,
+       "cwd": "/work",
+       "error": "not a git repository",
+       "visibility": {
+        "origin": null,
+        "remotes": []
+       }
+      },
+      "home_dir": "/Users/example",
+      "is_remote_mode": false,
+      "live_cwd": "/work",
+      "permission_mode": "auto",
+      "platform": "darwin",
+      "prior_turn_context": [
+       {
+        "context": {
+         "live_cwd": "/work",
+         "platform": "darwin"
+        },
+        "tool_use_ids": [
+         "toolu_01FixtureBash00000000000"
+        ]
+       }
+      ],
+      "restricted": false,
+      "rule_roots": {
+       "userSettings": "/Users/example/.claude"
+      },
+      "rules": {
+       "allow": [
+        "Bash(git:*)"
+       ],
+       "ask": [],
+       "deny": []
+      },
+      "trusted_directories": {
+       "additional": [],
+       "block_reads_outside_working_directories": false,
+       "network": [],
+       "primary": {
+        "path": "/work",
+        "resolved": [
+         "/work"
+        ]
+       }
+      },
+      "user_identity": "[EMAIL_1]",
+      "v": 1
+     },
+     "type": "dangerous_tool_use"
+    }
+   ],
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "auto_mode/short": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file [USER_1]h and [USER_1]tern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "safeguards": [
+    {
+     "classifier_context": {
+      "artifact_consent_holdback": false,
+      "case_insensitive_paths": true,
+      "classify_all_shell": false,
+      "git_state": {
+       "branch": null,
+       "cwd": "/work",
+       "error": "not a git repository",
+       "visibility": {
+        "origin": null,
+        "remotes": []
+       }
+      },
+      "home_dir": "/Users/example",
+      "is_remote_mode": false,
+      "live_cwd": "/work",
+      "permission_mode": "auto",
+      "platform": "darwin",
+      "prior_turn_context": [
+       {
+        "context": {
+         "live_cwd": "/work",
+         "platform": "darwin"
+        },
+        "tool_use_ids": [
+         "toolu_01FixtureBash00000000000"
+        ]
+       }
+      ],
+      "restricted": false,
+      "rule_roots": {
+       "userSettings": "/Users/example/.claude"
+      },
+      "rules": {
+       "allow": [
+        "Bash(git:*)"
+       ],
+       "ask": [],
+       "deny": []
+      },
+      "trusted_directories": {
+       "additional": [],
+       "block_reads_outside_working_directories": false,
+       "network": [],
+       "primary": {
+        "path": "/work",
+        "resolved": [
+         "/work"
+        ]
+       }
+      },
+      "user_identity": "[EMAIL_1]",
+      "v": 1
+     },
+     "type": "dangerous_tool_use"
+    }
+   ],
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "haiku_print/name": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file path and pattern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "haiku_print/short": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file [USER_1]h and [USER_1]tern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "opus_print/name": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "text": "Effort for this turn.",
+       "type": "text"
+      }
+     ],
+     "output_config": {
+      "effort": "medium"
+     },
+     "role": "system"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file path and pattern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-opus-5-5",
+   "output_config": {
+    "effort": "medium"
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "type": "adaptive"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "opus_print/short": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "text": "Effort for this turn.",
+       "type": "text"
+      }
+     ],
+     "output_config": {
+      "effort": "medium"
+     },
+     "role": "system"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file [USER_1]h and [USER_1]tern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-opus-5-5",
+   "output_config": {
+    "effort": "medium"
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "type": "adaptive"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "sonnet_interactive/name": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file path and pattern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-sonnet-5",
+   "output_config": {
+    "effort": "high"
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "temperature": 1,
+   "thinking": {
+    "display": "omitted",
+    "type": "adaptive"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "sonnet_interactive/short": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_1]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_2] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_2]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_2]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file [USER_1]h and [USER_1]tern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_2] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-sonnet-5",
+   "output_config": {
+    "effort": "high"
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_1].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "temperature": 1,
+   "thinking": {
+    "display": "omitted",
+    "type": "adaptive"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Executes a bash command. Use the timeout parameter.",
+     "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "type": "string"
+       },
+       "dangerouslyDisableSandbox": {
+        "type": "boolean"
+       },
+       "description": {
+        "type": "string"
+       },
+       "run_in_background": {
+        "type": "boolean"
+       },
+       "timeout": {
+        "maximum": 600000,
+        "type": "number"
+       }
+      },
+      "required": [
+       "command"
+      ],
+      "type": "object"
+     },
+     "name": "Bash"
+    },
+    {
+     "description": "Searches file contents with a regular expression.",
+     "input_schema": {
+      "properties": {
+       "-A": {
+        "type": "number"
+       },
+       "output_mode": {
+        "enum": [
+         "content",
+         "files_with_matches",
+         "count"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "pattern": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "pattern"
+      ],
+      "type": "object"
+     },
+     "name": "Grep"
+    },
+    {
+     "description": "Finds a contact, e.g. ada.q@example.com.",
+     "input_schema": {
+      "properties": {
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "type": "object"
+     },
+     "name": "mcp__contacts__find_contact"
+    },
+    {
+     "max_uses": 8,
+     "name": "web_search",
+     "type": "web_search_20250305"
+    }
+   ]
+  }
+ },
+ "structured_output/name": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_2]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_3] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_3]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_3]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file path and pattern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_3] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_2].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tool_choice": {
+    "name": "StructuredOutput",
+    "type": "tool"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Use this tool to return your final response.",
+     "input_schema": {
+      "properties": {
+       "email": {
+        "description": "The contact email, for example [EMAIL_1]",
+        "type": "string"
+       }
+      },
+      "required": [
+       "email"
+      ],
+      "type": "object"
+     },
+     "name": "StructuredOutput"
+    }
+   ]
+  }
+ },
+ "structured_output/short": {
+  "masked": {
+   "context_management": {
+    "edits": [
+     {
+      "keep": "all",
+      "type": "clear_thinking_20251015"
+     }
+    ]
+   },
+   "max_tokens": 32000,
+   "messages": [
+    {
+     "content": [
+      {
+       "text": "<system-reminder>[EMAIL_2]</system-reminder>",
+       "type": "text"
+      },
+      {
+       "cache_control": {
+        "type": "ephemeral"
+       },
+       "text": "My name is [PERSON_1]; mail [EMAIL_3] or call [PHONE_1].",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "signature": "EqQBCkgIBxABGAIqQJ1fixtureSignature==",
+       "thinking": "I should read the notes of [PERSON_1].",
+       "type": "thinking"
+      },
+      {
+       "text": "I'll read the notes for [PERSON_1].",
+       "type": "text"
+      },
+      {
+       "caller": {
+        "type": "direct"
+       },
+       "id": "toolu_01FixtureRead00000000000",
+       "input": {
+        "file_path": "/work/notes.txt",
+        "limit": 2000
+       },
+       "name": "Read",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": "Name: [PERSON_1]\nEmail: [EMAIL_3]\nPhone: [PHONE_1]\n",
+       "tool_use_id": "toolu_01FixtureRead00000000000",
+       "type": "tool_result"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": [
+      {
+       "data": "RWRhY3RlZEZpeHR1cmU=",
+       "type": "redacted_thinking"
+      },
+      {
+       "id": "toolu_01FixtureBash00000000000",
+       "input": {
+        "command": "cat notes.txt; exit 1",
+        "description": "Show the notes",
+        "timeout": 120000
+       },
+       "name": "Bash",
+       "type": "tool_use"
+      }
+     ],
+     "role": "assistant"
+    },
+    {
+     "content": [
+      {
+       "content": [
+        {
+         "text": "Exit code 1\n[PERSON_1], [EMAIL_3]",
+         "type": "text"
+        },
+        {
+         "source": {
+          "data": "iVBORw0KGgo=",
+          "media_type": "image/png",
+          "type": "base64"
+         },
+         "type": "image"
+        }
+       ],
+       "is_error": true,
+       "tool_use_id": "toolu_01FixtureBash00000000000",
+       "type": "tool_result"
+      },
+      {
+       "text": "Now summarize the file [USER_1]h and [USER_1]tern.",
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    },
+    {
+     "content": "Reminder: [EMAIL_3] is the contact.",
+     "role": "system"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.ce0; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "ttl": "1h",
+      "type": "ephemeral"
+     },
+     "text": "You are Claude Code. Write each placeholder exactly.",
+     "type": "text"
+    },
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text": "Working directory: /work\nThe user is [EMAIL_2].",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ],
+   "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+   },
+   "tool_choice": {
+    "name": "StructuredOutput",
+    "type": "tool"
+   },
+   "tools": [
+    {
+     "description": "Reads a file from the local filesystem.",
+     "input_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+       "file_path": {
+        "description": "The absolute path to the file to read",
+        "type": "string"
+       },
+       "limit": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+       },
+       "offset": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_path"
+      ],
+      "type": "object"
+     },
+     "name": "Read"
+    },
+    {
+     "description": "Use this tool to return your final response.",
+     "input_schema": {
+      "properties": {
+       "email": {
+        "description": "The contact email, for example [EMAIL_1]",
+        "type": "string"
+       }
+      },
+      "required": [
+       "email"
+      ],
+      "type": "object"
+     },
+     "name": "StructuredOutput"
+    }
+   ]
+  }
+ },
+ "title_generation/name": {
+  "masked": {
+   "max_tokens": 512,
+   "messages": [
+    {
+     "content": "Help [PERSON_1] fix the build ([EMAIL_1]).",
+     "role": "user"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "output_config": {
+    "format": {
+     "schema": {
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "title"
+      ],
+      "type": "object"
+     },
+     "type": "json_schema"
+    }
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.4ac; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "text": "Generate a short title for this session.",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ]
+  }
+ },
+ "title_generation/short": {
+  "masked": {
+   "max_tokens": 512,
+   "messages": [
+    {
+     "content": "Help [PERSON_1] fix the build ([EMAIL_1]).",
+     "role": "user"
+    }
+   ],
+   "metadata": {
+    "user_id": "{\"device_id\": \"d3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33fd3adb33f\", \"account_uuid\": \"11111111-2222-4333-8444-555555555555\", \"session_id\": \"66666666-7777-4888-9999-000000000000\"}"
+   },
+   "model": "claude-haiku-4-5-20251001",
+   "output_config": {
+    "format": {
+     "schema": {
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "title"
+      ],
+      "type": "object"
+     },
+     "type": "json_schema"
+    }
+   },
+   "stream": true,
+   "system": [
+    {
+     "text": "x-anthropic-billing-header: cc_version=2.1.283.4ac; cc_entrypoint=cli; cch=00000; cc_prompt_id=0f3c1a2b-1111-4222-8333-444455556666;",
+     "type": "text"
+    },
+    {
+     "text": "Generate a short title for this session.",
+     "type": "text"
+    },
+    {
+     "text": "Personal data in this conversation has been replaced with placeholders: a type and a number in square brackets, in the form [TYPE_N]. The real values are put back on the user's computer, including in tool calls, so write each placeholder exactly as it appears and never guess the value behind it. [LITERAL_n] stands for text that itself looks like a placeholder: copy it unchanged.",
+     "type": "text"
+    }
+   ]
+  }
+ }
+}
