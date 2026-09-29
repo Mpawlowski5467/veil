@@ -37,10 +37,15 @@ apps. Automatic interception of ordinary ChatGPT chats is outside this scope.
 **Exit:** a new user completes setup, recognizes a stopped or mismatched gateway,
 and undoes setup without manually editing TOML or losing unrelated settings.
 
-## 2. Everyday operation and visible evidence — next
+## 2. Everyday operation and visible evidence — in progress
 
-- [ ] Manage a background gateway with explicit start, stop, restart, and removal.
-  Define startup, port-conflict, crash, and upgrade behavior on each supported OS.
+- [x] Manage a detached gateway on macOS/Linux with `start`, `stop`, `restart`,
+  and `stop --remove`. Check startup, preserve client settings/mappings, refuse
+  occupied ports, and recover from stale state without signalling saved PIDs.
+  See [operation, crash recovery, and upgrades](docs/background-gateway.md).
+- [ ] Add automatic login/reboot startup and supervised crash recovery after
+  defining installation/removal behavior for each OS. Windows background
+  management remains unsupported; the foreground gateway remains available.
 - [ ] Provide an opt-in verification request that proves a fresh client task
   reached Veil, instead of inferring that from saved configuration.
 - [ ] Show recent request activity and counts by entity type. Avoid original

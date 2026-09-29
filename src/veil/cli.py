@@ -416,6 +416,28 @@ def _parser() -> argparse.ArgumentParser:
         "args", nargs=argparse.REMAINDER, help="Codex arguments after --"
     )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
+    for operation in ("start", "stop", "restart"):
+        service = commands.add_parser(
+            operation, help=f"{operation} a background gateway"
+        )
+        service.add_argument(
+            "--config", type=Path, help="Codex setup configuration path"
+        )
+        if operation == "stop":
+            service.add_argument(
+                "--remove",
+                action="store_true",
+                help="also remove saved service options",
+            )
+        else:
+            service.add_argument(
+                "--port", type=int, help="gateway port (saved setup or 8485)"
+            )
+            service.add_argument("--api", choices=("anthropic", "openai"))
+            service.add_argument("--auth", choices=("api-key", "chatgpt"))
+            service.add_argument(
+                "--cwd", type=Path, help="folder for git identity (saved on restart)"
+            )
     for operation in ("setup", "undo"):
         configuration = commands.add_parser(
             operation, help=f"{operation} a backed-up Codex desktop configuration"
@@ -435,6 +457,12 @@ def _parser() -> argparse.ArgumentParser:
         diagnostics.add_argument(
             "--json", action="store_true", help="machine-readable report"
         )
+        if operation == "status":
+            diagnostics.add_argument(
+                "--service",
+                action="store_true",
+                help="check the background worker only",
+            )
     for operation in ("mask", "restore"):
         text_command = commands.add_parser(
             operation, help=f"{operation} local text for a chat"
@@ -485,6 +513,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command in {"start", "stop", "restart"}:
+            from .service import run_service
+
+            return run_service(
+                options.command,
+                data_dir=options.data_dir,
+                config=options.config,
+                port=getattr(options, "port", None),
+                api=getattr(options, "api", None),
+                auth=getattr(options, "auth", None),
+                cwd=getattr(options, "cwd", None),
+                remove=getattr(options, "remove", False),
+            )
         if options.command in {"setup", "undo"}:
             from .codex_setup import config_path, setup_codex, undo_codex
 
@@ -493,6 +534,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return undo_codex(target)
             return setup_codex(data_dir, target, options.port, options.auth)
         if options.command in {"status", "doctor"}:
+            if getattr(options, "service", False):
+                from .service import run_service_status
+
+                return run_service_status(
+                    options.data_dir, options.config, options.json
+                )
             from .diagnostics import run_diagnostics
 
             return run_diagnostics(
@@ -534,10 +581,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{APP}: {error}", file=sys.stderr)
         return 2
     except OSError:
-        if options.command not in {"setup", "undo", "status", "doctor"}:
+        if options.command not in {
+            "setup",
+            "undo",
+            "status",
+            "doctor",
+            "start",
+            "stop",
+            "restart",
+        }:
             raise
         print(
-            f"{APP}: could not access setup/diagnostic files; check permissions "
+            f"{APP}: could not access setup, service, or diagnostic files; "
+            "check permissions "
             "and available disk space. Preserve any existing backup and receipt.",
             file=sys.stderr,
         )

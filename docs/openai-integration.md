@@ -60,14 +60,22 @@ your login, or modify detector registrations. A selected Codex profile is
 refused because it could override the saved route. Repeated setup preserves
 the original backup. Change an existing managed setup by undoing it first.
 
-Start the gateway with the command printed by setup, keep it running, restart
-Codex, and start a new local task. Then check readiness in another terminal:
+Start the background gateway with the command printed by setup (`veil start`
+on macOS/Linux), restart Codex, and start a new local task. Then check readiness:
 
 ```bash
 veil status
 veil doctor
 veil doctor --json
+veil status --service
 ```
+
+Use `veil stop` and `veil restart` to control the background worker. It stays
+running after the terminal closes; login/reboot startup and supervised crash
+restart are not installed. Lifecycle state now appears in status/doctor, without
+implying active task coverage. See [background controls and recovery](background-gateway.md)
+for port conflicts, explicit data folders, upgrades, and removal. On Windows,
+continue using the foreground gateway shown below.
 
 Status checks saved provider/feature settings, the gateway's cryptographic
 identity proof, and authenticated API/auth-mode metadata. It probes only
