@@ -2,6 +2,17 @@
 
 ## 0.5.0
 
+### Added
+
+- `veil setup codex` and `veil undo codex` for private backups, comment-preserving configuration edits, and conflict-aware rollback. `veil status` and `veil doctor` check local readiness without model calls or private-value logging; `--json` provides structured results. The optional `desktop` extra supplies the TOML editor while the base library stays dependency-free.
+- Authenticated loopback gateway status metadata reports API/auth mode without conversation data. Readiness explicitly does not prove active task coverage.
+- A [roadmap to 1.0](ROADMAP.md) with scoped milestones, acceptance criteria, and later features.
+- Experimental OpenAI Responses gateway, `veil codex` launcher, and manual desktop configuration. Supports API-key authentication and Codex's existing ChatGPT login. Masks supported text, restores JSON and streamed replies, and preserves masked history. Unknown request shapes, media, hosted tools, stored conversation references, and remote compaction are refused. Returned tool inputs containing known private values are blocked except direct local patches. See [setup and limits](docs/openai-integration.md).
+- `veil mask` and `veil restore` for explicit chat workflows, with persistent session labels, stdin/stdout, and optional clipboard access. Warnings prevent output and clipboard replacement.
+- Opt-in local and live tests for Codex CLI and the desktop app's isolated app-server runtime. ChatGPT-authenticated live checks passed; live API-key validation remains pending.
+- `uv run python -m tests.live.census` checks what a new Claude Code sends: it runs Claude Code through the gateway on four models (`-p` with a subagent, `/compact`, an interactive session under GNU screen, and on Haiku `--json-schema`, MCP with tool search, an image and a PDF, web search and fetch, auto mode, and a check that Claude Code takes a refusal as final). It reports what is new against the census in `tests/gateway_payloads/` and every failure: a refusal, a real value in what left, a reply key the gateway dropped. With `--update`, a clean run refreshes the census and the protocol words, and moves the tested version forward. See Development in the README.
+- `RequestMasker.last_generic` lists where the last request had content masked generically; `UnsupportedRequestError.problems` lists every problem of a refused request.
+
 ### Changed
 
 - **A Claude Code update no longer breaks `veil claude` by adding something.** Content the gateway has no rule of its own for (a new field, block type, key on a known block, or setting) is masked like any text instead of refused. Only what masking can't reach is refused: a key, a type value or a number that holds personal data, file bytes, and opaque data (signatures, encrypted values) the API didn't send. Tests place fictional values in every such place, carried every way a value can be (as text, a key, a type, an id, a name, a number, file bytes, base64, a data URI), and each is masked, refused, or dropped with its signed thinking block: never sent as it is.
@@ -20,15 +31,13 @@
 
 ### Fixed
 
+- **The gateway masks keys and `type` values in tool inputs and safeguards.** A past tool call's input (when the gateway had no record of it) and Claude Code's `safeguards` were masked in their values only: keys went out as they were, and so did every value under a key named `type`, at any depth. A tool input such as `{"type": "jane.doe@example.com"}` or `{"jane.doe@example.com": 1}` (an MCP tool with a `type` parameter, or an object keyed by names or emails) left the machine unmasked, and so did a safeguard `{"type": "Jan Nowak 555-123-4567"}`. Now every key and every string in them is masked; a key or a type that holds no data (a protocol word such as `dangerous_tool_use`) goes on as it is. `/v1/messages/count_tokens` requests are masked the same way.
+  - A tool call's input the gateway restored still goes back to the model exactly as the model wrote it, so history and prompt caching don't change. A known value in one of its keys (from before it was masked) is now masked, as one in its values already was.
+  - Placeholders in the keys of a reply's tool call are restored like its values (exact placeholders only), so a key the model saw masked reaches the tool as the real value. The hook still checks keys for real values before an MCP tool gets them.
+  - Two keys of one object that would mask, or restore, to the same text can't both be kept. Rather than merge them, the gateway refuses such a request (the refusal names where, with keys as masked), and ends a reply with such a tool call, saying so. In practice this takes a model writing a real value next to its placeholder, or a `RequestMasker` whose shield has no `LiteralPlaceholderDetector`.
 - Requests that crashed the masker (a role or source type that isn't a string, JSON nested more than 100 levels, `NaN`, `Infinity` or a number too large for a float, a tool id the API couldn't have made) are refused by name, where they failed with a 500 that Claude Code retried.
-- A tool call's input kept its keys and `type` values unmasked; they are masked now, and restored in the reply.
 - A JSON reply sent back when its record couldn't be written to the ledger could leak a value with a quote, a backslash or a line break in it: masked afresh, its escaped spelling wasn't recognised. Known values are found as they are spelled inside a JSON string too.
 - A signed thinking block's `cache_control` went out as it came, even with content of its own.
-
-### Added
-
-- `uv run python -m tests.live.census` checks what a new Claude Code sends: it runs Claude Code through the gateway on four models (`-p` with a subagent, `/compact`, an interactive session under GNU screen, and on Haiku `--json-schema`, MCP with tool search, an image and a PDF, web search and fetch, auto mode, and a check that Claude Code takes a refusal as final). It reports what is new against the census in `tests/gateway_payloads/` and every failure: a refusal, a real value in what left, a reply key the gateway dropped. With `--update`, a clean run refreshes the census and the protocol words, and moves the tested version forward. See Development in the README.
-- `RequestMasker.last_generic` lists where the last request had content masked generically; `UnsupportedRequestError.problems` lists every problem of a refused request.
 
 ## 0.4.1
 

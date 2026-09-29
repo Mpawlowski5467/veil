@@ -29,6 +29,7 @@ class FakeAPI:
     def __init__(self):
         self.received = []
         self.replies = []
+        self.routes = {}
         api = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -42,7 +43,9 @@ class FakeAPI:
                 body = self.rfile.read(length) if length else b""
                 api.received.append((self.command, self.path, dict(self.headers), body))
                 status, content_type, parts = (
-                    api.replies.pop(0)
+                    api.routes[self.path.split("?", 1)[0]]
+                    if self.path.split("?", 1)[0] in api.routes
+                    else api.replies.pop(0)
                     if api.replies
                     else (200, "application/json", [b"{}"])
                 )

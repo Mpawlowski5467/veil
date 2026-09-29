@@ -14,6 +14,7 @@ from veil.gateway import (
     MemoryLedger,
     RequestMasker,
     UnsupportedRequestError,
+    restore_message,
 )
 from veil.gateway.ledger import canonical
 
@@ -42,6 +43,15 @@ def make_masker(**kwargs):
     shield = make_shield()
     ledger = MemoryLedger()
     return RequestMasker(shield, ledger, **kwargs), shield, ledger
+
+
+def tool_use_body(tool_input):
+    block = {"type": "tool_use", "id": "toolu_7", "name": "Lookup", "input": tool_input}
+    return {"messages": [{"role": "assistant", "content": [block]}]}
+
+
+def masked_input(masker, tool_input):
+    return masker.mask(tool_use_body(tool_input))["messages"][0]["content"][0]["input"]
 
 
 def claude_code_body():
@@ -450,6 +460,82 @@ class TestGluedValues:
         )
 
 
+class TestKeysAndTypes:
+    """Tool inputs and safeguards are JSON: keys and ``type`` values are data too."""
+
+    def test_keys_and_type_values_in_a_tool_input_are_masked(self):
+        masker, _, _ = make_masker(note=None)
+        tool_input = {
+            "type": EMAIL,
+            "filter": {"type": f"{NAME} 555-123-4567", "limit": 5},
+            "rows": [{"type": "contact", ACCOUNT: True}],
+        }
+        masked = masked_input(masker, tool_input)
+        # Only the model's own tool call has a "type" the API reads; one
+        # inside its input is the tool's parameter.
+        assert masked == {
+            "type": "[EMAIL_1]",
+            "filter": {"type": "[PERSON_1] [PHONE_1]", "limit": 5},
+            "rows": [{"type": "contact", "[EMAIL_2]": True}],
+        }
+
+    def test_the_safeguards_type_is_the_only_value_kept(self):
+        masker, _, _ = make_masker(note=None)
+        safeguard = {
+            "type": "dangerous_tool_use",
+            "classifier_context": {
+                "user_identity": ACCOUNT,
+                "type": NAME,
+                "trusted": {EMAIL: {"path": "/Users/example"}},
+                "v": 1,
+            },
+        }
+        out = masker.mask({"safeguards": [safeguard]})["safeguards"]
+        assert out == [
+            {
+                "type": "dangerous_tool_use",
+                "classifier_context": {
+                    "user_identity": "[EMAIL_1]",
+                    "type": "[PERSON_1]",
+                    "trusted": {"[EMAIL_2]": {"path": "/Users/example"}},
+                    "v": 1,
+                },
+            }
+        ]
+
+    def test_keys_mask_the_same_way_in_every_request(self):
+        masker, _, _ = make_masker(note=None)
+        body = tool_use_body({NAME: {"type": EMAIL}})
+        first = json.dumps(masker.mask(body))
+        masker.mask({"messages": [{"role": "user", "content": "Call 555-123-4567"}]})
+        assert json.dumps(masker.mask(body)) == first
+        assert NAME not in first
+        assert EMAIL not in first
+
+    def test_keys_that_mask_alike_are_refused(self):
+        # A shield without LiteralPlaceholderDetector leaves a placeholder
+        # written by hand as it is, the same text a real value masks to.
+        shield = Shield(detectors=[RegexDetector()], vault=MemoryVault())
+        shield.add_entity(NAME, "PERSON")
+        masker = RequestMasker(shield, MemoryLedger(), note=None)
+        for tool_input, path in [
+            ({NAME: 1, "[PERSON_1]": 2}, "messages[0].content[0].input"),
+            (
+                {"to": [{NAME: 1, "[PERSON_1]": 2}]},
+                "messages[0].content[0].input.to[0]",
+            ),
+            # A key is named only as masked, and only if it looks like a field.
+            ({EMAIL: {NAME: 1, "[PERSON_1]": 2}}, "messages[0].content[0].input.<key>"),
+        ]:
+            with pytest.raises(UnsupportedRequestError) as info:
+                masker.mask(tool_use_body(tool_input))
+            assert str(info.value) == f"{path}: two keys mask to the same text"
+        guard = {"type": "dangerous_tool_use", NAME: 1, "[PERSON_1]": 2}
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask({"safeguards": [guard]})
+        assert str(info.value) == "safeguards[0]: two keys mask to the same text"
+
+
 class TestClearedVault:
     def test_a_forget_between_requests_starts_afresh(self):
         masker, shield, ledger = make_masker(note=None)
@@ -521,6 +607,59 @@ class TestLedger:
         changed = {"command": f"echo {NAME}!", "description": "Say hi"}
         remasked = masker.mask(body(changed))["messages"][0]["content"][0]["input"]
         assert remasked == {"command": "echo [PERSON_1]!", "description": "Say hi"}
+
+    def test_a_replayed_tool_input_goes_back_byte_for_byte(self):
+        masker, shield, ledger = make_masker(note=None)
+        shield.mask(f"{NAME} {EMAIL}")  # [PERSON_1], [EMAIL_1]
+        masked = {"type": "[EMAIL_1]", "[PERSON_1]": {"type": "contact"}, "limit": 5}
+        restored = {"type": EMAIL, NAME: {"type": "contact"}, "limit": 5}
+        ledger.record_tool_input("toolu_7", restored, masked)
+        reordered = {"limit": 5, NAME: {"type": "contact"}, "type": EMAIL}
+        for tool_input in (restored, reordered):
+            out = masked_input(masker, tool_input)
+            # The model's own bytes, key order included, for prompt caching.
+            assert json.dumps(out) == json.dumps(masked)
+
+    def test_a_known_value_in_a_replayed_key_is_masked(self):
+        masker, shield, ledger = make_masker(note=None)
+        shield.mask(NAME)  # [PERSON_1]
+        # The model wrote a real value it saw before it was masked.
+        written = {NAME: {"note": f"{NAME}em"}}
+        ledger.record_tool_input("toolu_7", written, written)
+        out = masked_input(masker, written)
+        assert out == {"[PERSON_1]": {"note": "[PERSON_1]em"}}
+
+    def test_replayed_keys_that_mask_alike_are_refused(self):
+        masker, shield, ledger = make_masker(note=None)
+        shield.mask(NAME)  # [PERSON_1]
+        written = {"to": {NAME: 1, "[PERSON_1]": 2}}
+        ledger.record_tool_input("toolu_7", written, written)
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(tool_use_body(written))
+        assert str(info.value) == (
+            "messages[0].content[0].input.to: two keys mask to the same text"
+        )
+
+    def test_a_masked_key_comes_back_as_the_model_wrote_it(self):
+        masker, shield, ledger = make_masker(note=None)
+        request = {"messages": [{"role": "user", "content": f"{NAME}: {EMAIL}"}]}
+        assert masker.mask(request)["messages"][0]["content"] == "[PERSON_1]: [EMAIL_1]"
+        # The model uses the placeholder as a key; the client gets the value.
+        written = {"[EMAIL_1]": {"type": "[PERSON_1]"}}
+        reply = {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_7",
+                    "name": "Lookup",
+                    "input": written,
+                }
+            ]
+        }
+        restored = restore_message(shield, ledger, reply)["content"][0]["input"]
+        assert restored == {EMAIL: {"type": NAME}}
+        # Sent back as history, it goes out as the model wrote it.
+        assert json.dumps(masked_input(masker, restored)) == json.dumps(written)
 
     def test_memory_ledger_keeps_no_restored_text(self):
         ledger = MemoryLedger()
@@ -760,6 +899,19 @@ class TestSpeed:
         assert info.value.path == "speed"
         assert NAME not in str(info.value)
         assert EMAIL not in str(info.value)
+
+
+def test_a_safeguards_type_holding_data_is_masked():
+    # Its own type too: one that holds data goes out masked, never as it is;
+    # one that holds none (dangerous_tool_use) as it is.
+    masker, _, _ = make_masker(registered={NAME: "PERSON"})
+    guards = [
+        {"type": f"{NAME} 555-123-4567", "classifier_context": {}},
+        {"type": "dangerous_tool_use", "classifier_context": {}},
+    ]
+    out = masker.mask({"messages": [], "safeguards": guards})["safeguards"]
+    assert out[0]["type"] == "[PERSON_1] [PHONE_1]"
+    assert out[1]["type"] == "dangerous_tool_use"
 
 
 BAD_BODIES = [
@@ -1023,6 +1175,7 @@ def test_every_recorded_field_and_block_type_has_a_rule():
     from pathlib import Path
 
     from veil.gateway import request
+    from veil.gateway.vocab import WORDS
 
     census_file = Path(__file__).parent / "gateway_payloads" / "request_census.json"
     census = json.loads(census_file.read_text())["POST /v1/messages"]
@@ -1061,6 +1214,8 @@ def test_every_recorded_field_and_block_type_has_a_rule():
         request._NESTED_BLOCKS | set(request._NESTED_API_BLOCKS)
     )
     assert types_at("$.system[].type") == {"text"}
+    # A safeguard's type is a protocol word (one holding data is masked).
+    assert types_at("$.safeguards[].type") <= WORDS
     assert types_at("$.messages[].content[].content[].source.type") <= {"base64", "url"}
     # A key of a block of Claude Code's own has a rule too (the API's blocks
     # are checked by their rules, and anything else in them masked).

@@ -1070,11 +1070,13 @@ class RequestMasker:
             for name, item in value.items():
                 masked = name if self._ident_ok(name) else self._text(name)
                 if masked in out:
+                    # Merging them would change the data; keeping one, lose some.
                     raise UnsupportedRequestError(
-                        f"{path}.<key>", "two keys that mask to the same text"
+                        path, "two keys mask to the same text"
                     )
+                # Paths name a key only as masked, so a refusal never quotes one.
                 out[masked] = self._data(
-                    item, f"{path}.{_key(name)}", name, opaque=opaque
+                    item, f"{path}.{_key(masked)}", name, opaque=opaque
                 )
             return out
         if isinstance(value, bool) or value is None:
@@ -1201,16 +1203,19 @@ class RequestMasker:
         if isinstance(value, str):
             return self._known.mask(value)
         if isinstance(value, list):
-            return [self._known_everywhere(item, path) for item in value]
+            return [
+                self._known_everywhere(item, f"{path}[{i}]")
+                for i, item in enumerate(value)
+            ]
         if isinstance(value, dict):
             out: dict[str, Any] = {}
             for key, item in value.items():
                 masked = key if self._ident_ok(key) else self._known.mask(key)
                 if masked in out:
                     raise UnsupportedRequestError(
-                        f"{path}.<key>", "two keys that mask to the same text"
+                        path, "two keys mask to the same text"
                     )
-                out[masked] = self._known_everywhere(item, path)
+                out[masked] = self._known_everywhere(item, f"{path}.{_key(masked)}")
             return out
         return value
 

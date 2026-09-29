@@ -20,7 +20,7 @@ import time
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from . import __version__
 from .gateway import (
@@ -304,7 +304,7 @@ def run_claude(
 
 
 def _run_child(command: list[str], env: dict[str, str], cwd: Path | None) -> int:
-    """Run Claude Code, passing on signals, and return its exit code."""
+    """Run a client, passing on signals, and return its exit code."""
     child = subprocess.Popen(command, env=env, cwd=cwd)
 
     def pass_on(signum: int, _frame: object) -> None:
@@ -342,10 +342,35 @@ def gateway_secret(data_dir: Path) -> str:
     return secret
 
 
-def run_gateway(*, data_dir: Path, port: int, stop: Any = None) -> int:
+def run_gateway(
+    *,
+    data_dir: Path,
+    port: int,
+    stop: Any = None,
+    api: Literal["anthropic", "openai"] = "anthropic",
+    auth: Literal["api-key", "chatgpt"] = "api-key",
+) -> int:
     """Run a gateway until interrupted, printing how to point clients at it."""
-    _, sessions = _open(data_dir, Path.cwd())
-    with Gateway(sessions, port=port, secret=gateway_secret(data_dir)) as gateway:
+    prepare_data_dir(data_dir)
+    settings = load_settings(data_dir / "config.json")
+    identity = git_identity(Path.cwd()) if settings.identity else {}
+    sessions = open_sessions(data_dir, settings, identity, api=api)
+    with Gateway(
+        sessions, port=port, secret=gateway_secret(data_dir), api=api, openai_auth=auth
+    ) as gateway:
+        if api == "openai":
+            from .codex import write_configuration
+
+            configuration = write_configuration(gateway, data_dir)
+            _print_openai_gateway(gateway)
+            print(f"Private desktop/CLI configuration fragment: {configuration}")
+            sys.stdout.flush()
+            try:
+                while stop is None or not stop():
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                pass
+            return 0
         custom = claude_settings(gateway, data_dir=data_dir)
         custom["env"] = {k: v for k, v in custom["env"].items() if v}
         print(f"{APP} gateway listening at {gateway.url}")
@@ -366,6 +391,26 @@ def run_gateway(*, data_dir: Path, port: int, stop: Any = None) -> int:
         except KeyboardInterrupt:
             pass
     return 0
+
+
+def _print_openai_gateway(gateway: Gateway) -> None:
+    """Print a private provider configuration for local Codex clients."""
+    from .codex import provider, toml_value
+
+    print(f"{APP} experimental OpenAI gateway listening at {gateway.url}")
+    print("Add this provider to your user-level ~/.codex/config.toml:")
+    print("[model_providers.veil]")
+    for key, value in provider(gateway).items():
+        print(f"{key} = {toml_value(value)}")
+    print("Start a new Codex session with:")
+    print("codex --no-daemon -c 'model_provider=\"veil\"' -c 'web_search=\"disabled\"'")
+    print(
+        "Keep the configuration private and this gateway running. This path "
+        f"uses {gateway.openai_auth} authentication. Only supported text in model "
+        "requests is masked. Returned tool inputs containing private values are "
+        "blocked except direct local patches. Local execution and other client "
+        "traffic remain outside the gateway. See docs/openai-integration.md."
+    )
 
 
 def forget(*, data_dir: Path, session: str | None) -> int:
@@ -427,8 +472,48 @@ def _parser() -> argparse.ArgumentParser:
         "after 'claude' go to Claude Code as they are.",
         add_help=False,
     )
+    codex = commands.add_parser("codex", help="run Codex CLI through a private gateway")
+    codex.add_argument("--auth", choices=("chatgpt", "api-key"), default="chatgpt")
+    codex.add_argument(
+        "args", nargs=argparse.REMAINDER, help="Codex arguments after --"
+    )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
+    for operation in ("setup", "undo"):
+        configuration = commands.add_parser(
+            operation, help=f"{operation} a backed-up Codex desktop configuration"
+        )
+        configuration.add_argument("client", choices=("codex",))
+        configuration.add_argument("--config", type=Path, help="Codex config.toml path")
+        if operation == "setup":
+            configuration.add_argument("--port", type=int, default=8485)
+            configuration.add_argument(
+                "--auth", choices=("chatgpt", "api-key"), default="chatgpt"
+            )
+    for operation in ("status", "doctor"):
+        diagnostics = commands.add_parser(
+            operation, help="check saved Codex routing and local gateway readiness"
+        )
+        diagnostics.add_argument("--config", type=Path, help="Codex config.toml path")
+        diagnostics.add_argument(
+            "--json", action="store_true", help="machine-readable report"
+        )
+    for operation in ("mask", "restore"):
+        text_command = commands.add_parser(
+            operation, help=f"{operation} local text for a chat"
+        )
+        text_command.add_argument(
+            "--session", required=True, help="one label per conversation"
+        )
+        text_command.add_argument(
+            "--clipboard", action="store_true", help="read and replace clipboard text"
+        )
+        if operation == "restore":
+            text_command.add_argument(
+                "--exact", action="store_true", help="restore exact placeholders only"
+            )
     gateway.add_argument("--port", type=int, default=8484)
+    gateway.add_argument("--api", choices=("anthropic", "openai"), default="anthropic")
+    gateway.add_argument("--auth", choices=("api-key", "chatgpt"), default="api-key")
     hook = commands.add_parser("hook", help="answer a Claude Code hook (internal)")
     hook.add_argument("event", choices=["pre-tool-use", "user-prompt-submit"])
     hook.add_argument("--expect-url")
@@ -462,10 +547,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.command in {"setup", "undo"}:
+            from .codex_setup import config_path, setup_codex, undo_codex
+
+            target = config_path(options.config)
+            if options.command == "undo":
+                return undo_codex(target)
+            return setup_codex(data_dir, target, options.port, options.auth)
+        if options.command in {"status", "doctor"}:
+            from .diagnostics import run_diagnostics
+
+            return run_diagnostics(
+                config=options.config,
+                data_dir=data_dir if options.data_dir is not None else None,
+                doctor=options.command == "doctor",
+                json_output=options.json,
+            )
         if options.command == "claude":
             return run_claude(passed_on, data_dir=data_dir)
+        if options.command == "codex":
+            from .codex import run_codex
+
+            args = options.args[1:] if options.args[:1] == ["--"] else options.args
+            return run_codex(args, data_dir=data_dir, auth=options.auth)
         if options.command == "gateway":
-            return run_gateway(data_dir=data_dir, port=options.port)
+            if options.api != "openai" and options.auth != "api-key":
+                raise SettingsError("--auth chatgpt requires --api openai")
+            return run_gateway(
+                data_dir=data_dir, port=options.port, api=options.api, auth=options.auth
+            )
+        if options.command in {"mask", "restore"}:
+            from .text_cli import run_text
+
+            return run_text(
+                options.command,
+                data_dir=data_dir,
+                session=options.session,
+                clipboard=options.clipboard,
+                exact=getattr(options, "exact", False),
+            )
         if options.command == "hook":
             return _hook(options.event, data_dir, options.expect_url)
         prepare_data_dir(data_dir)
@@ -474,4 +594,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except SettingsError as error:
         print(f"{APP}: {error}", file=sys.stderr)
+        return 2
+    except OSError:
+        if options.command not in {"setup", "undo", "status", "doctor"}:
+            raise
+        print(
+            f"{APP}: could not access setup/diagnostic files; check permissions "
+            "and available disk space. Preserve any existing backup and receipt.",
+            file=sys.stderr,
+        )
         return 2
