@@ -2,6 +2,7 @@
 
 import copy
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -98,12 +99,24 @@ def respond(api, gateway, text="[EMAIL_1]", stream=False):
 
 
 def send(gateway, body, session="client-session"):
-    return call(
+    response = call(
         gateway,
         path="/v1/responses" if gateway.api == "openai" else "/v1/messages",
         body=body,
         headers={"thread-id": session, "x-claude-code-session-id": session},
     )
+    # The last response bytes can reach the client before the handler's finally
+    # block commits activity. Wait for that bookkeeping, without presuming a
+    # successful outcome: the tests below still assert verified vs incomplete.
+    deadline = time.monotonic() + 2
+    while any(
+        item["requests"] != item["completed"] + item["failed"]
+        for item in gateway.activity.summary()["sessions"]
+    ):
+        if time.monotonic() >= deadline:
+            pytest.fail("gateway did not finish recording request evidence")
+        time.sleep(0.005)
+    return response
 
 
 @pytest.mark.parametrize("stream", [False, True])
