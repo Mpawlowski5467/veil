@@ -16,8 +16,10 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Sequence
+from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -466,6 +468,11 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help=f"where mappings and config.json live (default: ~/.{APP})",
     )
+    parser.add_argument(
+        "--forget-after-run",
+        action="store_true",
+        help="use temporary mappings for a fresh Claude/Codex launch; remove on exit",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     entities = commands.add_parser("entities", help="manage exact private values")
     entity_commands = entities.add_subparsers(dest="operation", required=True)
@@ -631,6 +638,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.forget_after_run:
+            if options.command not in {"claude", "codex"}:
+                raise SettingsError(
+                    "--forget-after-run is only for claude or codex launches"
+                )
+            settings = load_settings(data_dir / "config.json")
+            with tempfile.TemporaryDirectory(prefix="veil-run-") as temporary:
+                private = prepare_data_dir(Path(temporary) / "data")
+                _write_private(private / "config.json", json.dumps(asdict(settings)))
+                print(
+                    f"{APP}: temporary mappings; removed when this launch exits. "
+                    "Client transcripts remain. Interrupted cleanup may leave files.",
+                    file=sys.stderr,
+                )
+                if options.command == "claude":
+                    return run_claude(passed_on, data_dir=private)
+                from .codex import run_codex
+
+                args = options.args[1:] if options.args[:1] == ["--"] else options.args
+                return run_codex(args, data_dir=private, auth=options.auth)
         if options.command == "entities":
             from .entities_cli import run_entities
 

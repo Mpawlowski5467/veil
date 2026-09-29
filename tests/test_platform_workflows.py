@@ -112,3 +112,4 @@ def test_native_clipboard_round_trip():
     clipboard_write(text)
     assert clipboard_read() == text
     clipboard_write("")
+    assert clipboard_read() == ""

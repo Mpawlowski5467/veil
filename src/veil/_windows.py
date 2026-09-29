@@ -1,9 +1,10 @@
 """Native Windows ACLs for private storage, without optional dependencies.
 
 A private object is owned by the current user or a privileged Windows account.
-Its discretionary ACL grants access only to that user, SYSTEM, and Administrators (the Windows equivalent
-of privileged Unix root access). New directories give children the same ACL.
-Existing permissions are checked, never silently rewritten.
+Its discretionary ACL grants access only to that user, SYSTEM, and
+Administrators (the Windows equivalent of privileged Unix root access).
+New directories give children the same ACL. Existing permissions are checked,
+never silently rewritten.
 """
 
 from __future__ import annotations

@@ -457,3 +457,51 @@ def test_python_dash_m_runs_the_command_line():
     )
     assert "claude" in completed.stdout
     assert "gateway" in completed.stdout
+
+
+@pytest.mark.parametrize("client", ["claude", "codex"])
+@pytest.mark.parametrize("fails", [False, True])
+def test_forget_after_run_isolated_storage_and_cleanup(
+    tmp_path, monkeypatch, client, fails
+):
+    from veil import cli, codex
+
+    source = tmp_path / "private"
+    source.mkdir(mode=0o700)
+    config = source / "config.json"
+    config.write_text('{"identity":false,"entities":{"PERSON":["Mira Quill"]}}')
+    original = config.read_bytes()
+    kept = source / "vault.db"
+    kept.write_bytes(b"existing storage remains untouched")
+    used = []
+
+    def launch(args, *, data_dir, **kwargs):
+        used.append(data_dir)
+        assert data_dir != source
+        assert json.loads((data_dir / "config.json").read_text())["entities"] == {
+            "PERSON": ["Mira Quill"]
+        }
+        assert not (data_dir / "vault.db").exists()
+        (data_dir / "vault.db").write_bytes(b"fictional temporary data")
+        if fails:
+            raise RuntimeError("simulated client failure")
+        return 7
+
+    monkeypatch.setattr(cli if client == "claude" else codex, "run_" + client, launch)
+    argv = ["--data-dir", str(source), "--forget-after-run", client]
+    if fails:
+        with pytest.raises(RuntimeError, match="simulated"):
+            cli.main(argv)
+    else:
+        assert cli.main(argv) == 7
+    assert len(used) == 1
+    assert not used[0].parent.exists()
+    assert config.read_bytes() == original
+    assert kept.read_bytes() == b"existing storage remains untouched"
+
+
+def test_forget_after_run_requires_a_launcher(capsys):
+    from veil.cli import main
+
+    assert main(["--forget-after-run", "entities", "list"]) == 2
+    assert "only for claude or codex" in capsys.readouterr().err

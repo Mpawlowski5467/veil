@@ -186,3 +186,28 @@ jobs:
         env:
           VEIL_NATIVE_CLIPBOARD: "1"
       - run: uv build
+      - run: uv run python benchmarks/wheel_smoke.py
+
+  upgrade:
+    name: Upgrade and rollback from 0.4.1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+      - run: uv build
+      - uses: actions/checkout@v7
+        with:
+          ref: v0.4.1
+          path: .previous-release
+      - run: uv build .previous-release --out-dir /tmp/veil-previous-dist
+      - run: |
+          uv venv /tmp/veil-previous-env
+          uv venv /tmp/veil-current-env
+          uv pip install --python /tmp/veil-previous-env/bin/python /tmp/veil-previous-dist/*.whl
+          uv pip install --python /tmp/veil-current-env/bin/python dist/*.whl
+          uv run python benchmarks/upgrade.py --previous-python /tmp/veil-previous-env/bin/python --current-python /tmp/veil-current-env/bin/python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: veil-distributions
+          path: dist/*
+          if-no-files-found: error
