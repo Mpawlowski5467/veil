@@ -1,96 +1,115 @@
 # OpenAI and Codex integration (experimental)
 
-Veil can serve a supported subset of the OpenAI Responses API through a local gateway. The first integration target is **Codex CLI with an OpenAI API key**. It is an experimental manual setup, available from this checkout; there is no `veil codex` launcher yet.
+Veil has a Responses gateway, a managed Codex CLI launcher, and configuration for local Codex desktop tasks. The ordinary ChatGPT chat interface uses a separate [explicit text/clipboard workflow](chat-workflow.md).
 
-The request path is:
+| Interface | Implemented and verified |
+| --- | --- |
+| Codex CLI | Managed launcher; local fixtures and a live round trip using ChatGPT login passed. |
+| Codex desktop | Private provider configuration; the bundled app-server passed local and live tests in an isolated ephemeral session. The active desktop UI was not reconfigured or restarted. |
+| OpenAI Responses API | JSON/SSE adapter and API-key routing tested against local fixtures. Live API-key validation remains pending. |
+| ChatGPT app / website | Explicit local mask/restore commands. No automatic interception of ordinary chats. |
 
-```text
-Codex CLI / your API client
-        ↓ text with real values
-Veil on 127.0.0.1 → mask → OpenAI /v1/responses
-        ↑ restore              ↓ placeholders in replies
-        └──────────────────────┘
-```
+## Codex CLI
 
-The Python library remains independent of the provider. This adapter is specifically for Responses, not Chat Completions.
-
-## Start the gateway
-
-Install the checkout with `python -m pip install .`, then run:
+Install this checkout with `python -m pip install .`. With Codex installed and signed in using ChatGPT:
 
 ```bash
-veil gateway --api openai --port 8485
+veil codex
+veil codex -- exec "Explain this project"
+veil codex -- resume
 ```
 
-Veil listens only on loopback. It prints a provider table containing the gateway URL and a local access secret. Merge that table into your **user-level** `~/.codex/config.toml`; replace an existing `model_providers.veil` table rather than adding a duplicate. Keep the file private. Veil does not edit your Codex configuration automatically.
-
-The printed table looks like this, with a real gateway secret in place of the example:
-
-```toml
-[model_providers.veil]
-name = "Veil (experimental)"
-base_url = "http://127.0.0.1:8485/v1"
-wire_api = "responses"
-env_key = "OPENAI_API_KEY"
-supports_websockets = false
-http_headers = { "x-gateway-secret" = "COPY_THE_PRINTED_SECRET" }
-```
-
-Make your API key available as `OPENAI_API_KEY` in the shell that launches Codex. Keep it out of repository files. The gateway forwards the client's bearer credential to `api.openai.com`; it does not read your ChatGPT login or choose an account.
-
-Keep the gateway running and start a **new** Codex conversation in another terminal:
+For an OpenAI API key, set `OPENAI_API_KEY` in the launching shell, then use:
 
 ```bash
-codex --no-daemon -c 'model_provider="veil"' -c 'web_search="disabled"'
+veil codex --auth api-key
 ```
 
-Choose a model available to your API account with Codex's `--model` option if needed. The explicit provider override selects Veil for this invocation. Standalone HTTP/SSE is required; WebSockets and hosted web search are unsupported. The gateway refuses unsupported capabilities instead of forwarding their request bodies.
+Veil starts a loopback gateway on a free port, runs standalone Codex with its provider pinned to the gateway, forwards the exit status, and closes the gateway on exit. It does not edit your Codex configuration. The local gateway secret is passed through an environment header setting, not exposed in process arguments.
 
-See OpenAI's [custom provider configuration](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers) and [provider authentication](https://learn.chatgpt.com/docs/auth#alternative-model-providers) for Codex settings. Do not add `requires_openai_auth = true` to this setup: that selects a different authentication path, which this integration has not implemented.
+The default `--auth chatgpt` uses Codex's existing sign-in. Veil does not read the credential file itself. Codex supplies authentication; the gateway forwards subscription requests to the Codex backend and API-key requests to `api.openai.com`. A mismatch between the client credential mode and gateway mode is refused.
+
+Pass Codex options after `--`; choose a model with `--model` if needed. Provider/config/profile overrides, remote connections, hosted search, and feature overrides are refused by the launcher. It disables hosted web search, apps, multi-agent tools, and analytics for this invocation. Existing local tools and hooks can still have their own traffic outside the model request path.
+
+OpenAI documents [custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced#custom-model-providers) and [using existing OpenAI authentication for a proxy](https://learn.chatgpt.com/docs/auth#alternative-model-providers).
+
+## Codex desktop: manual setup for local tasks
+
+Run a persistent gateway in a terminal:
+
+```bash
+veil gateway --api openai --auth chatgpt --port 8485
+```
+
+The command writes an owner-only configuration fragment to `~/.veil/codex-provider.toml` (or the selected `--data-dir`) and prints the provider details. It contains the local access secret, so keep it private.
+
+Merge the fragment into **user-level** `~/.codex/config.toml`, preserving unrelated settings. Root keys such as `model_provider` must appear before any table header. Merge existing `[features]` and `[model_providers.veil]` tables rather than adding duplicates. The fragment selects Veil, disables hosted search/apps/subagents, and configures HTTP/SSE with `requires_openai_auth = true`.
+
+Restart the desktop app when ready, keep the gateway running, and start a fresh **local Codex** task using the Veil provider. This configuration is not applied to cloud tasks or ordinary ChatGPT chats. It affects shared local Codex settings, so Veil deliberately does not change them or restart an active app automatically.
+
+The bundled runtime was exercised via its [app-server interface](https://learn.chatgpt.com/docs/app-server) in a temporary session. That validates the request/response path, not every desktop UI feature, plugin, attachment, or existing task. Full UI activation and verification remain a setup step.
+
+For manual CLI use, the persistent gateway also prints an invocation selecting the provider explicitly. For an API-key desktop setup, use `--auth api-key` and ensure `OPENAI_API_KEY` is available to the desktop process, not only an unrelated terminal.
 
 ## Other Responses API clients
 
-Use `http://127.0.0.1:8485/v1` as the client's base URL and send your API bearer token as usual. Add `x-gateway-secret` with the printed secret and a `thread-id` header containing a unique, stable ID for that conversation. Codex supplies `thread-id` automatically; Python scripts and other clients must provide it themselves. Use a different ID for each conversation so their mappings stay separate.
+Start `veil gateway --api openai --auth api-key --port 8485`, then configure the client with:
 
-Send `store: false` and replay the complete local conversation in `input`. Both JSON and SSE replies are supported. SDK operations targeting other endpoints, including Chat Completions, are not supported.
+- Base URL `http://127.0.0.1:8485/v1` and your normal API bearer token.
+- `x-gateway-secret` containing the printed secret.
+- `thread-id` containing a unique, stable conversation ID. Codex supplies this automatically; other clients must provide it.
+- `store: false` and the complete locally replayed history in `input`.
+
+Use a different `thread-id` for every conversation. The library remains independent of the provider; this HTTP adapter supports Responses, not Chat Completions.
 
 ## What is handled
 
 | Surface | Behavior |
 | --- | --- |
-| Instructions and text messages | Mask detected and registered values before forwarding. |
-| Local function/custom tool input and output | Mask outbound text; restore complete returned tool input with exact placeholders. Function JSON is parsed and encoded again so restored quotes remain valid JSON. |
-| Visible reasoning summaries and refusals | Restore returned text and reuse the masked version in subsequent history. |
-| JSON and SSE responses | Restore visible text, including placeholders split across network chunks. Tool deltas are buffered until the complete input is available. |
-| Conversation replay | Reuse the model's original masked text and tool inputs from the local ledger. |
-| Encrypted reasoning | Replay only opaque values previously received through the same Veil session; reject unseen values from other sessions. The ciphertext itself is not inspected. |
-| Request metadata | Mask text and object keys; hash cache, safety, and user identifiers. |
-| Headers | Forward a limited set of authentication and protocol headers. Remove local thread IDs, gateway credentials, client paths, and other client metadata headers. |
-| Storage | Require `store` to be false or omitted; always forward `store: false`. This is an API request setting, not a guarantee about provider retention policy. |
+| Instructions, messages, visible reasoning, refusals | Mask outbound supported text; restore returned visible text. |
+| Function/custom tool input and output | Mask outbound text. Buffer returned tool input until complete, restore exact placeholders, then check it before delivery. Function JSON is encoded again so restored quotes stay valid. |
+| JSON and SSE replies | Restore visible text, including placeholders split across chunks. Malformed/incomplete streams fail with an error. Subscription SSE without a content-type header still goes through the strict parser. |
+| History | Reuse the model's original masked text and tool inputs from the local ledger. |
+| Encrypted reasoning | Replay only opaque values previously received through the same Veil session. The ciphertext is not inspected. |
+| Metadata | Mask text and object keys; hash cache, safety, and user identifiers. |
+| Headers | Forward selected authentication/protocol headers. Remove the gateway secret and local context headers. Do not advertise Codex's unsupported binary response format. |
+| Model catalog | Allow `GET /v1/models` with an optional validated client-version query. The response is protocol configuration, not conversation text. |
+| Storage | Always send `store: false`; this is not a guarantee about provider retention policy. |
 
-The adapter accepts Codex's `additional_tools` input item and namespaces containing local function/custom tools. Tool definitions, descriptions, schemas, grammars, model names, protocol identifiers, and authentication headers are configuration, and **are not scrubbed**. Keep personal data out of those surfaces.
+Codex's `additional_tools` and namespaces containing local function/custom tools are supported. Tool definitions, descriptions, schemas, grammars, model names, protocol IDs, model catalogs, and authentication fields **are not scrubbed**. Keep personal data out of configuration surfaces.
 
-Use the same [entity and detector configuration](../README.md#register-names-and-other-private-values) as the Anthropic gateway. Names still need registration. The `allow_mcp_tools` setting controls Claude's hook guard and has no effect on this Codex setup.
+Use the [normal entity/detector settings](../README.md#register-names-and-other-private-values). Names still need registration. `allow_mcp_tools` controls Claude's hook guard; it does not exempt OpenAI tool calls.
 
-## Boundaries
+## Returned tool inputs
 
-- Images, file attachments, audio, hosted tools, structured output formats, unknown fields, and unknown input item types are refused. Text read from a file by a local tool can be masked when that tool result enters a supported request.
-- Only `POST /v1/responses` is forwarded. Query parameters, `/responses/compact`, file uploads, and other endpoints are refused. Long sessions that request remote compaction will stop with an error.
-- `previous_response_id` and server-managed `conversation` are refused. Clients must replay history locally. Start a new session through Veil; imported unprotected history may contain opaque state that Veil cannot verify.
-- This does **not** inspect or block local tool execution, shell network access, MCP traffic, app traffic, telemetry, or traffic sent directly to a different provider. Restored tool calls contain real values. The routing and tool guards used by `veil claude` have not been ported to Codex.
-- ChatGPT subscription authentication, Codex desktop/cloud workflows, and the ChatGPT website/app are not integrated or validated by this setup. This is an API-key CLI integration. A custom provider does not turn the ChatGPT chat interface into a client of this gateway.
-- Detection and restoration have the same [limits as the rest of Veil](../README.md#understand-the-boundaries). Unknown placeholders can remain in output; masking does not prove that every secret was detected.
+The OpenAI gateway refuses a returned tool input containing known private values unless the tool is exactly `apply_patch` or `functions.apply_patch`, the direct local patch tools. Shell commands, JavaScript wrappers, and MCP calls containing those values are refused. Ordinary calls without known private values can proceed.
 
-The vault and ledger use `~/.veil` by default, with owner-only permissions and plaintext original values in the vault. Codex can also store restored values in its own local history. `veil forget --session ID` or `veil forget --all` removes Veil's mappings and ledger entries, not Codex history. Replaying encrypted reasoning after forgetting a session is refused.
+This is a check before model-generated arguments reach the client, not a Codex execution hook, sandbox, routing monitor, or firewall. It cannot inspect a command's later file reads, subprocesses, network traffic, or an independently started tool. A generic code wrapper containing a private value is blocked even if its intended nested operation is a local edit; use a direct patch call for that edit.
 
-## Validation and next steps
+## Other boundaries
 
-Unit and local HTTP tests cover request rejection, masked history, persistent session isolation, JSON tool arguments containing quotes, chunked streaming, incomplete streams, and header filtering. An opt-in smoke test runs **Codex CLI 0.156.1** against loopback fixtures, checking that a synthetic email is absent upstream and restored in Codex's output:
+- Images, files, audio, hosted tools, structured output formats, unknown fields, and unknown input items are refused. File text read by a local tool can be masked when it enters a supported tool-result request.
+- Only Responses and the model catalog are forwarded. Uploads, `/responses/compact`, and other endpoints are refused. Long sessions that request remote compaction will stop with an error.
+- Stored conversation references and `previous_response_id` are refused. Replay history locally and start new conversations through Veil. Unseen encrypted state from imported conversations is refused.
+- Local execution, MCP/app traffic, hooks, telemetry from other processes, cloud tasks, and clients selecting a different provider are outside the gateway.
+- Detection and restoration have the [same limits as the rest of Veil](../README.md#understand-the-boundaries). Unknown placeholders can remain in gateway replies. No detection system proves that every secret was found.
+
+Mappings and the ledger live in `~/.veil` by default. Original values are plaintext in the owner-only vault. Codex can also store restored values in local history. `veil forget --session ID` or `veil forget --all` removes Veil's mappings and ledger entries, not Codex history. After forgetting a session, its old encrypted reasoning is refused.
+
+## Validation
+
+Local tests cover rejected requests, replay, session isolation, quoted JSON arguments, chunked streams, tool blocking, credential routing, model catalogs, and configuration output. Opt-in installed-client checks use fictional credentials and scripted loopback replies:
 
 ```bash
-VEIL_LOCAL_CODEX=1 uv run pytest -q tests/test_codex_local.py
+VEIL_LOCAL_CODEX=1 uv run pytest -q tests/test_codex_local.py tests/test_codex_desktop.py -m "not live"
 ```
 
-That test uses fictional credentials and scripted replies. It makes no live model call and does not establish compatibility with every model, tool, Codex release, or OpenAI backend. Live API validation remains outstanding.
+Live checks are separate and make real model calls:
 
-The next integration milestones are a managed `veil codex` launcher with routing checks, an appropriate Codex tool execution guard, and separate investigation of ChatGPT-authenticated routing. ChatGPT browser use would need its own explicit masking/restoration workflow or a separately designed client integration.
+```bash
+VEIL_LIVE_CODEX_CHATGPT=1 uv run pytest -q tests/test_codex_live.py -k chatgpt
+VEIL_LIVE_OPENAI=1 uv run pytest -q tests/test_codex_live.py -k api-key
+VEIL_LIVE_CODEX_APP=1 uv run pytest -q tests/test_codex_desktop.py -m live
+```
+
+`VEIL_CODEX_APP_BINARY` selects the desktop app's bundled `codex` executable; otherwise the app-server test uses `codex` from PATH. Verified clients: CLI 0.156.1 and desktop-bundled runtime 0.155.0-alpha.16. ChatGPT-authenticated live tests passed with `gpt-6-luna`. API-key live testing is pending because no key was available. These checks do not establish compatibility with every model, client version, or desktop feature.

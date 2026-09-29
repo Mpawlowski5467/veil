@@ -15,16 +15,20 @@ from ..restorer import StreamRestorer
 from ..shield import Shield
 from .ledger import Ledger
 from .openai_request import opaque_key
+from .openai_tools import PrivateToolError, check_tool
 from .response import ResponseRestorer, StreamError, _event, _parse
 
 
 class ResponsesRestorer:
     """Restore complete Responses output items and remember their masked form."""
 
-    def __init__(self, shield: Shield, ledger: Ledger) -> None:
+    def __init__(
+        self, shield: Shield, ledger: Ledger, *, guard_tools: bool = False
+    ) -> None:
         """Use the same shield and ledger as the request masker."""
         self.shield = shield
         self.ledger = ledger
+        self.guard_tools = guard_tools
 
     def text(self, text: str) -> str:
         """Restore visible prose and record it for history replay."""
@@ -32,7 +36,9 @@ class ResponsesRestorer:
         self.ledger.record_text(restored, text)
         return restored
 
-    def tool(self, call_id: str, source: str, *, function: bool) -> str:
+    def tool(
+        self, call_id: str, source: str, *, function: bool, name: str | None = None
+    ) -> str:
         """Restore a complete tool input; reject invalid function JSON."""
         if function:
             try:
@@ -42,9 +48,13 @@ class ResponsesRestorer:
                     "a function call's arguments are not valid JSON"
                 ) from None
             restored = self._value(masked)
+            if self.guard_tools:
+                check_tool(self.shield, name, restored)
             self.ledger.record_tool_input(call_id, restored, masked)
             return json.dumps(restored, ensure_ascii=False)
         restored = self.shield.restore(source, tolerant=False).text
+        if self.guard_tools:
+            check_tool(self.shield, name, restored)
         self.ledger.record_tool_input(call_id, restored, source)
         return restored
 
@@ -107,7 +117,10 @@ class ResponsesRestorer:
             ):
                 raise StreamError("a tool call's input could not be read")
             out[key] = self.tool(
-                item["call_id"], item[key], function=kind == "function_call"
+                item["call_id"],
+                item[key],
+                function=kind == "function_call",
+                name=item.get("name"),
             )
         return out
 
@@ -131,6 +144,7 @@ class _Text:
 class _Tool:
     call_id: str
     function: bool
+    name: str | None
     parts: list[str] = field(default_factory=list)
     emitted: bool = False
 
@@ -157,10 +171,12 @@ class ResponsesStreamRestorer(ResponseRestorer):
     Incomplete frames and unfinished streams produce an error, never raw tails.
     """
 
-    def __init__(self, shield: Shield, ledger: Ledger) -> None:
+    def __init__(
+        self, shield: Shield, ledger: Ledger, *, guard_tools: bool = False
+    ) -> None:
         """Start a Responses stream for the current session."""
         super().__init__(shield, ledger)
-        self._restore = ResponsesRestorer(shield, ledger)
+        self._restore = ResponsesRestorer(shield, ledger, guard_tools=guard_tools)
         self._visible: dict[tuple[str, str, int], _Text] = {}
         self._calls: dict[str, _Tool] = {}
         self._sequence = 0
@@ -180,6 +196,9 @@ class ResponsesStreamRestorer(ResponseRestorer):
             raw, self._buffer = self._buffer.split("\n\n", 1)
             try:
                 out.append(self._handle(raw + "\n\n"))
+            except PrivateToolError as error:
+                out.append(self._error(str(error)))
+                break
             except (StreamError, ValueError, TypeError, KeyError):
                 out.append(self._error("the Responses stream could not be restored"))
                 break
@@ -253,7 +272,7 @@ class ResponsesStreamRestorer(ResponseRestorer):
                 if not isinstance(initial, str):
                     raise StreamError("invalid initial tool input")
                 self._calls[item_id] = _Tool(
-                    call_id, function, [initial] if initial else []
+                    call_id, function, item.get("name"), [initial] if initial else []
                 )
                 data = {**data, "item": {**item, key: ""}}
             elif isinstance(item, dict):
@@ -339,7 +358,9 @@ class ResponsesStreamRestorer(ResponseRestorer):
             tool.parts and source != "".join(tool.parts)
         ):
             raise StreamError("completed tool differs from its deltas")
-        restored = self._restore.tool(tool.call_id, source, function=function)
+        restored = self._restore.tool(
+            tool.call_id, source, function=function, name=tool.name
+        )
         tool.emitted = True
         delta = {key: value for key, value in data.items() if key != field_name}
         delta.update(type=family + ".delta", delta=restored)

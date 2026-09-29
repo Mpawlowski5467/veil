@@ -298,6 +298,29 @@ class TestRequests:
 
 
 class TestRestoration:
+    @pytest.mark.parametrize(
+        "name", ["exec_command", "functions.exec", "mcp__remote__write", None]
+    )
+    def test_guard_blocks_private_tool_arguments(self, adapters, name):
+        shield, ledger, masker, _ = adapters
+        masker.mask({"input": EMAIL})
+        restorer = ResponsesRestorer(shield, ledger, guard_tools=True)
+        with pytest.raises(StreamError, match="blocked a tool"):
+            restorer.tool("c1", '{"cmd":"echo [EMAIL_1]"}', function=True, name=name)
+        assert ledger.masked_tool_input("c1", {"cmd": f"echo {EMAIL}"}) is None
+
+    def test_guard_allows_direct_local_patch_and_non_private_calls(self, adapters):
+        shield, ledger, masker, _ = adapters
+        masker.mask({"input": EMAIL})
+        restorer = ResponsesRestorer(shield, ledger, guard_tools=True)
+        assert (
+            restorer.tool("c1", "+[EMAIL_1]", function=False, name="apply_patch")
+            == f"+{EMAIL}"
+        )
+        assert json.loads(
+            restorer.tool("c2", '{"cmd":"pwd"}', function=True, name="exec_command")
+        ) == {"cmd": "pwd"}
+
     def test_function_values_and_keys_remain_valid_json(self, adapters):
         _, _, masker, restorer = adapters
         masker.mask({"input": f"{NAME} {EMAIL}"})
@@ -353,6 +376,41 @@ def text_events():
 
 
 class TestStreams:
+    def test_guard_emits_no_executable_private_input(self, adapters):
+        shield, ledger, masker, _ = adapters
+        masker.mask({"input": EMAIL})
+        stream = ResponsesStreamRestorer(shield, ledger, guard_tools=True)
+        source = '{"cmd":"echo [EMAIL_1]"}'
+        output = stream.feed(
+            events(
+                {
+                    "type": "response.output_item.added",
+                    "item": {
+                        "type": "function_call",
+                        "name": "exec_command",
+                        "id": "t1",
+                        "call_id": "c1",
+                        "arguments": "",
+                    },
+                },
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "item_id": "t1",
+                    "delta": source,
+                },
+                {
+                    "type": "response.function_call_arguments.done",
+                    "item_id": "t1",
+                    "arguments": source,
+                },
+            )
+        )
+        parsed = parse_events(output)
+        assert EMAIL not in output
+        assert source not in output
+        assert [e["type"] for e in parsed] == ["response.output_item.added", "error"]
+        assert "blocked a tool" in parsed[-1]["message"]
+
     @pytest.mark.parametrize(
         ("family", "field"),
         [
@@ -519,6 +577,84 @@ def gateway(api):
 
 
 class TestHTTP:
+    def test_chatgpt_routes_auth_and_parses_sse_without_content_type(self, api):
+        api.replies.append((200, "", [text_events().encode()]))
+        with Gateway(
+            Sessions(shield_for, api="openai"),
+            api="openai",
+            openai_auth="chatgpt",
+            upstream=api.host,
+            secure=False,
+        ) as gateway:
+            response, payload = call(
+                gateway,
+                path="/v1/responses",
+                headers={
+                    "thread-id": "s1",
+                    "chatgpt-account-id": "fictional-account",
+                    "x-openai-internal-codex-responses-lite": "true",
+                },
+                body={"input": f"{NAME} {EMAIL}", "stream": True},
+            )
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "text/event-stream"
+        assert EMAIL in payload.decode()
+        _, path, headers, body = api.received[0]
+        assert path == "/backend-api/codex/responses"
+        assert EMAIL.encode() not in body
+        lowered = {k.lower(): v for k, v in headers.items()}
+        assert lowered["chatgpt-account-id"] == "fictional-account"
+        assert "x-openai-internal-codex-responses-lite" not in lowered
+
+    @pytest.mark.parametrize("auth", ["chatgpt", "api-key"])
+    def test_authentication_modes_cannot_be_mixed(self, api, auth):
+        with Gateway(
+            Sessions(shield_for, api="openai"),
+            api="openai",
+            openai_auth=auth,
+            upstream=api.host,
+            secure=False,
+        ) as gateway:
+            headers = {"thread-id": "s1"}
+            if auth == "api-key":
+                headers["chatgpt-account-id"] = "wrong-mode"
+            response, _ = call(
+                gateway, path="/v1/responses", headers=headers, body={"input": EMAIL}
+            )
+        assert response.status == 400
+        assert api.received == []
+
+    def test_chatgpt_model_catalog(self, api):
+        api.replies.append((200, "application/json", [b'{"models":[]}']))
+        with Gateway(
+            Sessions(shield_for, api="openai"),
+            api="openai",
+            openai_auth="chatgpt",
+            upstream=api.host,
+            secure=False,
+        ) as gateway:
+            response, _ = call(
+                gateway,
+                method="GET",
+                path="/v1/models?client_version=0.156.1",
+                headers={"chatgpt-account-id": "fictional"},
+            )
+        assert response.status == 200
+        assert api.received[0][1] == "/backend-api/codex/models?client_version=0.156.1"
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/v1/models?secret=private",
+            "/v1/models?client_version=jane@example.com",
+            "/v1/models?client_version=0.1.0&client_version=0.2.0",
+        ],
+    )
+    def test_unknown_model_queries_are_not_forwarded(self, api, gateway, path):
+        response, _ = call(gateway, method="GET", path=path)
+        assert response.status == 400
+        assert api.received == []
+
     @pytest.mark.parametrize(
         ("content_type", "body"),
         [("application/json", b"{invalid"), ("text/plain", b"not a Responses reply")],

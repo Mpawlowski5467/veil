@@ -48,7 +48,7 @@ testpaths = ["tests", "src"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--doctest-modules"]
 filterwarnings = ["error"]
 markers = [
-    "live: runs the real Claude Code CLI (set VEIL_LIVE_CLAUDE=1; makes model calls)",
+    "live: opt-in tests that make real model calls through Claude Code or Codex",
 ]
 
 [tool.ruff]

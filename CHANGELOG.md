@@ -4,8 +4,9 @@
 
 ### Added
 
-- Experimental `veil gateway --api openai` for manually configured Codex CLI and OpenAI Responses API clients using an API key. Masks supported text, restores JSON and streamed replies, buffers complete function/custom tool inputs for exact restoration, and preserves masked history in the session ledger. Unknown request shapes, media, hosted tools, server-managed conversation state, and remote compaction are refused. This stage does not include a Codex launcher, ChatGPT subscription routing, or tool execution guards. See [setup and limits](docs/openai-integration.md).
-- An opt-in test runs the installed Codex CLI against local scripted servers, using fictional credentials and no live model calls.
+- Experimental OpenAI Responses gateway, `veil codex` launcher, and manual desktop configuration. Supports API-key authentication and Codex's existing ChatGPT login. Masks supported text, restores JSON and streamed replies, and preserves masked history. Unknown request shapes, media, hosted tools, stored conversation references, and remote compaction are refused. Returned tool inputs containing known private values are blocked except direct local patches. See [setup and limits](docs/openai-integration.md).
+- `veil mask` and `veil restore` for explicit chat workflows, with persistent session labels, stdin/stdout, and optional clipboard access. Warnings prevent output and clipboard replacement.
+- Opt-in local and live tests for Codex CLI and the desktop app's isolated app-server runtime. ChatGPT-authenticated live checks passed; live API-key validation remains pending.
 
 ## 0.4.1
 

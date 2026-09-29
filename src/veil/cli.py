@@ -242,7 +242,7 @@ def run_claude(
 
 
 def _run_child(command: list[str], env: dict[str, str], cwd: Path | None) -> int:
-    """Run Claude Code, passing on signals, and return its exit code."""
+    """Run a client, passing on signals, and return its exit code."""
     child = subprocess.Popen(command, env=env, cwd=cwd)
 
     def pass_on(signum: int, _frame: object) -> None:
@@ -286,6 +286,7 @@ def run_gateway(
     port: int,
     stop: Any = None,
     api: Literal["anthropic", "openai"] = "anthropic",
+    auth: Literal["api-key", "chatgpt"] = "api-key",
 ) -> int:
     """Run a gateway until interrupted, printing how to point clients at it."""
     prepare_data_dir(data_dir)
@@ -293,10 +294,14 @@ def run_gateway(
     identity = git_identity(Path.cwd()) if settings.identity else {}
     sessions = open_sessions(data_dir, settings, identity, api=api)
     with Gateway(
-        sessions, port=port, secret=gateway_secret(data_dir), api=api
+        sessions, port=port, secret=gateway_secret(data_dir), api=api, openai_auth=auth
     ) as gateway:
         if api == "openai":
+            from .codex import write_configuration
+
+            configuration = write_configuration(gateway, data_dir)
             _print_openai_gateway(gateway)
+            print(f"Private desktop/CLI configuration fragment: {configuration}")
             sys.stdout.flush()
             try:
                 while stop is None or not stop():
@@ -327,24 +332,22 @@ def run_gateway(
 
 
 def _print_openai_gateway(gateway: Gateway) -> None:
-    """Print an experimental API-key provider configuration for local Codex."""
+    """Print a private provider configuration for local Codex clients."""
+    from .codex import provider, toml_value
+
     print(f"{APP} experimental OpenAI gateway listening at {gateway.url}")
     print("Add this provider to your user-level ~/.codex/config.toml:")
     print("[model_providers.veil]")
-    print('name = "Veil (experimental)"')
-    print(f'base_url = "{gateway.url}/v1"')
-    print('wire_api = "responses"')
-    print('env_key = "OPENAI_API_KEY"')
-    print("supports_websockets = false")
-    print(f'http_headers = {{ "{SECRET_HEADER}" = "{gateway.secret}" }}')
+    for key, value in provider(gateway).items():
+        print(f"{key} = {toml_value(value)}")
     print("Start a new Codex session with:")
     print("codex --no-daemon -c 'model_provider=\"veil\"' -c 'web_search=\"disabled\"'")
     print(
         "Keep the configuration private and this gateway running. This path "
-        "requires an OpenAI API key; ChatGPT subscription routing is not "
-        "implemented. Only supported text in model requests is masked. Tool "
-        "execution, images, hosted tools, remote compaction, and other client "
-        "traffic are not covered. See docs/openai-integration.md."
+        f"uses {gateway.openai_auth} authentication. Only supported text in model "
+        "requests is masked. Returned tool inputs containing private values are "
+        "blocked except direct local patches. Local execution and other client "
+        "traffic remain outside the gateway. See docs/openai-integration.md."
     )
 
 
@@ -407,9 +410,29 @@ def _parser() -> argparse.ArgumentParser:
         "after 'claude' go to Claude Code as they are.",
         add_help=False,
     )
+    codex = commands.add_parser("codex", help="run Codex CLI through a private gateway")
+    codex.add_argument("--auth", choices=("chatgpt", "api-key"), default="chatgpt")
+    codex.add_argument(
+        "args", nargs=argparse.REMAINDER, help="Codex arguments after --"
+    )
     gateway = commands.add_parser("gateway", help="run a long-lived gateway")
+    for operation in ("mask", "restore"):
+        text_command = commands.add_parser(
+            operation, help=f"{operation} local text for a chat"
+        )
+        text_command.add_argument(
+            "--session", required=True, help="one label per conversation"
+        )
+        text_command.add_argument(
+            "--clipboard", action="store_true", help="read and replace clipboard text"
+        )
+        if operation == "restore":
+            text_command.add_argument(
+                "--exact", action="store_true", help="restore exact placeholders only"
+            )
     gateway.add_argument("--port", type=int, default=8484)
     gateway.add_argument("--api", choices=("anthropic", "openai"), default="anthropic")
+    gateway.add_argument("--auth", choices=("api-key", "chatgpt"), default="api-key")
     hook = commands.add_parser("hook", help="answer a Claude Code hook (internal)")
     hook.add_argument("event", choices=["pre-tool-use", "user-prompt-submit"])
     hook.add_argument("--expect-url")
@@ -445,8 +468,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if options.command == "claude":
             return run_claude(passed_on, data_dir=data_dir)
+        if options.command == "codex":
+            from .codex import run_codex
+
+            args = options.args[1:] if options.args[:1] == ["--"] else options.args
+            return run_codex(args, data_dir=data_dir, auth=options.auth)
         if options.command == "gateway":
-            return run_gateway(data_dir=data_dir, port=options.port, api=options.api)
+            if options.api != "openai" and options.auth != "api-key":
+                raise SettingsError("--auth chatgpt requires --api openai")
+            return run_gateway(
+                data_dir=data_dir, port=options.port, api=options.api, auth=options.auth
+            )
+        if options.command in {"mask", "restore"}:
+            from .text_cli import run_text
+
+            return run_text(
+                options.command,
+                data_dir=data_dir,
+                session=options.session,
+                clipboard=options.clipboard,
+                exact=getattr(options, "exact", False),
+            )
         if options.command == "hook":
             return _hook(options.event, data_dir, options.expect_url)
         prepare_data_dir(data_dir)

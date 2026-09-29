@@ -283,7 +283,12 @@ class TestGateway:
         monkeypatch.setattr(cli, "run_gateway", lambda **kw: calls.append(kw) or 0)
         assert cli.main(["--data-dir", str(data_dir), "gateway", "--port", "0"]) == 0
         assert calls == [
-            {"data_dir": data_dir.absolute(), "port": 0, "api": "anthropic"}
+            {
+                "data_dir": data_dir.absolute(),
+                "port": 0,
+                "api": "anthropic",
+                "auth": "api-key",
+            }
         ]
 
     def test_main_selects_the_openai_adapter(self, data_dir, monkeypatch):
@@ -293,7 +298,12 @@ class TestGateway:
             cli.main(["--data-dir", str(data_dir), "gateway", "--api", "openai"]) == 0
         )
         assert calls == [
-            {"data_dir": data_dir.absolute(), "port": 8484, "api": "openai"}
+            {
+                "data_dir": data_dir.absolute(),
+                "port": 8484,
+                "api": "openai",
+                "auth": "api-key",
+            }
         ]
 
     def test_openai_prints_api_key_provider_settings(self, data_dir, capsys):
@@ -308,7 +318,7 @@ class TestGateway:
         assert 'env_key = "OPENAI_API_KEY"' in out
         assert "supports_websockets = false" in out
         assert cli.gateway_secret(data_dir) in out
-        assert "ChatGPT subscription routing is not implemented" in out
+        assert "uses api-key authentication" in out
         assert "PreToolUse" not in out
 
 

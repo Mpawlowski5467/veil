@@ -6,7 +6,7 @@
 
 **A local masking layer for your AI workflows.**
 
-Veil replaces detected personal information with placeholders before you send text to an AI model, then restores the original values in the reply. Use it in Python scripts and applications, or run Claude Code through the included local gateway.
+Veil replaces detected personal information with placeholders before you send text to an AI model, then restores the original values in the reply. Use it in Python scripts, run Claude Code or Codex CLI through a local gateway, or explicitly mask and restore text for chat apps.
 
 Keep working with real names, email addresses, and account details while the model works with placeholders for the values Veil detects.
 
@@ -33,9 +33,10 @@ Names in this example are registered in advance. Email detection is built in. A 
 | --- | --- |
 | Python scripts and AI applications | Mask text before your provider call and restore the reply. The library is independent of any model SDK. |
 | Claude Code in a terminal | `veil claude` starts a local gateway and launches Claude Code through it. |
-| Codex CLI with an OpenAI API key | Experimental manual setup through `veil gateway --api openai`. See the [integration guide](docs/openai-integration.md). |
+| Codex CLI | Experimental `veil codex` launcher with ChatGPT login or `--auth api-key`. ChatGPT routing has passed a live test. |
+| Codex desktop (local tasks) | Manual provider setup; the bundled app-server runtime has passed local and live tests. Desktop UI activation is still manual. See the [integration guide](docs/openai-integration.md). |
 | Other coding assistants | Automatic coverage needs an integration with that tool's request and response path. |
-| Browser chats and desktop AI apps | No bundled copy-and-paste commands or desktop integration yet. |
+| ChatGPT app, browser chats, other chat apps | Explicit `veil mask` / `veil restore` commands, including optional clipboard mode. These do not intercept the app automatically. |
 
 The Python library can be used with different AI providers wherever you control the text sent and received. The gateway has separate adapters for Anthropic Messages and an experimental subset of OpenAI Responses.
 
@@ -179,15 +180,33 @@ The repository's live tests record compatibility checks against Claude Code 2.1.
 
 ## Try Veil with Codex CLI
 
-From a checkout containing the experimental adapter:
+From a checkout containing the experimental adapter, with Codex already signed in:
 
 ```bash
-veil gateway --api openai --port 8485
+veil codex
+veil codex --auth api-key
+veil codex -- exec "Explain this project"
 ```
 
-The gateway prints a private provider configuration and the command to start Codex through it. This requires an **OpenAI API key**. Text requests and replies, local function/custom tool calls, and conversation replay are supported; unsupported request shapes are refused.
+The launcher starts a private gateway, pins Codex's provider, disables hosted search, apps and subagents for that invocation, then stops the gateway when Codex exits. The default uses your existing ChatGPT login. `--auth api-key` requires `OPENAI_API_KEY` in the launching shell. Text requests and replies, local function/custom tool calls, and conversation replay are supported; unsupported request shapes are refused.
 
-This first stage does not include a `veil codex` launcher, ChatGPT subscription routing, or the tool execution checks provided by `veil claude`. Images, files, hosted tools, and remote compaction are refused. The [OpenAI integration guide](docs/openai-integration.md) explains setup, supported fields, and remaining work.
+Returned tool inputs containing known private values are blocked except direct local `apply_patch` calls. This check happens before the gateway delivers executable input; it does not inspect what a command later reads or sends. Images, file attachments, hosted tools, and remote compaction are refused. The [OpenAI integration guide](docs/openai-integration.md) covers desktop setup, API clients, tested versions, and limits. Live API-key validation is still pending.
+
+## Use Veil with the ChatGPT app
+
+Copy your prompt, mask the clipboard, then paste the masked text into ChatGPT:
+
+```bash
+veil mask --session chatgpt-notes --clipboard
+```
+
+Ask the model to keep bracketed placeholders unchanged. Copy its reply, then restore it locally:
+
+```bash
+veil restore --session chatgpt-notes --clipboard
+```
+
+Use the same session label for both operations and a different label for each conversation. Without `--clipboard`, the commands read stdin and write stdout. Warnings stop output instead of replacing the clipboard with a partial result. This is an explicit text workflow; attachments, voice, and messages sent directly in the app are not intercepted. See the [chat workflow guide](docs/chat-workflow.md).
 
 ## What Veil detects
 
@@ -258,7 +277,7 @@ See the [Python guide](docs/python-guide.md) for detection rules, opt-in normali
 - **Only detected text is masked.** Unregistered names, unsupported formats, and sensitive context can remain visible.
 - **Coverage depends on the adapter.** Images and PDFs pass through the Anthropic adapter; the OpenAI adapter refuses them. Tool definitions are not scrubbed. Hosted search results are outside the Anthropic adapter's coverage, and OpenAI hosted tools are refused.
 - **Masking is reversible.** The vault holds original values; placeholders still reveal types, counts, and repeated references. Surrounding context may reveal identity.
-- **Claude Code's tool checks cover arguments containing known values.** A command can read and send a file without including its contents in the arguments. The experimental Codex setup has no tool execution guard. Veil is not a sandbox or a network firewall.
+- **Tool checks cover arguments containing known values.** Claude uses hooks; the OpenAI gateway checks restored tool inputs before delivery. A command can read and send a file without including its contents in the arguments. Veil is not a sandbox or a network firewall.
 - **Your provider still authenticates you.** Masking prompt content does not hide your account or prevent local transcripts.
 - **Restoration depends on placeholders surviving.** Unknown placeholders remain unchanged and produce warnings. Use exact restoration (`tolerant=False`) for library output that will be executed or written as tool arguments.
 - **Warnings need handling.** Direct `mask()` and `restore()` calls return warnings; `wrap()` emits them by default. Use `strict=True` to raise and `redact_warnings=True` to avoid quoting leaked values in warnings.

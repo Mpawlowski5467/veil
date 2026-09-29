@@ -1,0 +1,118 @@
+"""Explicit local mask/restore workflows for ChatGPT and other chat interfaces."""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from . import MaskResult, RestoreResult
+from .gateway import git_identity, load_settings, open_sessions, prepare_data_dir
+from .gateway.config import SettingsError
+
+
+def _clipboard_command(*, write: bool) -> list[str]:
+    if sys.platform == "darwin":
+        return ["/usr/bin/pbcopy" if write else "/usr/bin/pbpaste"]
+    if sys.platform == "win32":
+        script = (
+            "Set-Clipboard -Value ([Console]::In.ReadToEnd())"
+            if write
+            else "[Console]::Write((Get-Clipboard -Raw))"
+        )
+        return [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Console]::InputEncoding = [Console]::OutputEncoding = "
+            "[System.Text.UTF8Encoding]::new(); " + script,
+        ]
+    wayland = shutil.which("wl-copy" if write else "wl-paste")
+    if wayland:
+        return [wayland] if write else [wayland, "--no-newline"]
+    xclip = shutil.which("xclip")
+    if xclip:
+        return [xclip, "-selection", "clipboard", "-i" if write else "-o"]
+    raise SettingsError(
+        "clipboard access needs wl-copy/wl-paste or xclip; use stdin instead"
+    )
+
+
+def clipboard_read() -> str:
+    """Read text only when the user explicitly selected --clipboard."""
+    try:
+        result = subprocess.run(
+            _clipboard_command(write=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=10,
+            check=True,
+        )
+        return result.stdout
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        raise SettingsError("could not read clipboard text") from None
+
+
+def clipboard_write(text: str) -> None:
+    """Replace clipboard text after a successful transformation."""
+    try:
+        subprocess.run(
+            _clipboard_command(write=True),
+            input=text,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            timeout=10,
+            check=True,
+        )
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        raise SettingsError("could not write clipboard text") from None
+
+
+def run_text(
+    operation: str,
+    *,
+    data_dir: Path,
+    session: str,
+    clipboard: bool = False,
+    exact: bool = False,
+) -> int:
+    """Mask or restore stdin/clipboard text using a persistent local session."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", session):
+        raise SettingsError(
+            "use a session label with letters, numbers, dots, "
+            "underscores, colons, or hyphens"
+        )
+    prepare_data_dir(data_dir)
+    settings = load_settings(data_dir / "config.json")
+    identity = git_identity(Path.cwd()) if settings.identity else {}
+    source = clipboard_read() if clipboard else sys.stdin.read()
+    with open_sessions(data_dir, settings, identity) as sessions:
+        shield = sessions.get(session).shield
+        result: MaskResult | RestoreResult
+        if operation == "mask":
+            result = shield.mask(source)
+        elif operation == "restore":
+            result = shield.restore(source, tolerant=not exact)
+        else:
+            raise SettingsError("unknown text operation")
+        if result.warnings:
+            raise SettingsError(
+                f"{operation} reported {len(result.warnings)} warning(s); "
+                "no output written. Check the session and registered values."
+            )
+        transformed = result.text
+    if clipboard:
+        clipboard_write(transformed)
+        print(
+            f"veil: {operation} completed on the clipboard (session {session})",
+            file=sys.stderr,
+        )
+    else:
+        sys.stdout.write(transformed)
+    return 0
