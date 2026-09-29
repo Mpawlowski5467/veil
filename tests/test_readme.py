@@ -43,3 +43,33 @@ def test_readme_names_the_tested_claude_code():
 
     text = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
     assert f"tested with Claude Code {TESTED_CLAUDE_CODE}." in text
+
+
+def test_the_refusal_example_is_one_the_gateway_gives():
+    # A newer Claude Code sends an opaque value under a field of a block that
+    # the gateway has no rule for: the README shows the message it gets.
+    from veil import MemoryVault, Shield
+    from veil.gateway import (
+        MemoryLedger,
+        RequestMasker,
+        UnsupportedRequestError,
+        compat,
+    )
+
+    signed = {"signature": "QmFzZTY0IHNpZ25lZCBieSBhIG5ld2VyIENsYXVkZSBDb2Rl" * 2}
+    block = {"type": "text", "text": "Notes", "attestation": signed}
+    user = {"role": "user", "content": "hi"}
+    assistant = {"role": "assistant", "content": "ok"}
+    last = {"role": "user", "content": [{"type": "text", "text": "a"}, block]}
+    body = {"messages": [user, assistant, user, assistant, last]}
+    masker = RequestMasker(Shield(vault=MemoryVault()), MemoryLedger(), note=None)
+    try:
+        masker.mask(body)
+    except UnsupportedRequestError as error:
+        problems = error.problems
+    else:
+        raise AssertionError("not refused")
+    newer = "2.1.290"
+    assert compat.compare(newer) == 1, "pick a version newer than the tested one"
+    expected = f"API Error: 400 {compat.refusal_message(problems, newer)}"
+    assert expected in README.read_text(encoding="utf-8")

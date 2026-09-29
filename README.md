@@ -105,7 +105,7 @@ What it doesn't cover:
 - **Copies on your own machine.** Claude Code's transcripts under `~/.claude/projects` hold the real values, and so does `~/.veil/vault.db` (plain text, readable by you only).
 - **The Claude desktop app**, which doesn't read `ANTHROPIC_BASE_URL`. `veil claude` is for Claude Code in a terminal.
 
-It was tested with Claude Code 2.1.283. When yours is another version, `veil claude` says so in one line when it starts (once for each version) and starts it anyway: a newer Claude Code may send something veil doesn't know yet, which is refused, never sent unmasked. After an update, the census (see [Development](#development)) checks that nothing it relies on changed.
+It was tested with Claude Code 2.1.283. When yours is another version, `veil claude` says so in one line when it starts (once for each Claude Code version and veil version) and starts it anyway: a newer Claude Code may send something veil has no rule for yet. That is masked like any text, or refused where masking can't reach it (a key, a type or a number that may hold personal data, file bytes, opaque data), never sent unmasked. After an update, the census (see [Development](#development)) checks that nothing it relies on changed.
 
 Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappings, and `veil gateway` runs a long-lived gateway on a fixed port and prints the settings to point Claude Code or another client at it. Prefer `veil claude`: while a long-lived gateway isn't running, another program could take its port.
 
@@ -114,10 +114,10 @@ Two more commands: `veil forget --session ID` (or `--all`) deletes stored mappin
 A request the gateway can't mask is never sent. Claude Code shows why, for example:
 
 ```
-API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.5.0 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].type (unknown block type 'future_block')
+API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.5.0 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].attestation.signature (opaque data that can't be masked)
 ```
 
-It names every part it couldn't handle and the Claude Code version that sent it. What to do:
+It names what it couldn't handle (each kind of problem once, with how many times it occurs, up to 50) and the Claude Code version that sent it. What to do:
 
 - **Update veil**, especially when Claude Code is newer than the version veil was tested with. A new Claude Code release can send something veil doesn't know yet.
 - **If it happens on every prompt**, the content is in the conversation, which Claude Code sends again with each prompt (and `/compact` too). Use `/rewind` to go back to before the prompt that brought it in, or start a new conversation; `--resume` of that conversation fails the same way. When the message says the part is sent with every request (a tool definition or a setting, not the conversation), `/rewind` won't help: update veil.
@@ -393,7 +393,7 @@ uv run python -m tests.live.census            # report only
 uv run python -m tests.live.census --update   # also refresh the census after a clean run
 ```
 
-With `--update`, a run without failures refreshes the census and the protocol words (`src/veil/gateway/vocab.py`); new paths go in only with `--accept-new`, after you've checked the gateway handles them. Once `-p` and an interactive session ran clean on all four models, it also moves the tested Claude Code version forward. A failed run is kept: `--from DIR` analyzes it again, and `--resume DIR` reruns what the harness couldn't finish.
+With `--update`, a run without failures refreshes the census and the protocol words (`src/veil/gateway/vocab.py`); new paths go in only with `--accept-new`, after you've checked the gateway handles them. Once `-p`, `/compact` and an interactive session ran clean on all four models, with nothing new (or with `--accept-new`), it also moves the tested Claude Code version forward. A failed run is kept: `--from DIR` analyzes it again, and `--resume DIR` reruns what the harness couldn't finish.
 
 To rename the package:
 

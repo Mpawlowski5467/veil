@@ -598,8 +598,10 @@ def restore_message(
     restorer = ResponseRestorer(shield, ledger, json_text=json_text)
     for block in message["content"]:
         # What the API sent, before any placeholder in it is restored: a
-        # restored value must never count as one the API sent.
-        restorer._record_opaque(block)
+        # restored value must never count as one the API sent. The model's
+        # own writing (text, a call's input, thinking) is left out, as a
+        # stream's deltas of it are.
+        restorer._record_opaque(_without_writing(block))
         if isinstance(block, dict) and block.get("type") == _TEXT:
             masked = block.get("text")
             if isinstance(masked, str):
@@ -636,6 +638,20 @@ def restore_message(
             restorer._record_seen(block)
         content.append(block)
     return {**message, "content": content}
+
+
+def _without_writing(block: Any) -> Any:
+    """A block without the part the model writes (see `_TEXT_DELTAS`)."""
+    if not isinstance(block, dict):
+        return block
+    kind = block.get("type")
+    written = {
+        _TEXT: "text",
+        _TOOL_USE: "input",
+        "thinking": "thinking",
+        **dict.fromkeys(_SERVER_CALLS, "input"),
+    }.get(kind if isinstance(kind, str) else "")
+    return {k: v for k, v in block.items() if k != written} if written else block
 
 
 def _strings(value: Any) -> list[str]:

@@ -724,7 +724,7 @@ class TestSpeed:
             "speed": speed,
         }
 
-    @pytest.mark.parametrize("speed", ["turbo", "priority"])
+    @pytest.mark.parametrize("speed", ["turbo", "priority", "fast_20991231"])
     def test_a_speed_the_api_may_add_goes_out_too(self, speed):
         # A name holding no data, like any setting's: a new one doesn't break
         # every request.
@@ -736,6 +736,11 @@ class TestSpeed:
         [
             " fast",
             "fast\n",
+            # A registered name however it is spelled, a phone glued to a letter.
+            "jan_nowak",
+            "jannowak",
+            "fast_jan_nowak",
+            "x5555550100",
             NAME,
             EMAIL,
             "",
@@ -748,7 +753,8 @@ class TestSpeed:
         ],
     )
     def test_only_a_speed_is_sent(self, speed):
-        masker, _, _ = make_masker()
+        # Registered as the gateway registers it (see store.open_sessions).
+        masker, _, _ = make_masker(registered={NAME: "PERSON"})
         with pytest.raises(UnsupportedRequestError) as info:
             masker.mask({"messages": [], "speed": speed})
         assert info.value.path == "speed"
@@ -990,6 +996,29 @@ def test_refusals_never_quote_a_value():
     assert EMAIL not in str(info.value)
 
 
+# Keys only the API's own blocks have (server tool calls, their results,
+# compaction, citations on text): each block type has a rule for them.
+_API_BLOCK_KEYS = frozenset(
+    {
+        "id",
+        "name",
+        "input",
+        "tool_use_id",
+        "content",
+        "citations",
+        "encrypted_content",
+        "signature",
+        "is_error",
+        "caller",
+        "file_id",
+        "from",
+        "to",
+        "trigger",
+        "tool_changes",
+    }
+)
+
+
 def test_every_recorded_field_and_block_type_has_a_rule():
     from pathlib import Path
 
@@ -1023,17 +1052,26 @@ def test_every_recorded_field_and_block_type_has_a_rule():
     def types_at(path):
         return {kind[5:] for kind in census[path]["kinds"] if kind.startswith("type=")}
 
-    assert types_at("$.messages[].content[].type") <= set(request._BLOCK_KEYS)
-    assert types_at("$.messages[].content[].content[].type") <= request._NESTED_BLOCKS
+    # Blocks the API defines have rules of their own, by role.
+    api_blocks = {kind for _, kind in request._API_BLOCKS}
+    assert (
+        types_at("$.messages[].content[].type") <= set(request._BLOCK_KEYS) | api_blocks
+    )
+    assert types_at("$.messages[].content[].content[].type") <= (
+        request._NESTED_BLOCKS | set(request._NESTED_API_BLOCKS)
+    )
     assert types_at("$.system[].type") == {"text"}
     assert types_at("$.messages[].content[].content[].source.type") <= {"base64", "url"}
+    # A key of a block of Claude Code's own has a rule too (the API's blocks
+    # are checked by their rules, and anything else in them masked).
     for path in census:
         if path.startswith("$.messages[].content[].") and path.count(".") == 3:
             key = path.rsplit(".", 1)[1].removesuffix("[]")
             assert (
                 any(key in keys for keys in request._BLOCK_KEYS.values())
                 or key == "type"
-            )
+                or key in _API_BLOCK_KEYS
+            ), key
 
 
 class TestEveryProblem:

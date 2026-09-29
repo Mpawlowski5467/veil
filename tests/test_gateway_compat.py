@@ -60,7 +60,11 @@ class TestVersions:
 
 
 PROBLEMS = [
-    ("messages[4].content[1].type", "unknown block type 'future_block'", 30),
+    (
+        "messages[4].content[1].attestation.signature",
+        "opaque data that can't be masked",
+        30,
+    ),
     ("messages[6].output_config.x", "unknown field", 1),
 ]
 
@@ -92,8 +96,9 @@ class TestMessages:
         assert "\n" not in message
         assert message.index("update") < message.index("Not handled")
         assert message.endswith(
-            "Not handled: messages[4].content[1].type (unknown block type "
-            "'future_block') 30 times; messages[6].output_config.x (unknown field)"
+            "Not handled: messages[4].content[1].attestation.signature (opaque "
+            "data that can't be masked) 30 times; messages[6].output_config.x "
+            "(unknown field)"
         )
 
     def test_rewind_is_suggested_only_for_the_conversation(self):
@@ -122,8 +127,8 @@ class TestMessages:
             f"{APP}: 2 requests couldn't be masked, so they weren't sent. Not handled:"
         )
         assert lines[1] == (
-            "  messages[4].content[1].type (unknown block type 'future_block'), "
-            "30 times"
+            "  messages[4].content[1].attestation.signature (opaque data that "
+            "can't be masked), 30 times"
         )
         assert lines[-1].startswith(f"{APP}: {APP} {__version__} was tested")
 

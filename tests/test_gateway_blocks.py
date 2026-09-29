@@ -267,6 +267,62 @@ class TestNotAsTheApiSentIt:
                 masker.mask(body)
 
 
+class TestStreamedOrWhole:
+    def test_both_record_the_same(self):
+        # The model's own writing (a call's input, text) isn't recorded as
+        # the API's bytes either way; the rest of the block is.
+        opaque = "QWJjRGVmR2hpSmtsTW5vUHFyU3R1Vnd4WXo" * 2
+        call = {
+            "type": "tool_use",
+            "id": "toolu_01AbCdEfGhIjKl",
+            "name": "send_mail",
+            "input": {"signature": "Regards, [PERSON_1]", "note": opaque},
+        }
+        text = {"type": "text", "text": opaque}
+        result = search_result()
+        whole = make()
+        restore_message(whole[1], whole[2], {"content": [call, text, result]})
+        streamed = make()
+        events = [
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {**call, "input": {}},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": json.dumps(call["input"]),
+                },
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": opaque},
+            },
+            {"type": "content_block_stop", "index": 1},
+            {"type": "content_block_start", "index": 2, "content_block": result},
+            {"type": "content_block_stop", "index": 2},
+        ]
+        stream = "".join(
+            f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events
+        )
+        ResponseRestorer(streamed[1], streamed[2]).feed(stream)
+        encrypted = result["content"][0]["encrypted_content"]
+        for value in ("Regards, [PERSON_1]", opaque, encrypted, result):
+            assert whole[2].was_seen(value) == streamed[2].was_seen(value), value
+        assert whole[2].was_seen(encrypted)
+        assert not whole[2].was_seen(opaque)
+
+
 class TestRules:
     def test_a_server_call_not_seen_is_masked_like_a_tool_input(self):
         masker, _, _ = make()

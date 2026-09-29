@@ -287,6 +287,9 @@ class TestWhatIsRefused:
             {"model": NAME},
             {"service_tier": NAME},
             {"speed": NAME},
+            {"speed": "jan_nowak"},
+            {"thinking": {"type": "ada_quill_mode"}},
+            {"service_tier": "tier_5555550100"},
             {"speed": f"fast_{HANDLE}"},
             {"thinking": {"type": EMAIL}},
             {"thinking": {"type": "enabled", "budget_tokens": "lots"}},
@@ -332,6 +335,8 @@ class TestWhatIsRefused:
             {"pattern": "^jan\\x2en@example\\.com$"},
             {"properties": {EMAIL: {"type": "string"}}},
             {"properties": {HANDLE: {"type": "string"}}},
+            {"properties": {"jan_nowak": {"type": "string"}}},
+            {"properties": {"JanNowak": {"type": "string"}}},
             {"required": [HANDLE]},
             {"patternProperties": {"^jan\\.n@example\\.com$": {}}},
             # A value spelled the other ways a pattern can spell it.

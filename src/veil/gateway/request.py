@@ -182,6 +182,9 @@ class _KnownValues:
         self._types: dict[str, str] = {}
         self._spelled: dict[str, str] = {}  # each spelling, to its value
         self._pattern: re.Pattern[str] | None = None
+        # Known values folded (see `folded_in`), for the vault size and
+        # shortest length they were made for.
+        self._folded: tuple[tuple[int, int], re.Pattern[str] | None] | None = None
 
     def reset(self) -> None:
         self._size = -1
@@ -236,6 +239,26 @@ class _KnownValues:
             self._registered_pattern = re.compile("|".join(map(re.escape, values)))
         pattern = self._registered_pattern
         return pattern is not None and pattern.search(text) is not None
+
+    def folded_in(self, text: str, *, min_length: int) -> bool:
+        """Whether ``text`` holds a known value, however it is spelled.
+
+        Values of ``min_length`` or more are compared without letter case,
+        spaces, ``_`` or ``-``. So ``jan_nowak``, ``JanNowak`` and
+        ``jan-nowak`` all hold "Jan Nowak": how a name that can't be masked
+        (a setting's, a property's) would spell a value.
+        """
+        self._current()
+        key = (self._size, min_length)
+        if self._folded is None or self._folded[0] != key:
+            values = {_fold(value) for value in self._types}
+            long = sorted(
+                (v for v in values if len(v) >= min_length), key=len, reverse=True
+            )
+            pattern = re.compile("|".join(map(re.escape, long))) if long else None
+            self._folded = (key, pattern)
+        pattern = self._folded[1]
+        return pattern is not None and pattern.search(_fold(text)) is not None
 
     def found_in(self, text: str, *, min_length: int = 0) -> bool:
         """Whether ``text`` holds a known value outside a placeholder.
@@ -812,13 +835,17 @@ class RequestMasker:
 
         It is read like an id the API makes: nothing a detector finds, no
         registered value as a whole word, no known value of five or more
-        characters inside it. A shorter one inside a longer word (``ted`` in
-        ``selected_memories``) is there by chance.
+        characters inside it, however it is spelled (``jan_nowak``, lower
+        case), and no run of nine or more digits (a phone or card number
+        glued to a letter; a date is eight). A shorter known value inside a
+        longer word (``ted`` in ``selected_memories``) is there by chance.
         """
         if name in WORDS:
             return self._word_clean(name)
-        return self._shield.mask(name).text == name and not self._known.found_in(
-            name, min_length=_CHANCE
+        return (
+            self._shield.mask(name).text == name
+            and not self._known.folded_in(name, min_length=_CHANCE)
+            and _LONG_NUMBER.search(name) is None
         )
 
     def _word_clean(self, word: str) -> bool:
@@ -1891,6 +1918,11 @@ def _readings(pattern: str) -> set[str]:
     return texts
 
 
+def _fold(text: str) -> str:
+    """``text`` in lower case, without spaces, ``_`` or ``-``."""
+    return re.sub(r"[\s_-]+", "", text.lower())
+
+
 def _spellings(value: str) -> set[str]:
     """A value as written, and as written inside a JSON string."""
     return {
@@ -1954,6 +1986,8 @@ _API_ID = re.compile(
     re.ASCII,
 )
 _CHANCE = 5
+# Digits enough for a phone or card number; a date (20251015) has eight.
+_LONG_NUMBER = re.compile(r"[0-9]{9,}")
 # A run of characters long enough to be encoded data (base64, hex, a URI's).
 _ENCODED_RUN = re.compile(r"[A-Za-z0-9+/_=%-]{16,}")
 # A URL a source may point to: on the web, not inline data.
