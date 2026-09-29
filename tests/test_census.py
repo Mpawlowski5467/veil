@@ -133,7 +133,7 @@ def test_endpoints_headers_betas_and_tools():
     )
     assert "new-beta-2026-10-01" in merged["anthropic_beta"]
     assert c.SECRET not in merged["request_headers"]
-    assert merged["tools"] == ["BrandNewTool", "Read"]
+    assert {"BrandNewTool", "Read"} <= set(merged["tools"])
     unchanged = c.merge_endpoints(known, seen, accept_new=False)
     assert "new-beta-2026-10-01" not in unchanged["anthropic_beta"]
     assert "x-new-header" not in unchanged["request_headers"]
@@ -276,8 +276,14 @@ def test_terminal_text_is_folded_and_sent_in_pieces():
 
 
 def test_what_to_run():
-    args = c.parse(["--models", "haiku,opus", "--scenarios", "print,web"])
-    assert c.plan(args) == [("haiku", "print"), ("haiku", "web"), ("opus", "print")]
+    args = c.parse(["--models", "haiku,opus", "--scenarios", "print,web,refusal"])
+    # Auto mode's scenarios run on Sonnet: Claude Code has no auto mode on Haiku.
+    assert c.plan(args) == [
+        ("haiku", "print"),
+        ("opus", "print"),
+        ("haiku", "web"),
+        ("sonnet", "refusal"),
+    ]
     assert c.parse(["--accept-new"]).update
 
 
@@ -307,6 +313,7 @@ class FakeAPI(http.server.BaseHTTPRequestHandler):
             b'event: content_block_delta\ndata: {"type": "content_block_delta",'
             b' "index": 0, "delta": {"type": "text_delta", "text": "hi"},'
             b' "new_key": 1}\n\n'
+            b'event: message_stop\ndata: {"type": "message_stop"}\n\n'
         )
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -388,20 +395,212 @@ def test_a_whole_chain(tmp_path, fake_api):
     assert report.exit_code() == 2
 
 
-def test_a_reply_key_the_gateway_dropped_is_found(tmp_path):
-    folder = tmp_path / "haiku" / "print"
+STOP = 'event: message_stop\ndata: {"type": "message_stop"}\n\n'
+
+
+def synthetic(tmp_path, front, upstream, *, label="haiku/print", api_requests=None):
+    """A run folder with one capture: (record, body, stream) triples per side."""
+    folder = tmp_path.joinpath(*label.split("/"))
+    (tmp_path / "data").mkdir(exist_ok=True)
+    (tmp_path / "data" / "config.json").write_text(json.dumps(c.CONFIG))
+    for side, items in (("front", front), ("upstream", upstream)):
+        (folder / side).mkdir(parents=True)
+        lines = []
+        for number, (record, body, stream) in enumerate(items, 1):
+            lines.append(json.dumps({"id": number, **record}))
+            (folder / side / f"request-{number}.json").write_text(json.dumps(body))
+            (folder / side / f"response-{number}.sse").write_text(stream)
+        (folder / side / "requests.jsonl").write_text("".join(f"{x}\n" for x in lines))
+    count = len(front) if api_requests is None else api_requests
+    c.Outcome(label, api_requests=count).save(folder)
+    return c.analyze(tmp_path, c.known_census())
+
+
+def request(agent=None, **shape):
+    headers = {"x-claude-code-session-id": "s1"}
+    if agent:
+        headers["x-claude-code-agent-id"] = agent
+    record = {
+        **front_record(),
+        "headers": headers,
+        "response_shape": shape or {"$": ["object"]},
+    }
+    return record
+
+
+def test_a_reply_kind_the_gateway_dropped_is_found_per_request(tmp_path):
+    body = {"model": "m", "messages": []}
+    kinds = {"$.type": ["type=message_start", "type=message_stop"]}
+    front = [(request(**{"$.type": ["type=message_start"]}), body, STOP)]
+    report = synthetic(tmp_path, front, [(request(**kinds), body, STOP)])
+    assert (
+        "haiku/print: request 1: the gateway dropped reply $.type type=message_stop"
+        in report.failures
+    )
+    assert "haiku/print" not in report.clean
+
+
+def test_requests_that_crossed_are_paired_by_what_they_are(tmp_path):
+    # A subagent's request reached the API first; nothing was dropped.
+    main = {"model": "m", "messages": [{"role": "user", "content": "a"}]}
+    sub = {"model": "m", "messages": []}
+    main_reply = {"$.delta.text": ["string"]}
+    sub_reply = {"$.delta.thinking": ["string"]}
+    front = [
+        (request(**main_reply), main, STOP),
+        (request("agent-1", **sub_reply), sub, STOP),
+    ]
+    upstream = [
+        (request("agent-1", **sub_reply), sub, STOP),
+        (request(**main_reply), main, STOP),
+    ]
+    report = synthetic(tmp_path, front, upstream)
+    assert report.failures == []
+    assert "haiku/print" in report.clean
+
+
+def test_a_stream_that_never_stopped_never_completed(tmp_path):
+    body = {"model": "m", "messages": []}
+    report = synthetic(tmp_path, [(request(), body, "")], [(request(), body, STOP)])
+    assert (
+        "haiku/print: request 1 (POST /v1/messages) never completed" in report.failures
+    )
+
+
+def test_no_debug_log_count_is_a_failure(tmp_path):
+    body = {"model": "m", "messages": []}
+    front = [(request(), body, STOP)]
+    report = synthetic(tmp_path, front, [(request(), body, STOP)], api_requests=0)
+    assert any("logged no [API REQUEST] lines" in line for line in report.failures)
+
+
+def test_endpoint_paths_are_shapes():
+    def ep(path):
+        return c.endpoint({"method": "GET", "path": path})
+
+    assert ep("/v1/messages?beta=true") == "GET /v1/messages"
+    assert ep("/v1/messages/count_tokens") == "GET /v1/messages/count_tokens"
+    assert ep("/api/organizations/0f3e8a2c-uuid/settings") == (
+        "GET /api/organizations/<id>/settings"
+    )
+    assert ep("/v1/files/file_011CNha8iCJcU1wXNR6q4V8w") == "GET /v1/files/<id>"
+
+
+def test_nothing_of_this_machines_is_written(monkeypatch):
+    monkeypatch.setenv("USER", "adaquill")
+    monkeypatch.setenv("LOGNAME", "adaquill")
+    assert c.endpoint({"method": "GET", "path": "/u/adaquill/x"}) == "GET /u/<id>/x"
+    seen = c.Endpoints()
+    seen.add({**front_record(), "header_names": ["x-adaquill-id", "accept"]}, None, "l")
+    assert set(seen.headers) == {"accept"}
+    assert c.collapse({"$.metadata.adaquill": ["number"], "$": ["object"]}) == {
+        "$": ["object"]
+    }
+    with pytest.raises(AssertionError, match="user name"):
+        c._check_committable('{"x": "AdaQuill"}', "endpoints.json")
+
+
+def test_words_leave_out_keys_of_maps():
+    body = {
+        "safeguards": [
+            {"classifier_context": {"by_slug": {"acme-widgets": 1, "notes_app": 2}}}
+        ]
+    }
+    found = c.words(body)
+    assert "by_slug" in found
+    assert not found & {"acme-widgets", "notes_app"}
+
+
+def test_new_paths_keep_the_protocol_words_as_they_are(tmp_path, monkeypatch):
+    for name in ("request_census.json", "response_census.json", "endpoints.json"):
+        (tmp_path / name).write_text((c.PAYLOADS / name).read_text())
+    vocab = tmp_path / "vocab.py"
+    vocab.write_text(c.VOCAB.read_text())
+    monkeypatch.setattr(c, "PAYLOADS", tmp_path)
+    monkeypatch.setattr(c, "VOCAB", vocab)
+    report = c.Report(new=["request POST /v1/messages $.brand_new: object"])
+    report.words = {"brand_new"}
+    done = c.update(report, c.known_census(), accept_new=False, version=None)
+    assert "brand_new" not in vocab.read_text()
+    assert any(line.startswith("vocab.py stays") for line in done)
+    c.update(report, c.known_census(), accept_new=True, version=None)
+    assert '"brand_new",' in vocab.read_text()
+
+
+def test_a_kept_folder_must_be_a_census_run(tmp_path, capsys):
+    assert c.main(["--from", str(tmp_path)]) == 3
+    assert "not a census run folder" in capsys.readouterr().err
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "config.json").write_text(json.dumps(c.CONFIG))
-    for side, shape in (
-        ("front", {"$": ["object"]}),
-        ("upstream", {"$": ["object"], "$.new_key": ["number"]}),
-    ):
+    assert c.main(["--from", str(tmp_path)]) == 2  # nothing ran in it
+
+
+def test_the_sweep_ends_only_what_names_the_run_folder(tmp_path, monkeypatch):
+    import subprocess
+    import time
+
+    ended = []
+    monkeypatch.setattr(c, "end_processes", ended.extend)
+    root = tmp_path / "census-run"
+    root.mkdir()
+    near = f"{root}0/settings.json"
+    started = [
+        subprocess.Popen(["/bin/sh", "-c", "sleep 30; true", path])
+        for path in (f"{root}/settings.json", near, str(root))
+    ]
+    try:
+        time.sleep(0.3)
+        c.sweep(root)
+        assert sorted(ended) == sorted([started[0].pid, started[2].pid])
+        ended.clear()
+        c.sweep(c.Path("/"))
+        c.sweep(c.Path("/Users"))
+        assert ended == []  # never a run folder
+    finally:
+        for process in started:
+            process.kill()
+            process.wait()
+
+
+def test_the_planted_field_is_never_taken_for_claude_codes(tmp_path):
+    folder = tmp_path / "sonnet" / "refusal"
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "config.json").write_text(json.dumps(c.CONFIG))
+    body = {"model": "m", "messages": [], c.PLANTED: {"signature": c.PLANTED_VALUE}}
+    for side in ("front", "upstream"):
         (folder / side).mkdir(parents=True)
-        record = {"id": 1, **front_record(), "response_shape": shape}
-        (folder / side / "requests.jsonl").write_text(json.dumps(record) + "\n")
-        (folder / side / "request-1.json").write_text(
-            json.dumps({"model": "m", "messages": []})
-        )
-    c.Outcome("haiku/print", api_requests=1).save(folder)
+    record = {
+        "id": 1,
+        **front_record(),
+        "rewritten": True,
+        "response_shape": {"$": ["object"]},
+    }
+    (folder / "front" / "requests.jsonl").write_text(json.dumps(record) + "\n")
+    (folder / "front" / "request-1.json").write_text(json.dumps(body))
+    (folder / "upstream" / "requests.jsonl").write_text("")
+    note = f"claude -p reported an error: veil: ... Not handled: {c.PLANTED}.signature"
+    c.Outcome("sonnet/refusal", api_requests=1, notes=[note]).save(folder)
     report = c.analyze(tmp_path, c.known_census())
-    assert "haiku/print: the gateway dropped reply path $.new_key" in report.failures
+    assert not [p for p in report.requests.get(c.MESSAGES, {}) if c.PLANTED in p]
+    assert c.PLANTED not in report.words
+    assert not [w for w in report.warnings if c.PLANTED in w]
+
+
+def test_the_inputs_of_tools_others_wrote_arent_listed():
+    call = {"type": "tool_use", "id": "toolu_01", "input": {"email": "x"}}
+    body = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {**call, "name": "StructuredOutput"},
+                    {**call, "name": "mcp__contacts__find_contact"},
+                    {**call, "name": "Read", "input": {"file_path": "x"}},
+                ],
+            }
+        ]
+    }
+    shape = c.collapse(shape_of([c.own_inputs(body)]))
+    assert "$.messages[].content[].input.file_path" in shape
+    assert "$.messages[].content[].input.email" not in shape
+    assert body["messages"][0]["content"][0]["input"] == {"email": "x"}  # unchanged

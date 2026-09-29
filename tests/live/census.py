@@ -67,6 +67,8 @@ MODELS = {
 }
 CORE = ("print", "compact", "interactive")
 EXTRAS = ("schema", "mcp", "media", "web", "auto", "refusal")
+# Scenarios that need auto mode, which Claude Code doesn't use on Haiku.
+AUTO_SCENARIOS = ("auto", "refusal")
 MESSAGES = "POST /v1/messages"
 SECRET = "x-gateway-secret"
 # What the front records may answer besides a success.
@@ -178,9 +180,39 @@ class HarnessError(RuntimeError):
 # --- Shapes and what is new --------------------------------------------------
 
 
+_SEGMENT = re.compile(r"[a-z_][a-z0-9_]{0,39}")
+
+
+def own_names() -> set[str]:
+    """This machine's user name and home folder name, in lower case.
+
+    They are never written to a committed file (four characters or more:
+    shorter ones would be found inside ordinary words).
+    """
+    names = {
+        os.environ.get("USER", ""),
+        os.environ.get("LOGNAME", ""),
+        Path.home().name,
+    }
+    return {name.lower() for name in names if len(name) >= 4}
+
+
+def _owned(text: str) -> bool:
+    return any(name in text.lower() for name in own_names())
+
+
 def endpoint(record: Mapping[str, Any]) -> str:
-    """``"POST /v1/messages"``: a record's method and path, without the query."""
-    return f"{record['method']} {str(record['path']).split('?')[0]}"
+    """``"POST /v1/messages"``: a record's method and path's shape.
+
+    The query is dropped, and a path segment that isn't a plain name (an
+    id, say) becomes ``<id>``.
+    """
+    path = str(record["path"]).split("?")[0]
+    shape = "/".join(
+        part if not part or (_SEGMENT.fullmatch(part) and not _owned(part)) else "<id>"
+        for part in path.split("/")
+    )
+    return f"{record['method']} {shape}"
 
 
 def collapse(shape: Mapping[str, list[str]]) -> dict[str, list[str]]:
@@ -192,8 +224,42 @@ def collapse(shape: Mapping[str, list[str]]) -> dict[str, list[str]]:
     return {
         path: list(kinds)
         for path, kinds in shape.items()
-        if not path.startswith("$.tools[].input_schema.")
+        if not path.startswith("$.tools[].input_schema.") and not _owned(path)
     }
+
+
+def _others_tool(name: Any) -> bool:
+    """A tool whose schema someone else wrote: MCP's, or the user's own."""
+    return isinstance(name, str) and (
+        name.startswith("mcp__") or name == "StructuredOutput"
+    )
+
+
+def own_inputs(body: Any) -> Any:
+    """A body with the input of each call to `_others_tool` emptied.
+
+    Its keys are that schema's, not Claude Code's, so the census doesn't
+    list them (a --json-schema property, say).
+    """
+    if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
+        return body
+
+    def block(item: Any) -> Any:
+        if (
+            isinstance(item, dict)
+            and item.get("type") == "tool_use"
+            and _others_tool(item.get("name"))
+        ):
+            return {**item, "input": {}}
+        return item
+
+    messages = [
+        {**m, "content": [block(b) for b in m["content"]]}
+        if isinstance(m, dict) and isinstance(m.get("content"), list)
+        else m
+        for m in body["messages"]
+    ]
+    return {**body, "messages": messages}
 
 
 def _ignored(path: str, *, reply: bool) -> bool:
@@ -299,13 +365,14 @@ class Endpoints:
         if isinstance(record.get("status"), int):
             entry["statuses"].add(record["status"])
         for name in record.get("header_names", []):
-            if name != SECRET:
+            if name != SECRET and _HEADER.fullmatch(name) and not _owned(name):
                 self.headers.setdefault(name, set()).add(label)
         self.betas |= betas(record.get("headers", {}).get("anthropic-beta", ""))
         self.tools |= tool_names(body)
 
 
 _BETA = re.compile(r"[a-z0-9][a-z0-9.-]{0,79}")
+_HEADER = re.compile(r"[a-z0-9-]{1,64}")
 _TOOL = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
@@ -419,6 +486,8 @@ def words(body: Any) -> set[str]:
                     found.add(item)
                 if key == "input" and path.startswith("$.messages"):
                     continue
+                if key.startswith("by_") and isinstance(item, dict):
+                    continue  # keyed by data (a path, a slug): not field names
                 walk(item, f"{path}.{key}")
         elif isinstance(value, list):
             for item in value:
@@ -430,15 +499,13 @@ def words(body: Any) -> set[str]:
                 found.add(key)
                 for tool in item:
                     name = tool.get("name") if isinstance(tool, dict) else None
-                    if isinstance(name, str) and (
-                        name.startswith("mcp__") or name == "StructuredOutput"
-                    ):
+                    if _others_tool(name):
                         continue
                     walk(tool, "$.tools[]")
             else:
                 found.add(key)
                 walk(item, f"$.{key}")
-    own = {os.environ.get("USER", "").lower(), Path.home().name.lower()} - {""}
+    own = own_names()
     return {
         word
         for word in found
@@ -724,8 +791,13 @@ def run_print(
     permission_mode: str | None = None,
     resume: str | None = None,
     timeout: float = 300,
+    expect_error: bool = False,
 ) -> h.Run:
-    """One ``claude -p`` run through ``link``."""
+    """One ``claude -p`` run through ``link``.
+
+    One that ends in an error is a failure, unless ``expect_error`` (the
+    refusal check's) or it only ran out of turns.
+    """
     try:
         run = ws.run(
             prompt,
@@ -743,11 +815,12 @@ def run_print(
         raise HarnessError(f"claude -p didn't finish in {timeout:.0f} s") from None
     out.api_requests += len(run.api_requests())
     if not run.result:
-        out.notes.append(f"claude -p ended without a result (exit {run.returncode})")
-    elif run.result.get("is_error"):
+        out.failures.append(f"claude -p ended without a result (exit {run.returncode})")
+    elif run.result.get("is_error") and run.result.get("subtype") != "error_max_turns":
         # The text is Claude Code's or the gateway's, not a value.
         text = str(run.result.get("result", ""))[:300]
-        out.notes.append(shown(f"claude -p reported an error: {text}"))
+        line = shown(f"claude -p reported an error: {text}")
+        (out.notes if expect_error else out.failures).append(line)
     return run
 
 
@@ -937,6 +1010,10 @@ def run_interactive(
     deadline = time.monotonic() + 30
     while open_count(link.front) and time.monotonic() < deadline:
         time.sleep(0.5)
+    if open_count(link.front):
+        out.failures.append(
+            f"{open_count(link.front)} request(s) still open after /exit"
+        )
     debug = folder / "debug.log"
     if debug.exists():
         out.api_requests = sum(
@@ -1021,6 +1098,7 @@ def run_scenario(
                     EXTRA_TOOLS["auto"],
                     out,
                     permission_mode="auto",
+                    expect_error=True,
                 )
                 (folder / "result.txt").write_text(
                     str(run.result.get("result", "")), encoding="utf-8"
@@ -1262,13 +1340,21 @@ def check_capture(
     if status.get("harness"):
         report.harness.append(shown(f"{label}: {status['harness']}"))
         return
+    failures_before = len(report.failures)
     report.failures += [f"{label}: {f}" for f in status.get("failures", [])]
-    report.warnings += [f"{label}: {n}" for n in status.get("notes", [])]
+    report.warnings += [
+        f"{label}: {n}"
+        for n in status.get("notes", [])
+        if PLANTED not in n  # the refusal check's own, expected
+    ]
     front, upstream = capture.front, capture.upstream
     # What Claude Code sent.
     refused = 0
     for record in front.records:
         body = front.body(record)
+        if record.get("rewritten") and isinstance(body, dict):
+            # The refusal check's planted field isn't Claude Code's.
+            body = {key: value for key, value in body.items() if key != PLANTED}
         report.endpoints.add(record, body, label)
         ep = endpoint(record)
         if (
@@ -1276,7 +1362,7 @@ def check_capture(
             and record["method"] == "POST"
             and "/v1/messages" in ep
         ):
-            observe(report.requests, ep, collapse(census([body])), label)
+            observe(report.requests, ep, collapse(census([own_inputs(body)])), label)
             report.words |= words(body)
             report.versions |= billing_versions(body)
             model = body.get("model")
@@ -1288,7 +1374,7 @@ def check_capture(
             refused += 1
             if not label.endswith("/refusal"):
                 report.failures.append(shown(f"refused live: {label}: {message[:300]}"))
-        elif not isinstance(status_code, int):
+        elif not finished(front, record):
             report.failures.append(
                 f"{label}: request {record['id']} ({ep}) never completed"
             )
@@ -1302,19 +1388,22 @@ def check_capture(
         if ua:
             report.versions.add(ua)
     # What left the machine.
-    front_reply: set[str] = set()
-    upstream_reply: set[str] = set()
-    for record in front.models():
-        front_reply |= set(record.get("response_shape", {}))
     for record in upstream.models():
         body = upstream.body(record)
         for path in leaks(body):
             report.failures.append(f"leak: {label}: {normalized(path)}")
         status_code = record.get("status")
-        if status_code == 200:
-            shape = record.get("response_shape", {})
-            upstream_reply |= set(shape)
-            observe(report.replies, endpoint(record), shape, label)
+        if not finished(upstream, record):
+            report.failures.append(
+                f"{label}: the API's reply to request {record['id']} never completed"
+            )
+        elif status_code == 200:
+            observe(
+                report.replies,
+                endpoint(record),
+                record.get("response_shape", {}),
+                label,
+            )
         elif status_code in (429, 500, 502, 503, 529):
             report.warnings.append(
                 f"{label}: the API answered {status_code} (transient)"
@@ -1329,25 +1418,40 @@ def check_capture(
                     f"{label}: the API answered {status_code} {kind}: {str(text)[:200]}"
                 )
             )
-    for path in sorted(upstream_reply - front_reply):
-        report.failures.append(f"{label}: the gateway dropped reply path {path}")
-    front_billing = [billing_versions(front.body(r)) for r in front.models()]
-    upstream_billing = [billing_versions(upstream.body(r)) for r in upstream.models()]
-    if set().union(*front_billing, set()) != set().union(*upstream_billing, set()):
-        report.failures.append(
-            f"{label}: a billing line didn't reach the API as it was"
-        )
+    # Each request as Claude Code sent it, against what reached the API.
+    for sent, reached in pairs(front, upstream):
+        front_shape = sent.get("response_shape", {})
+        for path, kinds in reached.get("response_shape", {}).items():
+            lost = sorted(set(kinds) - set(front_shape.get(path, [])))
+            if lost:
+                report.failures.append(
+                    f"{label}: request {sent['id']}: the gateway dropped reply "
+                    f"{path} {', '.join(lost)}"
+                )
+        if billing_versions(front.body(sent)) != billing_versions(
+            upstream.body(reached)
+        ):
+            report.failures.append(
+                f"{label}: request {sent['id']}'s billing line didn't reach the "
+                "API as it was"
+            )
     # Counts.
-    sent, reached = len(front.models()), len(upstream.models())
-    if status.get("api_requests") and status["api_requests"] != sent:
+    sent_count, reached_count = len(front.models()), len(upstream.models())
+    logged = status.get("api_requests", 0)
+    if sent_count and not logged:
         report.failures.append(
-            f"{label}: Claude Code logged {status['api_requests']} model "
-            f"requests, the gateway saw {sent}"
+            f"{label}: Claude Code logged no [API REQUEST] lines, the gateway saw "
+            f"{sent_count} (its debug log is missing or its format changed)"
         )
-    if reached != sent - refused:
+    elif logged != sent_count:
         report.failures.append(
-            f"{label}: {sent} requests, {refused} refused, "
-            f"but {reached} reached the API"
+            f"{label}: Claude Code logged {logged} model requests, the gateway "
+            f"saw {sent_count}"
+        )
+    if reached_count != sent_count - refused:
+        report.failures.append(
+            f"{label}: {sent_count} requests, {refused} refused, "
+            f"but {reached_count} reached the API"
         )
     missing = coverage(capture)
     scenario = label.split("/", 1)[1]
@@ -1358,12 +1462,57 @@ def check_capture(
             else report.warnings
         ).append(f"{label}: didn't see {what}")
     replay(capture, config, report)
-    if (
-        not missing
-        and not status.get("failures")
-        and not refused_unexpected(label, refused)
+    if len(report.failures) == failures_before and not refused_unexpected(
+        label, refused
     ):
         report.clean.add(label)
+
+
+def finished(side: Side, record: Mapping[str, Any]) -> bool:
+    """Whether a request got a whole reply.
+
+    A streamed reply that never reached ``message_stop`` was cut off.
+    """
+    if not isinstance(record.get("status"), int):
+        return False
+    if "response_shape" not in record and "response_kind" not in record:
+        return False
+    streamed = "text/event-stream" in str(record.get("response_type", ""))
+    if streamed and record["status"] == 200 and "/v1/messages" in record["path"]:
+        return "event: message_stop" in side.stream(record)
+    return True
+
+
+def pairs(front: Side, upstream: Side) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Each request the gateway passed on, with the one that reached the API.
+
+    They are paired in order within the same session, agent, model and
+    number of messages: concurrent requests (a subagent's, the title's) can
+    reach the API in another order than they left Claude Code.
+    """
+
+    def key(side: Side, record: Mapping[str, Any]) -> tuple[Any, ...]:
+        body = side.body(record)
+        headers = record.get("headers", {})
+        messages = body.get("messages") if isinstance(body, dict) else None
+        return (
+            headers.get("x-claude-code-session-id"),
+            headers.get("x-claude-code-agent-id"),
+            body.get("model") if isinstance(body, dict) else None,
+            len(messages) if isinstance(messages, list) else None,
+        )
+
+    queues: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for record in upstream.models():
+        queues.setdefault(key(upstream, record), []).append(record)
+    found = []
+    for record in front.models():
+        if _gateway_refusal(front, record) is not None:
+            continue
+        queue = queues.get(key(front, record))
+        if queue:
+            found.append((record, queue.pop(0)))
+    return found
 
 
 def refused_unexpected(label: str, refused: int) -> bool:
@@ -1432,10 +1581,28 @@ def coverage(capture: Capture) -> list[str]:
         _has(b, _block("image")) or _has(b, _block("document")) for b in bodies
     ):
         missing.append("an image or a document block")
-    if scenario == "web" and not any(
-        _has(b, _block("server_tool_use")) for b in bodies
+    if scenario == "web" and not (
+        # WebSearch runs as a request of its own with the web_search server
+        # tool; the API's blocks come back in that request's reply.
+        any(
+            _has(
+                b,
+                lambda v: (
+                    isinstance(v, dict)
+                    and str(v.get("type", "")).startswith("web_search_")
+                ),
+            )
+            for b in bodies
+        )
+        and any(
+            "type=server_tool_use"
+            in r.get("response_shape", {}).get("$.content_block.type", [])
+            for r in records
+        )
     ):
-        missing.append("a server_tool_use block")
+        missing.append(
+            "a web search: the web_search tool, and server_tool_use in its reply"
+        )
     if scenario == "auto" and not any(
         isinstance(b, dict) and b.get("safeguards") for b in bodies
     ):
@@ -1545,16 +1712,20 @@ def update(
     }
     for name, value in files.items():
         text = dump(value)
-        h.assert_fictional(text)
+        _check_committable(text, name)
         if text != (PAYLOADS / name).read_text(encoding="utf-8"):
             write_atomic(PAYLOADS / name, text)
             done.append(f"updated {name}")
-    old = VOCAB.read_text(encoding="utf-8")
-    new = vocab_source(old, report.words)
-    h.assert_fictional(new)
-    if new != old:
-        write_atomic(VOCAB, new)
-        done.append("updated vocab.py")
+    if report.new and not accept_new:
+        # Words from paths not reviewed yet would loosen the masker.
+        done.append("vocab.py stays: the run saw something new (see --accept-new)")
+    else:
+        old = VOCAB.read_text(encoding="utf-8")
+        new = vocab_source(old, report.words)
+        _check_committable(new, VOCAB.name)
+        if new != old:
+            write_atomic(VOCAB, new)
+            done.append("updated vocab.py")
     if version is None or not complete(report) or (report.new and not accept_new):
         done.append("the tested version stays: the run isn't complete and clean")
         return done
@@ -1568,12 +1739,30 @@ def update(
     return done
 
 
+def _check_committable(text: str, name: str) -> None:
+    """Refuse to write a committed file holding anything real or this machine's."""
+    h.assert_fictional(text)
+    if _owned(text):
+        raise AssertionError(f"{name} would hold this machine's user name")
+
+
 def sweep(folder: Path) -> None:
     """End every process whose command line names the run folder.
 
     Claude Code, its hooks and MCP servers are; this process and those that
-    started it (a shell given the folder, say) are spared.
+    started it (a shell given the folder, say) are spared. Only the whole
+    folder counts (``/x/run1`` doesn't name ``/x/run10``).
     """
+    # As given and as resolved: on macOS a temporary folder is also
+    # /private/var/..., and commands were given the first.
+    spellings = {
+        str(p) for p in (folder.absolute(), folder.resolve()) if len(p.parts) >= 3
+    }
+    if not spellings:
+        return  # never a run folder: "/" or "/Users"
+    named = re.compile(
+        "(?:" + "|".join(map(re.escape, sorted(spellings))) + r")(?=/|\s|$)"
+    )
     listing = subprocess.run(
         ["ps", "-A", "-o", "pid=,ppid=,command="],
         capture_output=True,
@@ -1595,7 +1784,7 @@ def sweep(folder: Path) -> None:
         [
             pid
             for pid, command in commands.items()
-            if pid not in spared and str(folder) in command
+            if pid not in spared and named.search(command)
         ]
     )
 
@@ -1634,6 +1823,11 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
         "--extras-on", default="haiku", help="models that run the extra scenarios"
     )
     parser.add_argument(
+        "--auto-on",
+        default="sonnet",
+        help="models that run auto mode's scenarios (not Haiku: it has no auto mode)",
+    )
+    parser.add_argument(
         "--update",
         action="store_true",
         help="refresh the census on a run without failures",
@@ -1662,15 +1856,20 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
 
 
 def plan(args: argparse.Namespace) -> list[tuple[str, str]]:
+    """The (model, scenario) pairs to run, in order.
+
+    Core scenarios run on every model; the extras on ``--extras-on``, but
+    auto mode's on ``--auto-on``, since Claude Code (2.1.283) uses auto mode
+    only on some models (not Haiku).
+    """
     models = [m for m in args.models.split(",") if m]
     scenarios = [s for s in args.scenarios.split(",") if s]
-    extras_on = set(args.extras_on.split(","))
-    return [
-        (m, s)
-        for m in models
-        for s in scenarios
-        if s in CORE or (s in EXTRAS and m in extras_on)
-    ]
+    todo = [(m, s) for m in models for s in scenarios if s in CORE]
+    for s in scenarios:
+        if s in EXTRAS:
+            on = args.auto_on if s in AUTO_SCENARIOS else args.extras_on
+            todo += [(m, s) for m in on.split(",") if m]
+    return todo
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1687,9 +1886,15 @@ def main(argv: list[str] | None = None) -> int:
             + ", ".join(f"{m}/{s}" for m, s in todo)
         )
         return 0
+    kept = args.source or args.resume
+    if kept is not None:
+        kept = kept.resolve()
+        if not (kept / "data" / "config.json").is_file():
+            print(f"not a census run folder: {kept}", file=sys.stderr)
+            return 3
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, signal.default_int_handler)
-    run_root = args.source or args.resume or Path(tempfile.mkdtemp(prefix="census-"))
+    run_root = kept or Path(tempfile.mkdtemp(prefix="census-"))
     run_root.chmod(0o700)
     data_dir = run_root / "data"
     data_dir.mkdir(mode=0o700, exist_ok=True)
@@ -1712,6 +1917,12 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  harness: {shown(out.harness)}", flush=True)
         end = claude_version(claude) if claude and args.source is None else None
         report = analyze(run_root, known_census())
+        found = {tuple(c.label.split("/", 1)) for c in captures(run_root)}
+        if not found:
+            report.harness.append(f"no scenario ran in {run_root}")
+        if args.source is None:
+            for model, scenario in sorted(set(todo) - found):
+                report.harness.append(f"{model}/{scenario}: didn't finish")
         if start and end and start != end:
             report.failures.append(
                 f"Claude Code changed from {start} to {end} during the run"
@@ -1743,7 +1954,8 @@ def main(argv: list[str] | None = None) -> int:
         code = 130
         return code
     finally:
-        sweep(run_root)
+        if args.source is None:  # --from starts nothing
+            sweep(run_root)
         if code == 0 and not args.keep and args.source is None and args.resume is None:
             shutil.rmtree(run_root, ignore_errors=True)
         else:
