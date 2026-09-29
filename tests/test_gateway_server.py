@@ -1003,3 +1003,17 @@ def test_a_failure_of_the_gateway_mid_stream_is_final(api, gateway):
     assert error["type"] == "policy_blocked"
     assert error["details"] == {"error_code": "dlp_request_denied"}
     assert NAME.encode() not in payload
+
+
+def test_refusal_digest_storage_is_bounded():
+    from veil.gateway.request import UnsupportedRequestError
+    from veil.gateway.server import Refusals
+
+    refusals = Refusals()
+    error = UnsupportedRequestError("field", "unsupported")
+    for index in range(1100):
+        refusals.add(error, str(index).encode(), None)
+    assert len(refusals._bodies) == 1024
+    assert refusals.requests == 1100
+    refusals.add(error, b"1099", None)
+    assert refusals.requests == 1100

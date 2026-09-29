@@ -618,6 +618,14 @@ def _split_claude(argv: list[str]) -> tuple[list[str], list[str]]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line; return the exit code."""
+    if os.name == "nt":
+        # Windows pipes otherwise use the legacy ANSI code page, even though
+        # the local text/file workflow promises UTF-8. Keep interactive console
+        # handling with Python; only reconfigure redirected real streams.
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            configure = getattr(stream, "reconfigure", None)
+            if not stream.isatty() and callable(configure):
+                configure(encoding="utf-8", errors="strict")
     own, passed_on = _split_claude(list(sys.argv[1:] if argv is None else argv))
     options = _parser().parse_args(own)
     # Absolute, since the hooks run from wherever Claude Code is working.

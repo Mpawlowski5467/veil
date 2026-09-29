@@ -221,7 +221,8 @@ class Sessions:
 class Refusals:
     """What the gateway refused, for a summary when the client exits.
 
-    Only paths and problems, never a value; a request sent again counts once.
+    Only paths and problems, never a value. Deduplicate the last 1,024
+    distinct request bodies; older repeats can count again.
 
     Attributes:
         client: The Claude Code version of the last refused request, if known.
@@ -231,7 +232,8 @@ class Refusals:
         """Start with nothing refused; keep at most ``limit`` problems."""
         self._lock = threading.Lock()
         self._limit = limit
-        self._bodies: set[str] = set()
+        self._bodies: OrderedDict[str, None] = OrderedDict()
+        self._requests = 0
         self._groups: dict[tuple[str, str], list[Any]] = {}
         self.client: str | None = None
 
@@ -244,7 +246,10 @@ class Refusals:
             self.client = client or self.client
             if digest in self._bodies:
                 return
-            self._bodies.add(digest)
+            self._bodies[digest] = None
+            self._requests += 1
+            if len(self._bodies) > 1024:
+                self._bodies.popitem(last=False)
             for path, problem, count in error.problems:
                 key = (_INDEX.sub("[]", path), problem)
                 if key in self._groups:
@@ -254,9 +259,9 @@ class Refusals:
 
     @property
     def requests(self) -> int:
-        """How many different requests were refused."""
+        """Refused requests, excluding repeats still in the bounded cache."""
         with self._lock:
-            return len(self._bodies)
+            return self._requests
 
     def summary(self) -> list[str]:
         """Lines to print once the client has exited; none if nothing was refused."""
@@ -264,7 +269,7 @@ class Refusals:
             if not self._bodies:
                 return []
             problems = [(p, w, n) for p, w, n in self._groups.values()]
-            return compat.summary(len(self._bodies), problems, self.client)
+            return compat.summary(self._requests, problems, self.client)
 
 
 class Gateway:

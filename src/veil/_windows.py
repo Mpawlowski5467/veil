@@ -1,7 +1,7 @@
 """Native Windows ACLs for private storage, without optional dependencies.
 
-A private object is owned by the current user. Its discretionary ACL grants
-access only to that user, SYSTEM, and Administrators (the Windows equivalent
+A private object is owned by the current user or a privileged Windows account.
+Its discretionary ACL grants access only to that user, SYSTEM, and Administrators (the Windows equivalent
 of privileged Unix root access). New directories give children the same ACL.
 Existing permissions are checked, never silently rewritten.
 """
@@ -139,13 +139,13 @@ def check_private(path: Path) -> None:
     if status:
         raise OSError("Windows could not read private storage permissions")
     try:
-        if _sid_text(owner) != _user_sid() or not dacl:
+        allowed = {_user_sid(), "S-1-5-18", "S-1-5-32-544"}
+        if _sid_text(owner) not in allowed or not dacl:
             raise OSError(
                 "private storage must be owned by you and have a restricted ACL"
             )
         size = _AclSize()
         _check(adv.GetAclInformation(dacl, ctypes.byref(size), ctypes.sizeof(size), 2))
-        allowed = {_user_sid(), "S-1-5-18", "S-1-5-32-544"}
         for index in range(size.count):
             ace = w.LPVOID()
             _check(adv.GetAce(dacl, index, ctypes.byref(ace)))
