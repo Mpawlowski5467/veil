@@ -6,13 +6,49 @@ that a new user can install, verify, troubleshoot, and remove without help.
 
 This is an ordered plan, not a release-date commitment. Checked items are
 implemented in this branch; they do not imply a published package or validation
-of every supported client feature. The current package version remains 0.4.1.
+of every supported client feature. The current package version is 0.5.0; this is not a 1.0 release.
+
+## Where we are now
+
+**Stage: late alpha, preparing for a small external beta.** The core workflow is
+implemented; the remaining 1.0 work centers on evidence from real use, privacy
+review, and a dependable release process.
+
+| Area | Implemented in this checkout | Still needed for 1.0 |
+| --- | --- | --- |
+| Mask and restore | Python API, persistent mappings, streaming, built-in patterns including US SSNs, and private entity registration. | Expand the published 30-document fictional baseline with independently reviewed, representative samples. |
+| Setup and daily use | Codex setup/undo, CLI launchers, assistant skills, background controls, diagnostics, and request verification. | New users completing install, verification, recovery, and removal on each advertised platform. |
+| Client compatibility | Claude Code and experimental Codex adapters, scripted regression tests, and selected live round trips. | Broader desktop UI and long-session coverage, live API-key checks, and real client journeys on every target OS. |
+| Privacy and storage | Local masking, owner-only storage, bounded activity metadata, retention, and explicit deletion commands. | Independent review and resolved findings; the threat model and plaintext-storage decision are now documented. |
+| Release readiness | Cross-platform CI, package artifacts, wheel smoke checks, and 0.4.1 upgrade/rollback checks. | Complete the external beta and resolve release-blocking findings. |
+
+The pending compatibility, verification, and detection branches are integrated
+and tested together in the readiness candidate. Passing unit tests or one echo demonstration is not
+enough to call the advertised workflows stable.
+
+The next sequence is:
+
+1. Keep all candidate checks green, including native Windows, before sharing
+   the built wheel with beta participants.
+2. Run a small beta with people new to Veil, recording setup friction and failures
+   during ordinary work, including client updates and long conversations.
+3. Publish detection and compatibility results, complete the privacy/storage
+   review, and fix release-blocking findings.
+4. Ship 1.0 only when the [release gate](#10-release-gate) is met.
+
+Automatic login startup, local name recognition, secret/token detection, and
+additional media/providers are useful extensions. They can remain outside 1.0
+when the supported scope and exclusions are clear. The storage/security decisions
+and validation for the features we do advertise still need to be completed.
 
 ## The 1.0 promise
 
 **Mask supported, detected text locally before supported model calls, then
 restore it locally in supported replies.** Make the active route and limits
 understandable. Never imply that all computer traffic or every secret is covered.
+
+macOS, Linux, and native Windows are all 1.0 targets; Windows validation is
+required. See the [evidence and exclusions](docs/compatibility.md).
 
 The first stable scope is the Python library and supported local text workflows
 in Claude Code and Codex. The explicit mask/restore helper can support other chat
@@ -49,26 +85,30 @@ and undoes setup without manually editing TOML or losing unrelated settings.
 - [ ] Add automatic login/reboot startup and supervised crash recovery after
   defining installation/removal behavior for each OS. Windows background
   management remains unsupported; the foreground gateway remains available.
-- [ ] Provide an opt-in verification request that proves a fresh client task
-  reached Veil, instead of inferring that from saved configuration.
-- [ ] Show recent request activity and counts by entity type. Avoid original
-  values, prompts, authentication headers, and unnecessary retained history.
-- [ ] Distinguish stopped, ready, recently verified, and unknown states. A green
-  readiness result must not imply every client, tool, or existing task is covered.
+- [x] Provide an opt-in, one-use verification prompt that proves a particular
+  client request reached Veil, was masked, and had its reply restored. Evidence
+  identifies the observed session and expires; it does not prove future routing.
+- [x] Show bounded in-memory activity with request times and placeholder counts.
+  Include replayed history in counts, group custom types, salt session IDs, and
+  exclude original values, prompts, and authentication headers from reports.
+- [x] Distinguish worker states, gateway readiness, recent test evidence, and
+  unknown/expired probes without implying every client or task is covered.
+  See [verification and activity](docs/verification.md).
 
 **Exit:** users can tell whether their intended task used Veil, recover after a
 restart, and troubleshoot without keeping a terminal open or sharing raw requests.
 
 ## 3. Detection that matches everyday documents
 
-- [ ] Add a tested built-in US SSN detector with explicit supported formats and
+- [x] Add a tested built-in US SSN detector with explicit supported formats and
   false-positive rules; replace the ad hoc demo regex for normal use.
-- [ ] Add easy commands to register, list, and remove names, organizations, and
+- [x] Add easy commands to register, list, and remove names, organizations, and
   custom values, with private storage and clear case/variant behavior.
 - [ ] Evaluate opt-in secret/token detection against realistic examples before
   promising API-key or password coverage.
-- [ ] Maintain labeled, fictional test corpora; measure missed values and false
+- [x] Maintain labeled, fictional test corpora; measure missed values and false
   positives by entity type, format, and language, plus masking latency.
+  [Initial 30-document baseline](docs/detection-results.md); broader sampling remains.
 - [ ] Investigate optional local name recognition. Keep it optional and publish
   its limitations; don't silently send unmasked text to a remote detector.
 
@@ -83,25 +123,31 @@ values need registration and can preview a representative document locally.
   actionable recovery path while keeping masking intact.
 - [ ] Complete real API-key tests separately from ChatGPT sign-in tests.
 - [ ] Expand desktop testing beyond the verified basic text round trip.
-- [ ] Run native clipboard checks on supported operating systems.
-- [ ] Publish a client/version/feature matrix and rerun compatibility checks
-  after client updates. Unsupported request formats must fail clearly.
+- [x] Run native clipboard checks on macOS, Windows, and Linux X11. Native
+  Wayland remains unvalidated.
+- [x] Publish a [client/version/feature matrix](docs/compatibility.md) and a
+  repeatable census for client updates. Unsupported request formats must fail clearly.
 
 **Exit:** supported workflows work repeatedly under normal use and realistic
 failures, and regressions have reproducible tests. Unsupported features are explicit.
 
 ## 5. Private storage, review, and stable release
 
-- [ ] Offer a clear forget-after-run mode for the launchers and understandable
+- [x] Offer a clear forget-after-run mode for the launchers and understandable
   retention/deletion controls. Explain that client transcripts are separate.
-- [ ] Decide on vault encryption and OS-backed key storage against a written
-  threat model. Owner-only plaintext files are the current behavior.
-- [ ] Review how tool execution, shell reads/network access, inherited context,
+- [x] Decide on vault encryption and OS-backed key storage against a written
+  [threat model](docs/threat-model.md). Private plaintext files remain the scoped
+  default; application encryption/keychain support is explicitly deferred.
+- [x] Review how tool execution, shell reads/network access, inherited context,
   metadata, and alternate routes can bypass the model-request boundary.
 - [ ] Arrange an independent security review before making stronger privacy claims.
-- [ ] Publish stable API/configuration contracts, migration/rollback instructions,
-  a compatibility matrix, and installable release artifacts.
+- [x] Publish the planned 1.0 contracts, [upgrade/rollback instructions](docs/upgrading.md),
+  compatibility matrix, and installable CI artifacts. Registry publishing and
+  stable release approval remain manual gates.
 - [ ] Complete a small external beta and resolve release-blocking findings.
+
+The [beta protocol and release checklist](docs/release-checklist.md) records the
+human validation still required. Automated CI is not an external beta.
 
 ## 1.0 release gate
 

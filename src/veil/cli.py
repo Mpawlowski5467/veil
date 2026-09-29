@@ -16,17 +16,21 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Sequence
+from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from . import __version__
 from .gateway import (
     SECRET_HEADER,
     Gateway,
     SettingsError,
     SQLiteLedger,
+    compat,
     default_data_dir,
     git_identity,
     hooks,
@@ -60,6 +64,13 @@ REFUSED_OPTIONS = ("--settings", "--bare", "--safe-mode")
 #: Variables that turn every hook off; they are unset for Claude Code.
 HOOKS_OFF = ("CLAUDE_CODE_SIMPLE", "CLAUDE_CODE_SAFE_MODE")
 
+#: Seconds ``claude --version`` may take; past that the version is unknown.
+VERSION_TIMEOUT = 3.0
+
+# The versions already warned about, one "<claude code> <this package>" line
+# each, in the data folder.
+_WARNED = "version-warnings"
+
 
 def hook_command(data_dir: Path) -> list[str]:
     """The command Claude Code runs for the gateway's hooks.
@@ -91,6 +102,8 @@ def claude_settings(
         "ANTHROPIC_BASE_URL": gateway.url,
         "ANTHROPIC_CUSTOM_HEADERS": f"{headers}\n{custom}" if headers else custom,
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "VEIL_GATEWAY_URL": gateway.url,
+        "VEIL_GATEWAY_SECRET": gateway.secret,
     }
     # An empty value means unset: no other provider, hooks on.
     env.update(dict.fromkeys(hooks.OTHER_PROVIDERS, ""))
@@ -136,6 +149,51 @@ def _problems(args: Sequence[str], user_env: dict[str, str]) -> list[str]:
                 "to the Anthropic API itself, so unset it"
             )
     return found
+
+
+def claude_version(executable: str) -> str | None:
+    """The version the claude command reports, or None if it can't be read."""
+    try:
+        done = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=VERSION_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if done.returncode != 0:
+        return None
+    return compat.from_cli_output(done.stdout)
+
+
+def version_warning(version: str | None, data_dir: Path) -> str | None:
+    """The line to print about an untested Claude Code version, if any.
+
+    Given once for each pair of Claude Code and this package's version:
+    Claude Code updates often, and a line on every start would soon be
+    ignored. Never raises.
+    """
+    line = compat.version_warning(version)
+    if line is None:
+        return None
+    pair = f"{version} {__version__}"
+    path = data_dir / _WARNED
+    try:
+        if pair in path.read_text(encoding="utf-8").splitlines():
+            return None
+    except (OSError, ValueError):
+        pass
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(pair + "\n")
+    except OSError:
+        pass
+    return line
 
 
 def _open(data_dir: Path, cwd: Path) -> tuple[Settings, Any]:
@@ -233,12 +291,20 @@ def run_claude(
             f"({registered} registered values, {len(settings.patterns)} patterns)",
             file=sys.stderr,
         )
+        warning = version_warning(claude_version(executable), data_dir)
+        if warning is not None:
+            print(warning, file=sys.stderr)
         try:
-            return _run_child(
+            code = _run_child(
                 [executable, "--settings", str(settings_file), *args], env, cwd
             )
         finally:
             settings_file.unlink(missing_ok=True)
+        # Claude Code has left the terminal: say what it couldn't send, since
+        # a background request (a session title, say) fails without a word.
+        for line in gateway.refusals.summary():
+            print(line, file=sys.stderr)
+        return code
 
 
 def _run_child(command: list[str], env: dict[str, str], cwd: Path | None) -> int:
@@ -402,7 +468,38 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help=f"where mappings and config.json live (default: ~/.{APP})",
     )
+    parser.add_argument(
+        "--forget-after-run",
+        action="store_true",
+        help="use temporary mappings for a fresh Claude/Codex launch; remove on exit",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
+    entities = commands.add_parser("entities", help="manage exact private values")
+    entity_commands = entities.add_subparsers(dest="operation", required=True)
+    for operation in ("add", "remove"):
+        entity_command = entity_commands.add_parser(operation)
+        entity_command.add_argument(
+            "entity_type", help="type such as PERSON or ORGANIZATION"
+        )
+        entity_command.add_argument(
+            "--stdin",
+            action="store_true",
+            help="read one private value from stdin instead of a hidden prompt",
+        )
+    entity_list = entity_commands.add_parser(
+        "list", help="show counts, without private values"
+    )
+    entity_list.add_argument("entity_type", nargs="?")
+    entity_list.add_argument("--json", action="store_true")
+    verify = commands.add_parser(
+        "verify", help="create or check a client verification prompt"
+    )
+    verify.add_argument("--check", help="verification ID to inspect")
+    verify.add_argument("--config", type=Path, help="Codex config.toml path")
+    verify.add_argument(
+        "--gateway-url", help="explicit loopback gateway; secret from --data-dir"
+    )
+    verify.add_argument("--json", action="store_true")
     skill = commands.add_parser("skill", help="install or remove assistant skills")
     skill.add_argument("operation", choices=("install", "uninstall"))
     skill.add_argument(
@@ -467,6 +564,18 @@ def _parser() -> argparse.ArgumentParser:
         )
         if operation == "status":
             diagnostics.add_argument(
+                "--activity",
+                action="store_true",
+                help="inspect recent gateway activity",
+            )
+            diagnostics.add_argument(
+                "--verification", help="check evidence for a verification ID"
+            )
+            diagnostics.add_argument(
+                "--gateway-url",
+                help="explicit loopback gateway; secret from --data-dir",
+            )
+            diagnostics.add_argument(
                 "--service",
                 action="store_true",
                 help="check the background worker only",
@@ -516,11 +625,75 @@ def _split_claude(argv: list[str]) -> tuple[list[str], list[str]]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line; return the exit code."""
+    if os.name == "nt":
+        # Windows pipes otherwise use the legacy ANSI code page, even though
+        # the local text/file workflow promises UTF-8. Keep interactive console
+        # handling with Python; only reconfigure redirected real streams.
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            configure = getattr(stream, "reconfigure", None)
+            if not stream.isatty() and callable(configure):
+                configure(encoding="utf-8", errors="strict")
     own, passed_on = _split_claude(list(sys.argv[1:] if argv is None else argv))
     options = _parser().parse_args(own)
     # Absolute, since the hooks run from wherever Claude Code is working.
     data_dir = (options.data_dir or default_data_dir()).absolute()
     try:
+        if options.forget_after_run:
+            if options.command not in {"claude", "codex"}:
+                raise SettingsError(
+                    "--forget-after-run is only for claude or codex launches"
+                )
+            settings = load_settings(data_dir / "config.json")
+            with tempfile.TemporaryDirectory(prefix="veil-run-") as temporary:
+                private = prepare_data_dir(Path(temporary) / "data")
+                _write_private(private / "config.json", json.dumps(asdict(settings)))
+                print(
+                    f"{APP}: temporary mappings; removed when this launch exits. "
+                    "Client transcripts remain. Interrupted cleanup may leave files.",
+                    file=sys.stderr,
+                )
+                if options.command == "claude":
+                    return run_claude(passed_on, data_dir=private)
+                from .codex import run_codex
+
+                args = options.args[1:] if options.args[:1] == ["--"] else options.args
+                return run_codex(args, data_dir=private, auth=options.auth)
+        if options.command == "entities":
+            from .entities_cli import run_entities
+
+            return run_entities(
+                options.operation,
+                data_dir=data_dir,
+                entity_type=options.entity_type,
+                stdin=getattr(options, "stdin", False),
+                json_output=getattr(options, "json", False),
+            )
+        if options.command == "verify":
+            from .verification import run_verify
+
+            return run_verify(
+                check=options.check,
+                json_output=options.json,
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+            )
+        if options.command == "status" and (
+            options.activity or options.verification or options.gateway_url
+        ):
+            from .verification import run_activity
+
+            if options.service:
+                raise SettingsError(
+                    "choose --service or activity/verification status, not both"
+                )
+            return run_activity(
+                verification=options.verification,
+                json_output=options.json,
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+            )
         if options.command == "skill":
             from .skill import run_skill
 
@@ -531,7 +704,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .service import run_service
 
             return run_service(
-                options.command,
+                cast("Literal['start', 'stop', 'restart']", options.command),
                 data_dir=options.data_dir,
                 config=options.config,
                 port=getattr(options, "port", None),
@@ -595,6 +768,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{APP}: {error}", file=sys.stderr)
         return 2
     except OSError:
+        if options.command == "entities":
+            print(
+                f"{APP}: could not access private input or configuration; "
+                "check permissions and available disk space",
+                file=sys.stderr,
+            )
+            return 2
         if options.command == "skill":
             print(
                 f"{APP}: could not access skill files; check permissions and "
@@ -610,6 +790,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "start",
             "stop",
             "restart",
+            "verify",
         }:
             raise
         print(

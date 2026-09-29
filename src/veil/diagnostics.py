@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from . import Shield
+from . import Shield, _windows
 from .codex_setup import config_path, parse_toml, read_private_file, read_receipt
 from .gateway import SECRET_HEADER, SettingsError, default_data_dir, load_settings
 from .gateway.hooks import STATUS_PATH, _gateway_answers
@@ -229,6 +230,16 @@ def inspect_configuration(config: Path) -> tuple[list[Check], dict[str, Any]]:
     return checks, provider
 
 
+def _private_permissions(path: Path, mask: int = 0o077) -> bool:
+    try:
+        if _windows.is_windows():
+            _windows.check_private(path)
+            return True
+        return not bool(stat.S_IMODE(path.stat().st_mode) & mask)
+    except OSError:
+        return False
+
+
 def _doctor_checks(
     config: Path, directory: Path, provider: dict[str, Any]
 ) -> list[Check]:
@@ -245,7 +256,7 @@ def _doctor_checks(
     elif (
         directory.is_symlink()
         or not directory.is_dir()
-        or directory.stat().st_mode & 0o077
+        or not _private_permissions(directory)
     ):
         checks.append(
             Check(
@@ -264,8 +275,7 @@ def _doctor_checks(
         unsafe = [
             path.name
             for path in files
-            if path.is_symlink()
-            or (path.exists() and stat.S_IMODE(path.stat().st_mode) & 0o077)
+            if path.is_symlink() or (path.exists() and not _private_permissions(path))
         ]
         checks.append(
             Check(
@@ -467,6 +477,19 @@ def run_diagnostics(
         )
         if service["state"] == "unsupported":
             service_command = None
+    activity = None
+    if endpoint and any(
+        check.name == "gateway" and check.state == "pass" for check in checks
+    ):
+        from .gateway.activity import ACTIVITY_PATH
+        from .verification import Endpoint, local_request
+
+        # Older gateways can pass readiness without activity support.
+        with contextlib.suppress(SettingsError):
+            activity = local_request(
+                Endpoint(endpoint, provider["http_headers"][SECRET_HEADER]),
+                ACTIVITY_PATH,
+            )
     report = {
         "ready": ready,
         "config": str(target),
@@ -475,6 +498,7 @@ def run_diagnostics(
         "gateway_command": command,
         "service_command": service_command,
         "service": service,
+        "activity": activity,
         "checks": [asdict(check) for check in checks],
         "scope": (
             "Saved user settings and local gateway only. "
@@ -491,6 +515,12 @@ def run_diagnostics(
         print("Veil readiness: " + ("checks passed" if ready else "needs attention"))
         print(f"Codex settings: {target}")
         print(f"Background gateway: {service['state']}")
+        if activity is not None:
+            print(
+                f"Recent sessions observed: {len(activity['sessions'])}; "
+                "use status --activity for counts or --verification ID "
+                "for test evidence."
+            )
         if doctor:
             print(f"Veil data folder: {directory}")
         for check in checks:

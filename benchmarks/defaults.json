@@ -1,0 +1,414 @@
+{
+  "version": "0.5.0",
+  "corpus_sha256": "23e6f8742e6c97de3d5c8e6257245b0a9000f08e81c24592a67229d00a899f6e",
+  "documents": 30,
+  "mode": "defaults",
+  "platform": "Darwin",
+  "python": "3.14.6",
+  "total": {
+    "tp": 36,
+    "fp": 2,
+    "fn": 17,
+    "precision": 0.9474,
+    "recall": 0.6792
+  },
+  "by_type": {
+    "ADDRESS": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0
+    },
+    "CREDIT_CARD": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "EMAIL": {
+      "tp": 13,
+      "fp": 2,
+      "fn": 4,
+      "precision": 0.8667,
+      "recall": 0.7647
+    },
+    "IBAN": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "IPV4": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "IPV6": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.5
+    },
+    "ORGANIZATION": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "precision": null,
+      "recall": 0.0
+    },
+    "PERSON": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 5,
+      "precision": null,
+      "recall": 0.0
+    },
+    "PHONE": {
+      "tp": 8,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.8
+    },
+    "SECRET": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0
+    },
+    "SSN": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.8
+    }
+  },
+  "by_language": {
+    "de": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "en": {
+      "tp": 24,
+      "fp": 1,
+      "fn": 13,
+      "precision": 0.96,
+      "recall": 0.6486
+    },
+    "es": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "fr": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.5
+    },
+    "ja": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "ko": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "pl": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.6667
+    },
+    "zh": {
+      "tp": 0,
+      "fp": 1,
+      "fn": 1,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  },
+  "by_format": {
+    "ambiguous-layout": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0
+    },
+    "email": {
+      "tp": 11,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.7857
+    },
+    "invoice": {
+      "tp": 7,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.875
+    },
+    "json": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "log": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.8333
+    },
+    "note": {
+      "tp": 11,
+      "fp": 1,
+      "fn": 3,
+      "precision": 0.9167,
+      "recall": 0.7857
+    },
+    "registration": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "precision": null,
+      "recall": 0.0
+    },
+    "unsupported-layout": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "precision": null,
+      "recall": 0.0
+    },
+    "url": {
+      "tp": 0,
+      "fp": 1,
+      "fn": 1,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  },
+  "exact_restorations": 30,
+  "fully_covered_annotations": 38,
+  "expected_annotations": 53,
+  "mismatches": [
+    {
+      "id": "support-email",
+      "false_positives": [],
+      "misses": [
+        [
+          "PERSON",
+          3,
+          13
+        ]
+      ]
+    },
+    {
+      "id": "invoice",
+      "false_positives": [],
+      "misses": [
+        [
+          "ORGANIZATION",
+          18,
+          37
+        ]
+      ]
+    },
+    {
+      "id": "employee-note",
+      "false_positives": [],
+      "misses": [
+        [
+          "PERSON",
+          9,
+          19
+        ]
+      ]
+    },
+    {
+      "id": "polish-email",
+      "false_positives": [],
+      "misses": [
+        [
+          "PERSON",
+          25,
+          36
+        ]
+      ]
+    },
+    {
+      "id": "french-note",
+      "false_positives": [],
+      "misses": [
+        [
+          "PERSON",
+          10,
+          21
+        ]
+      ]
+    },
+    {
+      "id": "chinese-adjacent",
+      "false_positives": [
+        [
+          "EMAIL",
+          0,
+          25
+        ]
+      ],
+      "misses": [
+        [
+          "EMAIL",
+          4,
+          25
+        ]
+      ]
+    },
+    {
+      "id": "url-query",
+      "false_positives": [
+        [
+          "EMAIL",
+          27,
+          46
+        ]
+      ],
+      "misses": [
+        [
+          "EMAIL",
+          30,
+          46
+        ]
+      ]
+    },
+    {
+      "id": "log-multiple",
+      "false_positives": [],
+      "misses": [
+        [
+          "IPV6",
+          41,
+          44
+        ]
+      ]
+    },
+    {
+      "id": "local-french-phone",
+      "false_positives": [],
+      "misses": [
+        [
+          "PHONE",
+          16,
+          30
+        ]
+      ]
+    },
+    {
+      "id": "local-uk-phone",
+      "false_positives": [],
+      "misses": [
+        [
+          "PHONE",
+          16,
+          29
+        ]
+      ]
+    },
+    {
+      "id": "ssn-unlabelled",
+      "false_positives": [],
+      "misses": [
+        [
+          "SSN",
+          26,
+          35
+        ]
+      ]
+    },
+    {
+      "id": "obfuscated-email",
+      "false_positives": [],
+      "misses": [
+        [
+          "EMAIL",
+          9,
+          36
+        ]
+      ]
+    },
+    {
+      "id": "address",
+      "false_positives": [],
+      "misses": [
+        [
+          "ADDRESS",
+          11,
+          36
+        ],
+        [
+          "ORGANIZATION",
+          66,
+          85
+        ],
+        [
+          "PERSON",
+          46,
+          56
+        ]
+      ]
+    },
+    {
+      "id": "arbitrary-secret",
+      "false_positives": [],
+      "misses": [
+        [
+          "SECRET",
+          24,
+          52
+        ]
+      ]
+    },
+    {
+      "id": "quoted-address",
+      "false_positives": [],
+      "misses": [
+        [
+          "EMAIL",
+          21,
+          45
+        ]
+      ]
+    }
+  ],
+  "mask_latency_ms": {
+    "samples": 600,
+    "median": 0.0476,
+    "p95": 0.0855
+  }
+}

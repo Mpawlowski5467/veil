@@ -18,11 +18,13 @@ payload is saved as a fixture.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
@@ -313,18 +315,24 @@ class Workspace:
         extra_settings: Mapping[str, Any] | None = None,
         gateway: bool = False,
         timeout: float = 300,
+        model: str | None = None,
     ) -> Run:
         """Run ``claude -p prompt`` here with the probe hook answering ``rules``.
 
         ``extra_settings`` is merged into the settings file (e.g. ``env`` or
         ``permissions``). With ``gateway``, the CLI talks to the API through a
         recording pass-through gateway (see ``recorder.py``), whose records
-        end up in ``Run.gateway``.
+        end up in ``Run.gateway``. ``model`` overrides ``VEIL_LIVE_MODEL``.
+        On a timeout, everything the CLI started is ended, and
+        ``subprocess.TimeoutExpired`` is raised.
         """
         claude = claude_path()
         if claude is None:
             raise RuntimeError("the claude CLI isn't installed")
-        run_dir = self.root / f"run-{len(self.runs) + 1}"
+        number = len(self.runs) + 1
+        while (self.root / f"run-{number}").exists():  # a workspace used before
+            number += 1
+        run_dir = self.root / f"run-{number}"
         run_dir.mkdir()
         rules_file = run_dir / "rules.json"
         rules_file.write_text(json.dumps(list(rules), indent=1), encoding="utf-8")
@@ -340,7 +348,7 @@ class Workspace:
             "-p",
             prompt,
             "--model",
-            MODEL,
+            model or MODEL,
             "--settings",
             str(settings_file),
             "--setting-sources",
@@ -380,16 +388,7 @@ class Workspace:
             env["ANTHROPIC_BASE_URL"] = recorder.url
         env.update(extra_env or {})
         try:
-            completed = subprocess.run(
-                command,
-                cwd=self.work,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
+            completed = _run(command, cwd=self.work, env=env, timeout=timeout)
         finally:
             if recorder is not None:
                 recorder.close()
@@ -411,6 +410,39 @@ class Workspace:
             run.gateway = recorder.records
         self.runs.append(run)
         return run
+
+
+def _run(
+    command: list[str], *, cwd: Path, env: dict[str, str], timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Run ``command`` in a process group of its own, ended whole on a timeout.
+
+    Claude Code starts hooks, MCP servers and shells; killing it alone would
+    leave them running.
+    """
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, None)):
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(process.pid, sig)
+            try:
+                process.communicate(timeout=wait)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 # --- Fixtures: saving real payloads without anything real in them ----------

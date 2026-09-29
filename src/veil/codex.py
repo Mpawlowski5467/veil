@@ -177,7 +177,11 @@ def run_codex(
         for key, value in overrides.items():
             command.extend(["-c", f"{key}={toml_value(value)}"])
         command.extend(args)
-        env = {**os.environ, "VEIL_GATEWAY_SECRET": gateway.secret}
+        env = {
+            **os.environ,
+            "VEIL_GATEWAY_SECRET": gateway.secret,
+            "VEIL_GATEWAY_URL": gateway.url,
+        }
         print(
             f"veil: Codex through a local masking gateway ({auth}); "
             "private values in returned tools are limited to direct local patches",

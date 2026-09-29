@@ -11,6 +11,7 @@ from contextlib import contextmanager, suppress
 from datetime import timedelta
 from types import TracebackType
 
+from .. import _windows
 from ..placeholders import format_placeholder, validate_entity_type
 
 _SCHEMA_VERSION = 1
@@ -135,7 +136,12 @@ class SQLiteVault:
             if not create and not os.path.exists(self._path):
                 raise FileNotFoundError(f"The vault file {self._path} is gone")
             # Create the file owner-only before SQLite does (with 0644).
-            os.close(os.open(self._path, os.O_CREAT | os.O_RDWR, 0o600))
+            if _windows.is_windows():
+                from pathlib import Path
+
+                _windows.create_private(Path(self._path))
+            else:
+                os.close(os.open(self._path, os.O_CREAT | os.O_RDWR, 0o600))
         self._connect()
 
     def _connect(self) -> None:

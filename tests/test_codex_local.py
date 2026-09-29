@@ -72,6 +72,8 @@ def test_installed_codex_masks_a_prompt_and_restores_a_stream(tmp_path):
             upstream=api.host,
             secure=False,
         ) as gateway:
+            probe = gateway.activity.create_probe()
+            email = probe["prompt"].splitlines()[-1]
             provider = (
                 '{name="Veil local fixture",'
                 f'base_url="{gateway.url}/v1",'
@@ -101,7 +103,7 @@ def test_installed_codex_masks_a_prompt_and_restores_a_stream(tmp_path):
                     'web_search="disabled"',
                     "-m",
                     "gpt-6-sol",
-                    f"Say hello to {email}. Do not use tools.",
+                    probe["prompt"],
                 ],
                 env={**os.environ, "VEIL_CODEX_FIXTURE_KEY": "fictional-offline-key"},
                 capture_output=True,
@@ -111,6 +113,9 @@ def test_installed_codex_masks_a_prompt_and_restores_a_stream(tmp_path):
             )
             assert result.returncode == 0, result.stderr[-5000:]
             assert f"Hello {email}." in result.stdout
+            assert (
+                gateway.activity.probe(probe["verification_id"])["state"] == "verified"
+            )
             assert len(api.received) == 1
             _, path, headers, body = api.received[0]
             assert path == "/v1/responses"

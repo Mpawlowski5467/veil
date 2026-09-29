@@ -10,13 +10,18 @@ import time
 
 import pytest
 
-from veil import cli
+from veil import __version__, cli
 from veil.gateway import SECRET_HEADER, Settings, open_sessions
+from veil.gateway.compat import TESTED_CLAUDE_CODE
 
 FAKE_CLAUDE = """#!{python}
-import http.client, json, os, sys
+import http.client, json, os, sys, time
 from urllib.parse import urlsplit
 args = sys.argv[1:]
+if args == ["--version"]:
+    time.sleep(float(os.environ.get("FAKE_CLAUDE_VERSION_SLEEP", "0")))
+    print(os.environ.get("FAKE_CLAUDE_VERSION", ""))
+    sys.exit(int(os.environ.get("FAKE_CLAUDE_VERSION_EXIT", "0")))
 settings_path = args[args.index("--settings") + 1]
 settings = json.load(open(settings_path))
 mode = os.stat(settings_path).st_mode & 0o777
@@ -42,6 +47,22 @@ report = {{
     "secret_in_argv": secret in " ".join(sys.argv),
 }}
 report["pid"] = os.getpid()
+post = os.environ.get("FAKE_CLAUDE_POST")
+if post:
+    conn = http.client.HTTPConnection(host, timeout=5)
+    conn.request(
+        "POST",
+        "/v1/messages",
+        body=post,
+        headers={{
+            name: secret,
+            "x-claude-code-session-id": "s-1",
+            "User-Agent": "claude-cli/2.1.290 (external, cli)",
+            "Content-Type": "application/json",
+        }},
+    )
+    report["post_status"] = conn.getresponse().status
+    conn.close()
 with open(os.environ["FAKE_CLAUDE_REPORT"], "w") as f:
     json.dump(report, f)
 import time
@@ -58,6 +79,7 @@ def fake_claude(tmp_path, monkeypatch):
     path.chmod(0o755)
     report = tmp_path / "report.json"
     monkeypatch.setenv("FAKE_CLAUDE_REPORT", str(report))
+    monkeypatch.setenv("FAKE_CLAUDE_VERSION", f"{TESTED_CLAUDE_CODE} (Claude Code)")
     monkeypatch.setenv("PATH", f"{path.parent}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
     # Not this machine's own settings: a Claude Code session running these
@@ -118,6 +140,79 @@ class TestClaude:
     def test_claudes_exit_code_is_returned(self, fake_claude, data_dir, monkeypatch):
         monkeypatch.setenv("FAKE_CLAUDE_EXIT", "3")
         assert cli.main(["--data-dir", str(data_dir), "claude"]) == 3
+
+    def test_refused_requests_are_listed_when_claude_exits(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        _, report_file = fake_claude
+        # Refused: thinking the gateway can't vouch for, in the user's message.
+        thinking = {"type": "thinking", "thinking": "x", "signature": "s"}
+        body = {"messages": [{"role": "user", "content": [thinking]}]}
+        monkeypatch.setenv("FAKE_CLAUDE_POST", json.dumps(body))
+        monkeypatch.setenv("FAKE_CLAUDE_EXIT", "1")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 1
+        assert json.loads(report_file.read_text())["post_status"] == 400
+        err = capsys.readouterr().err.splitlines()
+        start = err.index(
+            "veil: 1 request couldn't be masked, so it wasn't sent. Not handled:"
+        )
+        assert err[start + 1] == (
+            "  messages[0].content[0].type "
+            "(only the model's own messages have thinking)"
+        )
+        assert err[start + 2].startswith("veil: This is Claude Code 2.1.290")
+
+    def test_an_untested_claude_code_is_named_once(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", "9.0.0 (Claude Code)")
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 0
+        err = capsys.readouterr().err
+        assert (
+            f"veil: Claude Code 9.0.0 is newer than {TESTED_CLAUDE_CODE}, the version "
+            f"veil {__version__} was tested with; if requests are refused, update veil"
+        ) in err.splitlines()
+        # Claude Code started anyway.
+        assert json.loads(fake_claude[1].read_text())["args"]
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        assert "is newer than" not in capsys.readouterr().err
+        assert (data_dir / "version-warnings").stat().st_mode & 0o777 == 0o600
+
+    def test_an_older_claude_code_is_told_to_update(
+        self, fake_claude, data_dir, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", "0.1.0 (Claude Code)")
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        err = capsys.readouterr().err
+        assert "veil: Claude Code 0.1.0 is older than" in err
+        assert "if requests are refused, update Claude Code" in err
+
+    @pytest.mark.parametrize(
+        ("output", "code", "sleep"),
+        [
+            (f"{TESTED_CLAUDE_CODE} (Claude Code)", "0", "0"),  # the tested one
+            ("not a version", "0", "0"),
+            ("9.0.0 (Claude Code)", "1", "0"),  # it failed
+            ("9.0.0 (Claude Code)", "0", "2"),  # too slow
+        ],
+    )
+    def test_nothing_is_said_when_the_version_isnt_new(
+        self, fake_claude, data_dir, monkeypatch, capsys, output, code, sleep
+    ):
+        monkeypatch.setattr(cli, "VERSION_TIMEOUT", 0.3)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION", output)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION_EXIT", code)
+        monkeypatch.setenv("FAKE_CLAUDE_VERSION_SLEEP", sleep)
+        # The slow version command must be ignored. Timing the entire launch
+        # also measures hook checks and server teardown under CI contention.
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 0
+        assert "was tested with" not in capsys.readouterr().err
+
+    def test_nothing_is_listed_when_nothing_was_refused(
+        self, fake_claude, data_dir, capsys
+    ):
+        cli.main(["--data-dir", str(data_dir), "claude"])
+        assert "couldn't be masked" not in capsys.readouterr().err
 
     def test_existing_custom_headers_are_kept(self, fake_claude, data_dir, monkeypatch):
         _, report_file = fake_claude
@@ -362,3 +457,51 @@ def test_python_dash_m_runs_the_command_line():
     )
     assert "claude" in completed.stdout
     assert "gateway" in completed.stdout
+
+
+@pytest.mark.parametrize("client", ["claude", "codex"])
+@pytest.mark.parametrize("fails", [False, True])
+def test_forget_after_run_isolated_storage_and_cleanup(
+    tmp_path, monkeypatch, client, fails
+):
+    from veil import cli, codex
+
+    source = tmp_path / "private"
+    source.mkdir(mode=0o700)
+    config = source / "config.json"
+    config.write_text('{"identity":false,"entities":{"PERSON":["Mira Quill"]}}')
+    original = config.read_bytes()
+    kept = source / "vault.db"
+    kept.write_bytes(b"existing storage remains untouched")
+    used = []
+
+    def launch(args, *, data_dir, **kwargs):
+        used.append(data_dir)
+        assert data_dir != source
+        assert json.loads((data_dir / "config.json").read_text())["entities"] == {
+            "PERSON": ["Mira Quill"]
+        }
+        assert not (data_dir / "vault.db").exists()
+        (data_dir / "vault.db").write_bytes(b"fictional temporary data")
+        if fails:
+            raise RuntimeError("simulated client failure")
+        return 7
+
+    monkeypatch.setattr(cli if client == "claude" else codex, "run_" + client, launch)
+    argv = ["--data-dir", str(source), "--forget-after-run", client]
+    if fails:
+        with pytest.raises(RuntimeError, match="simulated"):
+            cli.main(argv)
+    else:
+        assert cli.main(argv) == 7
+    assert len(used) == 1
+    assert not used[0].parent.exists()
+    assert config.read_bytes() == original
+    assert kept.read_bytes() == b"existing storage remains untouched"
+
+
+def test_forget_after_run_requires_a_launcher(capsys):
+    from veil.cli import main
+
+    assert main(["--forget-after-run", "entities", "list"]) == 2
+    assert "only for claude or codex" in capsys.readouterr().err

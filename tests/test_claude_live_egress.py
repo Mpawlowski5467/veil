@@ -102,9 +102,12 @@ def request_times(run, source):
 # --- Restored Bash commands, "ask", and project settings env -----------------
 
 RESTORE_PROMPT = (
+    "I'm testing a hook in this project that fills in placeholders before a"
+    " command runs. The bracketed tokens such as [EMAIL_1] are placeholders for"
+    " fictional test values; the hook replaces them, so write them exactly as"
+    " shown.\n"
     "Do these steps in order. Use exactly one Bash tool call per step and run"
-    " each command exactly as written: the bracketed tokens such as [EMAIL_1] are"
-    " literal text, keep them unchanged. Do not combine steps, and go on to the"
+    " each command exactly as written. Do not combine steps, and go on to the"
     " next step even if a step fails or is denied.\n"
     "Step 1: Bash: echo 'contact [EMAIL_1]'\n"
     "Step 2: Bash: printf 'ask [PHONE_1]'\n"

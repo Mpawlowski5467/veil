@@ -1,10 +1,12 @@
 """Masking Messages API requests: every field has a rule, unknown ones are refused."""
 
+import base64
 import copy
 import json
 
 import pytest
 
+import gateway_bodies
 from veil import LiteralPlaceholderDetector, MemoryVault, RegexDetector, Shield
 from veil.gateway import (
     DEFAULT_NOTE,
@@ -17,6 +19,8 @@ from veil.gateway import (
 from veil.gateway.ledger import canonical
 
 EMAIL = "jane.doe@example.com"
+# A fictional note, base64-encoded as a file would be.
+BASE64_NOTE = base64.b64encode(b"Name: Jan Nowak, jane.doe@example.com").decode()
 ACCOUNT = "account.owner@example.com"
 NAME = "Jan Nowak"
 BILLING = "x-anthropic-billing-header: cc_version=2.1.99.146; cc_entrypoint=cli"
@@ -163,8 +167,12 @@ class TestMasking:
 
     def test_system_text_is_masked_but_the_billing_header_is_not(self):
         masker, _, _ = make_masker(note=None)
-        system = masker.mask(claude_code_body())["system"]
-        assert system[0] == {"type": "text", "text": BILLING}
+        system = masker.mask(claude_code_body(), client_version="2.1.99")["system"]
+        # Kept as the client's version; its hash matches no prompt: left out.
+        assert system[0] == {
+            "type": "text",
+            "text": "x-anthropic-billing-header: cc_version=2.1.99; cc_entrypoint=cli",
+        }
         assert system[1]["text"] == "You are a helpful agent. The user is [EMAIL_1]."
         assert system[1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
 
@@ -827,9 +835,9 @@ class TestPerTurnEffort:
             with pytest.raises(UnsupportedRequestError) as info:
                 masker.mask(body)
             assert "output_config" in str(info.value)
-        clear_at = {"role": "system", "content": "x", "clear_at": "next_user_message"}
+        other = {"role": "system", "content": "x", "clear_at": "Jan Nowak"}
         with pytest.raises(UnsupportedRequestError) as info:
-            masker.mask({"messages": [clear_at]})
+            masker.mask({"messages": [other], "new": {"type": NAME}})
         assert "output_config" not in str(info.value)
 
 
@@ -855,15 +863,23 @@ class TestSpeed:
             "speed": speed,
         }
 
+    @pytest.mark.parametrize("speed", ["turbo", "priority", "fast_20991231"])
+    def test_a_speed_the_api_may_add_goes_out_too(self, speed):
+        # A name holding no data, like any setting's: a new one doesn't break
+        # every request.
+        masker, _, _ = make_masker(note=None)
+        assert masker.mask({"messages": [], "speed": speed})["speed"] == speed
+
     @pytest.mark.parametrize(
         "speed",
         [
-            "FAST",
             " fast",
             "fast\n",
-            "turbo",
-            "priority",
+            # A registered name however it is spelled, a phone glued to a letter.
             "jan_nowak",
+            "jannowak",
+            "fast_jan_nowak",
+            "x5555550100",
             NAME,
             EMAIL,
             "",
@@ -876,11 +892,26 @@ class TestSpeed:
         ],
     )
     def test_only_a_speed_is_sent(self, speed):
-        masker, _, _ = make_masker()
+        # Registered as the gateway registers it (see store.open_sessions).
+        masker, _, _ = make_masker(registered={NAME: "PERSON"})
         with pytest.raises(UnsupportedRequestError) as info:
             masker.mask({"messages": [], "speed": speed})
-        assert str(info.value) == "speed: unknown speed"
         assert info.value.path == "speed"
+        assert NAME not in str(info.value)
+        assert EMAIL not in str(info.value)
+
+
+def test_a_safeguards_type_holding_data_is_masked():
+    # Its own type too: one that holds data goes out masked, never as it is;
+    # one that holds none (dangerous_tool_use) as it is.
+    masker, _, _ = make_masker(registered={NAME: "PERSON"})
+    guards = [
+        {"type": f"{NAME} 555-123-4567", "classifier_context": {}},
+        {"type": "dangerous_tool_use", "classifier_context": {}},
+    ]
+    out = masker.mask({"messages": [], "safeguards": guards})["safeguards"]
+    assert out[0]["type"] == "[PERSON_1] [PHONE_1]"
+    assert out[1]["type"] == "dangerous_tool_use"
 
 
 BAD_BODIES = [
@@ -893,32 +924,13 @@ BAD_BODIES = [
         },
         "system[0].citations: citations aren't supported",
     ),
-    ({"messages": [], "prompt": "x"}, "prompt: unknown field"),
-    ({"messages": [], "speed": "turbo"}, "speed: unknown speed"),
-    ({"messages": [], "a b": "x"}, "<key>: unknown field"),
     ("not an object", "$: the body is not a JSON object"),
     ({"messages": {"role": "user"}}, "messages: not a list"),
     (
         {"messages": [{"role": "tool", "content": "x"}]},
-        "messages[0].role: unknown role",
+        "messages[0].role: unknown role 'tool'",
     ),
     ({"messages": ["x"]}, "messages[0]: not an object"),
-    (
-        {"messages": [{"role": "user", "content": "x", "name": "n"}]},
-        "messages[0].name: unknown field",
-    ),
-    (
-        {"messages": [{"role": "user", "content": "x", EMAIL: 1}]},
-        "messages[0].<key>: unknown field",
-    ),
-    (
-        {
-            "messages": [
-                {"role": "system", "content": "x", "clear_at": "next_user_message"}
-            ]
-        },
-        "messages[0].clear_at: unknown field",
-    ),
     (
         with_output_config({"effort": "high"}, role="user"),
         "messages[1].output_config: only a system message has output_config",
@@ -952,24 +964,96 @@ BAD_BODIES = [
         "messages[0].role: unknown role",
     ),
     (
-        {
-            "messages": [
-                {"role": "user", "content": [{"type": "server_tool_use", "id": "s"}]}
-            ]
-        },
-        "messages[0].content[0].type: unknown block type",
-    ),
-    (
-        {
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": "x", "extra": 1}]}
-            ]
-        },
-        "messages[0].content[0].extra: unknown field",
-    ),
-    (
         {"messages": [{"role": "user", "content": [{"type": "text", "text": 5}]}]},
         "messages[0].content[0].text: not a string",
+    ),
+    ({"messages": [], "stop_sequences": [1]}, "stop_sequences[0]: not a string"),
+    ({"messages": [], "a b": "x"}, "<key>: a field name that may hold personal data"),
+    (
+        {"messages": [{"role": "user", "content": "x", EMAIL: 1}]},
+        "messages[0].<key>: a field name that may hold personal data",
+    ),
+    (
+        {"messages": [{"role": "user", "content": [{"type": "text", "text": "x"}]}]}
+        | {"new": {"type": NAME}},
+        "new.type: a type that may hold personal data",
+    ),
+    (
+        {"messages": [], "new": {"card": 4111111111111111}},
+        "new.card: a number that may hold personal data",
+    ),
+    (
+        {"messages": [], "new": {"blob": BASE64_NOTE}},
+        "new.blob: opaque data that can't be masked",
+    ),
+    (
+        {"messages": [], "new": {"signature": "abc"}},
+        "new.signature: opaque data that can't be masked",
+    ),
+    (
+        {"messages": [], "new": {"source": {"media_type": "text/csv", "data": "x"}}},
+        "new.source: file data that can't be masked",
+    ),
+    (
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "thinking", "thinking": "x", "signature": "s"}
+                    ],
+                }
+            ]
+        },
+        "messages[0].content[0].type: only the model's own messages have thinking",
+    ),
+    (
+        {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "thinking", "thinking": "x"}],
+                }
+            ]
+        },
+        "messages[0].content[0].signature: not a string",
+    ),
+    (
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": EMAIL}],
+                }
+            ]
+        },
+        "messages[0].content[0].tool_use_id: an id the API couldn't have made",
+    ),
+    (
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "t", "is_error": "yes"}
+                    ],
+                }
+            ]
+        },
+        "messages[0].content[0].is_error: not true or false",
+    ),
+    (
+        {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "tool_use", "id": "t", "name": NAME, "input": {}}
+                    ],
+                }
+            ]
+        },
+        "messages[0].content[0].name: a tool name that may hold personal data",
     ),
     (
         {
@@ -978,15 +1062,18 @@ BAD_BODIES = [
                     "role": "user",
                     "content": [
                         {
-                            "type": "text",
-                            "text": "x",
-                            "citations": [{"cited_text": "y"}],
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "audio/wav",
+                                "data": "x",
+                            },
                         }
                     ],
                 }
             ]
         },
-        "messages[0].content[0].citations: citations aren't supported",
+        "messages[0].content[0].source.media_type: a kind of file that isn't sent",
     ),
     (
         {
@@ -994,12 +1081,18 @@ BAD_BODIES = [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "source": {"type": "file", "file_id": "f"}}
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": f"https://example.com/?u={EMAIL}",
+                            },
+                        }
                     ],
                 }
             ]
         },
-        "messages[0].content[0].source.type: unknown source type",
+        "messages[0].content[0].source.url: a URL that may hold personal data",
     ),
     (
         {
@@ -1009,49 +1102,17 @@ BAD_BODIES = [
                     "content": [
                         {
                             "type": "document",
-                            "source": {"type": "content", "content": []},
+                            "source": {
+                                "type": "text",
+                                "media_type": "text/csv",
+                                "data": "x",
+                            },
                         }
                     ],
                 }
             ]
         },
-        "messages[0].content[0].source.type: unknown document source",
-    ),
-    (
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": "t",
-                            "content": [{"type": "tool_use"}],
-                        }
-                    ],
-                }
-            ]
-        },
-        "messages[0].content[0].content[0].type: unknown block type",
-    ),
-    (
-        {"system": [{"type": "image", "source": {}}], "messages": []},
-        "system[0].type: unknown block type",
-    ),
-    ({"messages": [], "stop_sequences": [1]}, "stop_sequences[0]: not a string"),
-    ({"messages": [], "safeguards": {"type": "x"}}, "safeguards: not a list"),
-    ({"messages": [], "safeguards": ["x"]}, "safeguards[0]: not an object"),
-    (
-        {"messages": [], "safeguards": [{"type": f"{NAME} 555-123-4567"}]},
-        "safeguards[0].type: unknown safeguard type",
-    ),
-    (
-        {"messages": [], "safeguards": [{"type": ["dangerous_tool_use"]}]},
-        "safeguards[0].type: unknown safeguard type",
-    ),
-    (
-        {"messages": [], "safeguards": [{"classifier_context": {}}]},
-        "safeguards[0].type: unknown safeguard type",
+        "messages[0].content[0].source.media_type: not text/plain",
     ),
 ]
 
@@ -1075,7 +1136,9 @@ def test_refusals_never_quote_a_value():
     with pytest.raises(UnsupportedRequestError) as info:
         masker.mask(body)
     # Keys are named only when they look like field names.
-    assert str(info.value) == "messages[0].content[0].<key>: unknown field"
+    assert str(info.value) == (
+        "messages[0].content[0].<key>: a field name that may hold personal data"
+    )
     body = {"messages": [{"role": EMAIL, "content": "x"}]}
     with pytest.raises(UnsupportedRequestError) as info:
         masker.mask(body)
@@ -1085,10 +1148,34 @@ def test_refusals_never_quote_a_value():
     assert EMAIL not in str(info.value)
 
 
+# Keys only the API's own blocks have (server tool calls, their results,
+# compaction, citations on text): each block type has a rule for them.
+_API_BLOCK_KEYS = frozenset(
+    {
+        "id",
+        "name",
+        "input",
+        "tool_use_id",
+        "content",
+        "citations",
+        "encrypted_content",
+        "signature",
+        "is_error",
+        "caller",
+        "file_id",
+        "from",
+        "to",
+        "trigger",
+        "tool_changes",
+    }
+)
+
+
 def test_every_recorded_field_and_block_type_has_a_rule():
     from pathlib import Path
 
     from veil.gateway import request
+    from veil.gateway.vocab import WORDS
 
     census_file = Path(__file__).parent / "gateway_payloads" / "request_census.json"
     census = json.loads(census_file.read_text())["POST /v1/messages"]
@@ -1118,15 +1205,349 @@ def test_every_recorded_field_and_block_type_has_a_rule():
     def types_at(path):
         return {kind[5:] for kind in census[path]["kinds"] if kind.startswith("type=")}
 
-    assert types_at("$.messages[].content[].type") <= set(request._BLOCK_KEYS)
-    assert types_at("$.messages[].content[].content[].type") <= request._NESTED_BLOCKS
+    # Blocks the API defines have rules of their own, by role.
+    api_blocks = {kind for _, kind in request._API_BLOCKS}
+    assert (
+        types_at("$.messages[].content[].type") <= set(request._BLOCK_KEYS) | api_blocks
+    )
+    assert types_at("$.messages[].content[].content[].type") <= (
+        request._NESTED_BLOCKS | set(request._NESTED_API_BLOCKS)
+    )
     assert types_at("$.system[].type") == {"text"}
-    assert types_at("$.safeguards[].type") <= request._SAFEGUARD_TYPES
+    # A safeguard's type is a protocol word (one holding data is masked).
+    assert types_at("$.safeguards[].type") <= WORDS
     assert types_at("$.messages[].content[].content[].source.type") <= {"base64", "url"}
+    # A key of a block of Claude Code's own has a rule too (the API's blocks
+    # are checked by their rules, and anything else in them masked).
     for path in census:
         if path.startswith("$.messages[].content[].") and path.count(".") == 3:
             key = path.rsplit(".", 1)[1].removesuffix("[]")
             assert (
                 any(key in keys for keys in request._BLOCK_KEYS.values())
                 or key == "type"
+                or key in _API_BLOCK_KEYS
+            ), key
+
+
+class TestEveryProblem:
+    """A refusal names every problem, so one update fixes them all."""
+
+    def body(self):
+        thinking = {"type": "thinking", "thinking": "x", "signature": "s"}
+        return {
+            "brand_new_field": {"type": NAME},
+            "messages": [
+                {"role": "user", "content": [thinking]},
+                {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+                {"role": "user", "content": [thinking]},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "x", "a b": 1, EMAIL: 2}],
+                },
+                {"role": ["user"], "content": "x"},
+            ],
+            "system": [{"type": "text", "text": "x", "citations": [{"a": 1}]}],
+        }
+
+    def test_problems_are_collected_and_grouped(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(self.body())
+        error = info.value
+        assert error.problems == (
+            ("brand_new_field.type", "a type that may hold personal data", 1),
+            (
+                "messages[0].content[0].type",
+                "only the model's own messages have thinking",
+                2,
+            ),
+            (
+                "messages[3].content[0].<key>",
+                "a field name that may hold personal data",
+                2,
+            ),
+            ("messages[4].role", "unknown role", 1),
+            ("system[0].citations", "citations aren't supported", 1),
+        )
+        assert error.total == 7
+        assert error.path == "brand_new_field.type"
+        assert str(error).startswith(
+            "brand_new_field.type: a type that may hold personal data; "
+        )
+        assert "have thinking (2 times)" in str(error)
+
+    def test_one_problem_reads_as_before(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask({"messages": [], "a b": 1})
+        assert str(info.value) == "<key>: a field name that may hold personal data"
+        assert info.value.problems == (
+            ("<key>", "a field name that may hold personal data", 1),
+        )
+
+    def test_a_refused_request_leaves_nothing_behind_for_the_next(self):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError):
+            masker.mask(self.body())
+        # The next request is judged on its own.
+        assert masker.mask({"messages": [{"role": "user", "content": "hi"}]})
+
+    def test_a_name_holding_data_is_never_shown(self):
+        shield = make_shield()
+        shield.add_entity("ada_quill", "USER")
+        masker = RequestMasker(
+            shield, MemoryLedger(), registered={"ada_quill": "USER", NAME: "PERSON"}
+        )
+        body = {
+            "ada_quill": 1,
+            "messages": [
+                {"role": "user", "content": [{"type": "ada_quill"}]},
+                {"role": "ada_quill", "content": "x"},
+                {"role": "user", "content": [{"type": "text", "text": "x", EMAIL: 1}]},
+            ],
+        }
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        text = str(info.value)
+        assert "ada_quill" not in text
+        assert EMAIL not in text
+        assert info.value.problems == (
+            ("<key>", "a field name that may hold personal data", 1),
+            ("messages[0].content[0].type", "a type that may hold personal data", 1),
+            ("messages[1].role", "unknown role", 1),
+            (
+                "messages[2].content[0].<key>",
+                "a field name that may hold personal data",
+                1,
+            ),
+        )
+
+
+class TestNamesAreCheckedLast:
+    def test_a_key_holding_a_value_seen_later_is_not_shown(self):
+        # A card glued to a letter: only the known-value pass finds it, and
+        # only once the card itself has been seen, later in the same body.
+        card = "4111111111111111"
+        masker, _, _ = make_masker(note=None)
+        thinking = {"type": "thinking", "thinking": "x", "signature": "s"}
+        body = {
+            "messages": [
+                {"role": "user", "content": [thinking]},
+                {"role": "user", "content": f"my card is {card}"},
+            ],
+            "new": {f"k{card}": 1},
+        }
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert card not in str(info.value)
+        # Checking the name didn't leave a verdict behind for later text.
+        later = {"messages": [{"role": "user", "content": f"k{card}"}]}
+        masker.mask({"messages": [{"role": "user", "content": card}]})
+        assert card not in json.dumps(masker.mask(later))
+
+    def test_the_gateways_own_words_are_always_shown(self):
+        shield = make_shield()
+        shield.add_entity("con", "USER")
+        masker = RequestMasker(shield, MemoryLedger(), registered={"con": "USER"})
+        thinking = {"type": "thinking", "thinking": "x", "signature": "s"}
+        body = {"messages": [{"role": "user", "content": [thinking]}]}
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert info.value.path == "messages[0].content[0].type"
+
+
+class TestCrashes:
+    """Bodies that used to crash the masker are refused instead."""
+
+    @pytest.mark.parametrize("role", [["user"], {"a": 1}, 1, None])
+    def test_a_role_that_isnt_a_string(self, role):
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError, match=r"messages\[0\]\.role"):
+            masker.mask({"messages": [{"role": role, "content": "x"}]})
+
+    @pytest.mark.parametrize("kind", [["base64"], {"a": 1}])
+    def test_a_source_type_that_isnt_a_string(self, kind):
+        masker, _, _ = make_masker()
+        image = {"type": "image", "source": {"type": kind}}
+        with pytest.raises(UnsupportedRequestError, match="unknown source type"):
+            masker.mask({"messages": [{"role": "user", "content": [image]}]})
+
+    @pytest.mark.parametrize("where", ["tool_input", "safeguards"])
+    def test_a_value_nested_too_deeply(self, where):
+        from veil.gateway.request import MAX_DEPTH
+
+        deep = "x"
+        for _ in range(MAX_DEPTH + 5):
+            deep = {"k": deep}
+        if where == "safeguards":
+            body = {"messages": [], "safeguards": [deep]}
+        else:
+            block = {"type": "tool_use", "id": "t", "name": "n", "input": deep}
+            body = {"messages": [{"role": "assistant", "content": [block]}]}
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError, match="nested too deeply") as info:
+            masker.mask(body)
+        expected = "safeguards" if where == "safeguards" else "messages[0]"
+        assert info.value.path == expected
+
+    def test_a_deep_message_doesnt_hide_the_others_problems(self):
+        deep = "x"
+        for _ in range(200):
+            deep = {"k": deep}
+        block = {"type": "tool_use", "id": "t", "name": "n", "input": deep}
+        body = {
+            "messages": [
+                {"role": "assistant", "content": [block]},
+                {"role": "tool", "content": "x"},
+            ]
+        }
+        masker, _, _ = make_masker()
+        with pytest.raises(UnsupportedRequestError) as info:
+            masker.mask(body)
+        assert [p[:2] for p in info.value.problems] == [
+            ("messages[0]", "nested too deeply"),
+            ("messages[1].role", "unknown role 'tool'"),
+        ]
+
+    def test_a_tool_id_the_api_couldnt_have_made_is_refused(self, tmp_path):
+        # A lone surrogate crashed SQLiteLedger's lookup; it is refused first.
+        from veil.gateway import SQLiteLedger
+
+        ledger = SQLiteLedger(tmp_path / "ledger.db", "s")
+        masker = RequestMasker(make_shield(), ledger, note=None)
+        block = {"type": "tool_use", "id": "a\udfffb", "name": "n", "input": {}}
+        with pytest.raises(UnsupportedRequestError, match="an id the API couldn't"):
+            masker.mask({"messages": [{"role": "assistant", "content": [block]}]})
+        ledger.close()
+
+
+class TestBillingLine:
+    """Only the billing line's name and version, the client's own, stay."""
+
+    def masked(self, system, client_version="2.1.283", prompt=None, registered=None):
+        masker, shield, _ = make_masker(note=None)
+        for value, kind in (registered or {}).items():
+            shield.add_entity(value, kind)
+        messages = [] if prompt is None else [{"role": "user", "content": prompt}]
+        body = {"system": system, "messages": messages}
+        out = masker.mask(body, client_version=client_version)
+        return out["system"], out["messages"]
+
+    def test_the_hash_is_made_again_from_the_masked_prompt(self):
+        # Claude Code hashes three characters of the first prompt into the
+        # line; made from the real prompt, it could tell a masked one.
+        prompt = f"Please email {EMAIL} about the invoice"
+        line = gateway_bodies.billing(prompt)
+        system, messages = self.masked(line, prompt=prompt)
+        masked_prompt = messages[0]["content"]
+        assert masked_prompt == "Please email [EMAIL_1] about the invoice"
+        new_hash = gateway_bodies.fingerprint(masked_prompt)
+        assert new_hash != gateway_bodies.fingerprint(prompt)
+        assert system.startswith(
+            f"x-anthropic-billing-header: cc_version=2.1.283.{new_hash}; "
+        )
+
+    def test_a_hash_no_prompt_gives_is_left_out(self):
+        line = f"x-anthropic-billing-header: cc_version=2.1.283.a1b; to {NAME} {EMAIL};"
+        system, _ = self.masked([{"type": "text", "text": line}], prompt="Hi there")
+        assert system[0]["text"] == (
+            "x-anthropic-billing-header: cc_version=2.1.283; to [PERSON_1] [EMAIL_1];"
+        )
+
+    def test_the_name_in_any_letter_case_and_only_the_name(self):
+        line = "X-Anthropic-Billing-Header: cc_version=2.1.283;"
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert system[0]["text"] == line
+        upper = "x-anthropic-billing-header: CC_VERSION=2.1.283;"
+        system, _ = self.masked([{"type": "text", "text": upper}])
+        assert system[0]["text"] == TestBillingLine.fully_masked(upper)
+
+    def test_a_line_that_only_starts_like_it_is_masked(self):
+        line = f"x-anthropic-billing-header: {NAME} {EMAIL}"
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert system[0]["text"] == "x-anthropic-billing-header: [PERSON_1] [EMAIL_1]"
+
+    def test_only_the_billing_line_of_a_longer_block_is_kept(self):
+        text = (
+            f"Hello {NAME}\nx-anthropic-billing-header: cc_version=2.1.283\nBye {EMAIL}"
+        )
+        system, _ = self.masked(text)
+        assert system == (
+            "Hello [PERSON_1]\nx-anthropic-billing-header: cc_version=2.1.283\n"
+            "Bye [EMAIL_1]"
+        )
+
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "2.1.283.a1bJanNowak;",  # something glued to the version
+            "2.1.283.555-555-0100;",  # a phone glued after the version
+            "٢.1.283.a1b;",  # not ASCII digits
+            "2.1.284.a1b;",  # not the client's version
+            "2.1.283.ADA;",  # an upper-case "hash"
+        ],
+    )
+    def test_a_version_that_isnt_the_clients_is_not_kept(self, version):
+        line = f"x-anthropic-billing-header: cc_version={version} {EMAIL}"
+        system, _ = self.masked([{"type": "text", "text": line}])
+        assert EMAIL not in system[0]["text"]
+        assert system[0]["text"] == TestBillingLine.fully_masked(line)
+
+    def test_a_known_value_in_the_kept_part_is_masked(self):
+        line = "x-anthropic-billing-header: cc_version=2.1.283.ada;"
+        system, _ = self.masked(
+            [{"type": "text", "text": line}], registered={"ada": "USER"}
+        )
+        assert "ada" not in system[0]["text"]
+
+    @staticmethod
+    def fully_masked(text):
+        masker, _, _ = make_masker(note=None)
+        return masker.mask({"messages": [{"role": "user", "content": text}]})[
+            "messages"
+        ][0]["content"]
+
+    def test_without_a_client_version_only_claude_codes_own_place_is_kept(self):
+        line = "x-anthropic-billing-header: cc_version=2.1.283.a1b; cc_entrypoint=cli;"
+        dropped = "x-anthropic-billing-header: cc_version=2.1.283; cc_entrypoint=cli;"
+        first, _ = self.masked([{"type": "text", "text": line}], client_version=None)
+        assert first[0]["text"] == dropped  # no prompt gives the hash
+        # Not at the start of the first block, it is text like any other.
+        for system in (
+            [{"type": "text", "text": "Hi"}, {"type": "text", "text": line}],
+            [{"type": "text", "text": f"Hi\n{line}"}],
+        ):
+            out, _ = self.masked(system, client_version=None)
+            assert "cc_version=2.1.283.a1b" in json.dumps(out)
+        # An address where the version goes is masked, and so is a phone
+        # number with no hash.
+        for version, masked in (
+            ("10.0.0.100", "[IPV4_1]"),
+            ("555.555.0100", "[PHONE_1]"),
+        ):
+            text = (
+                f"x-anthropic-billing-header: cc_version={version}; cc_entrypoint=cli;"
             )
+            out, _ = self.masked([{"type": "text", "text": text}], client_version=None)
+            assert out[0]["text"] == (
+                f"x-anthropic-billing-header: cc_version={masked}; cc_entrypoint=cli;"
+            )
+
+
+def test_the_protocol_words_cover_the_census():
+    """Every key and type Claude Code was seen sending is a protocol word."""
+    import re
+    from pathlib import Path
+
+    from live.harness import assert_fictional
+    from veil.gateway.vocab import WORDS
+
+    census_file = Path(__file__).parent / "gateway_payloads" / "request_census.json"
+    census = json.loads(census_file.read_text())["POST /v1/messages"]
+    seen = set()
+    for path, info in census.items():
+        seen |= {s for s in re.split(r"\.|\[\]", path) if re.fullmatch(r"\w+", s)}
+        seen |= {kind[5:] for kind in info["kinds"] if kind.startswith("type=")}
+    assert seen <= WORDS
+    assert all(re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$-]{0,63}", word) for word in WORDS)
+    assert_fictional(" ".join(sorted(WORDS)))

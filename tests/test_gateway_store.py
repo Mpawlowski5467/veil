@@ -225,6 +225,47 @@ class TestLedger:
         assert ledger.masked_text("a") is None
         ledger.close()
 
+    def test_what_the_api_sent_is_kept_as_a_digest(self, tmp_path):
+        path = tmp_path / "ledger.db"
+        block = {"type": "web_search_result", "title": f"About {NAME}"}
+        ledger = SQLiteLedger(path, "s1")
+        ledger.record_seen(block)
+        ledger.record_seen("RW5jcnlwdGVk")
+        ledger.close()
+        again = SQLiteLedger(path, "s1")
+        assert again.was_seen(block)
+        # A cache breakpoint the client adds is not part of what was sent.
+        assert again.was_seen({**block, "cache_control": {"type": "ephemeral"}})
+        assert again.was_seen("RW5jcnlwdGVk")
+        assert not again.was_seen({**block, "title": "About someone"})
+        other = SQLiteLedger(path, "s2")
+        assert not other.was_seen(block)
+        other.close()
+        again.forget()
+        assert not again.was_seen(block)
+        again.close()
+        raw = b"".join(p.read_bytes() for p in tmp_path.iterdir())
+        assert NAME.encode() not in raw
+
+    def test_a_conversation_in_use_is_kept_whole(self, tmp_path, monkeypatch):
+        import veil.gateway.store as store
+
+        now = store.time.time()
+        path = tmp_path / "ledger.db"
+        old, busy = SQLiteLedger(path, "old"), SQLiteLedger(path, "busy")
+        old.record_seen("b2xk")
+        busy.record_seen("Zmlyc3Q=")
+        monkeypatch.setattr(store.time, "time", lambda: now + 2 * 86400)
+        busy.record_text("later", "LATER")
+        # The busy one's first entry is as old as the other's, but its
+        # history is still sent back.
+        assert busy.purge(timedelta(days=1)) == 1
+        assert not old.was_seen("b2xk")
+        assert busy.was_seen("Zmlyc3Q=")
+        assert busy.masked_text("later") == "LATER"
+        old.close()
+        busy.close()
+
 
 class TestSessions:
     def settings(self):
@@ -272,6 +313,7 @@ class TestSessions:
             "IPV6",
             "CREDIT_CARD",
             "IBAN",
+            "SSN",
             "ORDER",
             "PERSON",
         } <= types

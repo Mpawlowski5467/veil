@@ -1,6 +1,6 @@
 ---
 name: veil
-description: Use the installed Veil package to check local gateway readiness, guide Codex or Claude Code setup, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
+description: Use the installed Veil package to check gateway readiness and request evidence, verify a client test request, guide Codex or Claude Code setup, manage private registrations, and mask or restore local text files. Use when the user asks to use Veil or invokes the Veil skill.
 ---
 
 # Veil
@@ -25,8 +25,9 @@ Restore into a local file or clipboard without returning restored contents in
 tool output. A tool result containing original values can enter the next model
 request when the session is not routed through Veil.
 
-Veil covers supported, detected text. Email and phone detection are built in;
-names need registration, and SSNs need a custom pattern. Undetected values can
+Veil covers supported, detected text. Email, phone, and supported US SSN formats
+have built-in detection; names need registration. Compact/space-separated SSNs
+need an explicit SSN label, and impossible SSN ranges are rejected. Undetected values can
 remain in masked output. Do not promise complete anonymization. Local file access
 and other tool/network traffic are not automatically covered by the gateway.
 
@@ -44,17 +45,48 @@ doctor, start, stop, restart, or undo; it is not the detector config.
 
 - For Codex desktop readiness: `VEIL status --json`. For more detail:
   `VEIL doctor --json`. These check saved routing, gateway identity, and local
-  settings; they do not verify the active task or make model calls. Exit 1 means
+  settings and recent activity; they do not verify the active task or make model calls. Exit 1 means
   readiness needs attention, and exit 2 means a command/configuration error.
 - For a managed background worker: `VEIL status --service --json`. This is a
   worker check only. An `unmanaged` result does not rule out a foreground gateway.
-- For a Claude Code or Codex CLI session, do not treat Codex desktop configuration
-  or a managed worker as evidence of that session's route. There is no command
-  here that proves the current CLI session is protected. Report that uncertainty
-  and offer the appropriate launcher below. Run a worker check only when relevant.
+- For gateway activity, use `VEIL status --activity --json`. Launchers pass the
+  local endpoint privately to their child tools; outside a launcher, this uses
+  saved Codex settings. Never print environment variables to find the secret.
+  A custom manual gateway can be selected with `--gateway-url URL` and the
+  matching `--data-dir` holding its secret. Missing/old gateways need setup or
+  an upgrade/restart, not a fallback to another route.
+- If a verification ID from this conversation is known, use `VEIL status
+  --verification ID --json`. Describe its evidence and opaque session reference.
+  Otherwise, report readiness and activity only. Do not assume the newest or
+  most recently verified session in the report is this conversation. Counts
+  include repeated history, not unique people or newly masked values.
 - Report failed checks and their remedies without dumping underlying files.
   Do not automatically change routes, restart a client, or repair configuration
   just because a diagnostic failed.
+
+### Verify a conversation's request
+
+Only create a test when the user asks to verify. Run `VEIL verify --json` to
+register a one-use, ten-minute challenge with the intended gateway. Show the
+returned fictional prompt and ask the user to send it as a new message in the
+conversation they want to test. Sending that prompt uses the client's normal
+model account. Creating/checking the challenge only contacts the local gateway.
+
+Do not simulate the client with curl, launch a separate client, or put the prompt
+into a tool result as a substitute: that would not verify the user's intended
+conversation. Only its latest plain user message can consume the challenge.
+If the user sends the generated "Do not use tools" test prompt, answer it as
+requested; check evidence on their subsequent request, after the reply finishes.
+
+After that reply, use `VEIL verify --check ID --json` with the same endpoint, or
+`VEIL status --verification ID --json`. A `verified` result means this gateway
+observed the fictional email masked in an outbound request, forwarded it, then
+restored it in a successfully completed response for the reported session.
+It proves that test request, not future routing, all sensitive data, UI rendering,
+or other tool traffic. A model merely echoing text is not proof without evidence.
+`pending` means not observed yet; `in_progress` means wait for the reply;
+`incomplete` means some checks failed. `expired` and `unknown` need a new probe.
+Never call any of those states verified. Evidence resets on gateway restart.
 
 ### Enable or start
 
@@ -82,6 +114,23 @@ doctor, start, stop, restart, or undo; it is not the detector config.
 - Stop/restart only when requested. They can interrupt active model calls.
   `VEIL undo codex` reverses managed setup; stopping the worker alone leaves
   Codex pointing at it. Never use `forget` as a setup or troubleshooting step.
+
+### Register or remove private values
+
+- `VEIL entities list --json` reports counts by type without the values. It
+  covers manual registrations, not git identity, pattern matches, or mappings.
+- For interactive entry, give the user `VEIL entities add PERSON` (or another
+  type) to run in their local terminal. It prompts without echoing the value.
+  Never ask them to send the value through chat or command arguments.
+- With an authorized local file containing one value, run
+  `VEIL --data-dir DATA entities add PERSON --stdin < INPUT`, using the installed
+  runtime and shell-quoted paths. Pass the file directly without inspecting it.
+  `remove` uses the same hidden prompt or stdin workflow and exact spelling.
+- Matching is case-sensitive; register variants separately. Settings are stored
+  locally in plaintext with owner-only permissions. Changes require restarting
+  the relevant gateway or relaunching the client; explain this without restarting
+  an active client unless the user authorized it. Removal does not erase existing
+  vault mappings or client history.
 
 ### Mask or restore a file
 

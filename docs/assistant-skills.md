@@ -4,6 +4,9 @@ Veil includes a local assistant skill that calls the installed Python package.
 It can check readiness, guide setup, and mask or restore a text file. Installing
 the skill does **not** enable gateway routing or protect the prompt invoking it.
 
+For the first run, follow the [README's install → setup → verify walkthrough](../README.md#start-with-the-veil-skill).
+This guide covers installation options and everyday file workflows in more detail.
+
 ## Install
 
 From a checkout containing this feature:
@@ -45,19 +48,26 @@ In **Claude Code**, try:
 /veil mask /path/to/draft.txt into /path/to/draft.masked.txt using session email-demo
 ```
 
-In **Codex**, select Veil from the skills picker or use a skill mention:
+In **Codex desktop**, select **Veil** from the skills picker, then send:
+
+```text
+Help me set up Veil for Codex desktop.
+```
+
+In **Codex CLI**, use a skill mention:
 
 ```text
 $veil status
-$veil set up Veil for Codex desktop
+$veil help me start a Codex CLI session through Veil
 $veil mask /path/to/draft.txt into /path/to/draft.masked.txt using session email-demo
 ```
 
-Codex CLI also exposes `/skills`; a bare `/veil` is not promised in Codex.
-These phrases are assistant requests, not a rigid command parser. The assistant
+Codex CLI also exposes `/skills`; `/veil` is the Claude Code form. Send these
+phrases in the client's chat input, not your shell. They are assistant requests,
+not a rigid command parser. The assistant
 uses the skill's instructions to select Veil's CLI commands. If the skill does
 not appear, start a fresh client session. See the official
-[Codex skill documentation](https://developers.openai.com/codex/skills) and
+[Codex skill documentation](https://learn.chatgpt.com/docs/build-skills#how-codex-uses-skills) and
 [Claude Code skill documentation](https://code.claude.com/docs/en/skills).
 
 For Codex desktop, the skill can run backed-up setup, start the gateway, and
@@ -68,10 +78,12 @@ cannot switch the route of the current conversation. See the
 [Codex integration guide](openai-integration.md) and
 [background gateway controls](background-gateway.md).
 
-`status` checks Codex's saved settings or a managed background worker when those
-are relevant. Neither proves the current task is routed through Veil. There is
-no active Claude-session verification command yet; the skill reports that limit
-instead of using a Codex readiness result as evidence about Claude.
+`status` checks relevant readiness and recent activity. Neither alone proves
+that this conversation used Veil. Select Veil in Codex desktop and ask it to verify,
+or use `$veil verify` in Codex CLI or `/veil verify` in Claude Code to create
+a fictional test prompt, send it in the intended conversation, then ask the
+skill to check its verification ID. A pass supplies evidence for that particular
+request and opaque session reference. See [verification and activity](verification.md).
 
 ## Keep file contents local
 
@@ -90,9 +102,20 @@ available when explicitly requested.
 
 These are instructions an assistant follows, not a deterministic execution
 boundary. The gateway is the mechanism for automatic masking of supported
-model requests. Email and phone detection are built in; names need registration
-and SSNs need a custom pattern. Undetected values can remain in output. Neither
+model requests. Email, phone, and supported US SSN detection are built in; names
+need registration. Compact or space-separated SSNs need an explicit label, and
+impossible SSN ranges are rejected. Undetected values can remain in output. Neither
 the skill nor the gateway is a sandbox for every local tool or network action.
+
+## Register private values
+
+Ask the skill to register a value **from a local file path**, or ask for the
+`veil entities add PERSON` command to run yourself with a hidden terminal prompt.
+Do not paste the value into chat. `veil entities list --json` reports counts
+without exposing the values. Removal uses `veil entities remove PERSON` with
+the same private input options. Changes apply after restarting the relevant
+gateway or relaunching the client; removal keeps existing conversation mappings.
+See [registration and storage](entities.md).
 
 ## Update or remove
 

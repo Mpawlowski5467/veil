@@ -18,15 +18,21 @@ def _clipboard_command(*, write: bool) -> list[str]:
         return ["/usr/bin/pbcopy" if write else "/usr/bin/pbpaste"]
     if sys.platform == "win32":
         script = (
-            "Set-Clipboard -Value ([Console]::In.ReadToEnd())"
+            "$veilText = [Console]::In.ReadToEnd(); "
+            "if ($veilText.Length -eq 0) { "
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "[System.Windows.Forms.Clipboard]::Clear() "
+            "} else { Set-Clipboard -Value $veilText }"
             if write
             else "[Console]::Write((Get-Clipboard -Raw))"
         )
         return [
             "powershell.exe",
             "-NoProfile",
+            "-STA",
             "-NonInteractive",
             "-Command",
+            "$ErrorActionPreference = 'Stop'; "
             "[Console]::InputEncoding = [Console]::OutputEncoding = "
             "[System.Text.UTF8Encoding]::new(); " + script,
         ]

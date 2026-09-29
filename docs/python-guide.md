@@ -20,8 +20,31 @@ from veil import Shield
 | `IPV6` | `2001:db8::1`, `fe80::1ff:fe23:4567:890a`, `::ffff:192.0.2.1`, `[IPv6:2001:db8::1]`, `2001:db8::1` in `2001:db8::1:54321` | `::1` (loopback), `12:30:45`, `std::vector`, `a[1::2]` |
 | `CREDIT_CARD` | `4111 1111 1111 1111`, `5555-5555-5555-4444`, `378282246310005` | digit runs that fail the Luhn check, lack a card network's prefix or length, or aren't in a printed card layout |
 | `IBAN` | `DE89 3704 0044 0532 0130 00`, `GB82WEST12345698765432` | text that isn't laid out like an IBAN, uses a country code that doesn't issue IBANs, or fails the mod-97 checksum |
+| `SSN` | `123-45-6789`, `SSN: 123456789`, `Social Security number: 123 45 6789` | `000-12-3456`, `666-12-3456`, unlabelled `123456789` or `123 45 6789`, dates, mixed separators |
 
 Phone numbers outside North America need a leading `+` and country code. That keeps order numbers, IDs, and amounts from being masked as phones. Numbers and addresses are also found inside Chinese, Japanese, and Korean text, where there are no spaces around them.
+
+### US Social Security numbers
+
+SSNs use ASCII digits in three groups of 3, 2, and 4. Hyphenated numbers are
+detected without a label, using two identical ASCII hyphens, non-breaking
+hyphens (U+2011), or en dashes (U+2013). Compact numbers or groups separated by
+one identical space (ordinary, no-break, thin, or narrow no-break) require a
+case-insensitive `SSN`, `Social Security`, or `Social Security number` label on
+the same line. An optional `:`, `=`, or `#` may follow the label. Labels stay
+visible; only the number becomes `[SSN_1]`.
+
+Areas `000`, `666`, and `900`–`999`, group `00`, and serial `0000` are rejected.
+This checks format and impossible ranges, not whether a number was issued.
+SSN-shaped order numbers can still match. Numbers embedded in longer digit runs
+or glued to ASCII letters are rejected. Dots, newlines, mixed separators, and
+non-ASCII digits are unsupported. A label in another JSON field does not supply
+context to a number masked as a separate text value.
+
+Existing custom `SSN` patterns replace both built-in rules, including patterns
+that intentionally mask invalid demo numbers such as `000-12-3456`. Registered
+exact values can cover additional formats. SSN spellings stay separate even with
+`normalize=True`; restoring preserves each spelling exactly.
 
 ## Custom patterns
 

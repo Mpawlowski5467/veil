@@ -17,7 +17,7 @@ from veil.codex import provider, toml_value
 from veil.gateway import Gateway, Sessions
 
 
-def app_round_trip(binary, gateway, tmp_path, email):
+def app_round_trip(binary, gateway, tmp_path, email, *, prompt=None, turns=1):
     config = provider(gateway, environment_secret=True)
     config.update(request_max_retries=0, stream_max_retries=0)
     if gateway.openai_auth == "api-key":
@@ -96,34 +96,37 @@ def app_round_trip(binary, gateway, tmp_path, email):
         )
         started = response(1)
         assert started["thread"]["ephemeral"] is True
-        send(
-            "turn/start",
-            {
-                "threadId": started["thread"]["id"],
-                "input": [
-                    {
-                        "type": "text",
-                        "text": f"Reply with exactly {email}. Do not use tools.",
-                    }
-                ],
-            },
-            2,
-        )
-        response(2)
-        output = []
-        deadline = time.monotonic() + 45
-        while time.monotonic() < deadline:
-            message = incoming.get(timeout=max(0.01, deadline - time.monotonic()))
-            if message.get("method") == "item/completed":
-                item = message["params"]["item"]
-                if item.get("type") == "agentMessage":
-                    output.append(item["text"])
-            if message.get("method") == "turn/completed":
-                turn = message["params"]["turn"]
-                assert turn["status"] == "completed", turn.get("error")
-                assert email in "".join(output)
-                return
-        pytest.fail("app-server did not complete its turn")
+        for _ in range(turns):
+            send(
+                "turn/start",
+                {
+                    "threadId": started["thread"]["id"],
+                    "input": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                            or f"Reply with exactly {email}. Do not use tools.",
+                        }
+                    ],
+                },
+                2,
+            )
+            response(2)
+            output = []
+            deadline = time.monotonic() + 45
+            while time.monotonic() < deadline:
+                message = incoming.get(timeout=max(0.01, deadline - time.monotonic()))
+                if message.get("method") == "item/completed":
+                    item = message["params"]["item"]
+                    if item.get("type") == "agentMessage":
+                        output.append(item["text"])
+                if message.get("method") == "turn/completed":
+                    turn = message["params"]["turn"]
+                    assert turn["status"] == "completed", turn.get("error")
+                    assert email in "".join(output)
+                    break
+            else:
+                pytest.fail("app-server did not complete its turn")
     finally:
         process.stdin.close()
         process.terminate()
@@ -157,10 +160,17 @@ def test_desktop_runtime_against_local_fixture(tmp_path):
             upstream=api.host,
             secure=False,
         ) as gateway:
-            app_round_trip(binary_path(), gateway, tmp_path, "jane.doe@example.com")
+            probe = gateway.activity.create_probe()
+            email = probe["prompt"].splitlines()[-1]
+            app_round_trip(
+                binary_path(), gateway, tmp_path, email, prompt=probe["prompt"]
+            )
+            assert (
+                gateway.activity.probe(probe["verification_id"])["state"] == "verified"
+            )
         assert api.received
         for _, _, _, body in api.received:
-            assert b"jane.doe@example.com" not in body
+            assert email.encode() not in body
     finally:
         api.close()
 
@@ -174,4 +184,31 @@ def test_desktop_runtime_live_chatgpt(tmp_path):
         api="openai",
         openai_auth="chatgpt",
     ) as gateway:
-        app_round_trip(binary_path(), gateway, tmp_path, "veil.desktop@example.com")
+        probe = gateway.activity.create_probe()
+        email = probe["prompt"].splitlines()[-1]
+        connect = gateway._connect
+        sent = []
+
+        def checked_connect():
+            connection = connect()
+            request = connection.request
+
+            def checked_request(method, url, body=None, headers=None, **kwargs):
+                if method == "POST":
+                    assert email.encode() not in body
+                    assert b"[EMAIL_1]" in body
+                    sent.append(url)
+                return request(method, url, body=body, headers=headers, **kwargs)
+
+            connection.request = checked_request
+            return connection
+
+        gateway._connect = checked_connect
+        app_round_trip(
+            binary_path(), gateway, tmp_path, email, prompt=probe["prompt"], turns=3
+        )
+        assert len(sent) >= 3
+        deadline = time.monotonic() + 2
+        while gateway.activity.probe(probe["verification_id"])["state"] != "verified":
+            assert time.monotonic() < deadline, "completed request was not verified"
+            time.sleep(0.01)

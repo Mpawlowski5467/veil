@@ -106,5 +106,6 @@ transcripts have the storage limits documented in the integration guide.
 These controls are covered by real subprocess tests on macOS and Linux CI,
 including detached launch, repeated/concurrent starts, stop/restart, crashes,
 port conflicts, invalid state, and interrupted startup. No model calls are
-needed for these checks. Automatic login startup, supervised crash restart,
-per-task verification, and private activity counts remain roadmap work.
+needed for these checks. Automatic login startup and supervised crash restart
+remain roadmap work. [Request verification and activity
+counts](verification.md) now provide bounded evidence for individual client tests.

@@ -245,10 +245,12 @@ class ResponsesStreamRestorer(ResponseRestorer):
             return raw
         if all(not line or line.startswith(":") for line in raw.splitlines()):
             return raw
-        data = _parse(raw)
+        _, data = _parse(raw)  # its event name isn't used: its type is
         if not isinstance(data, dict) or not isinstance(data.get("type"), str):
             raise StreamError("invalid Responses event")
         kind = data["type"]
+        if self._ended:
+            self.terminal_error = True
         for family, field_name in _TEXT_EVENTS.items():
             if kind == family + ".delta":
                 return self._text_piece(data, family)
@@ -293,6 +295,8 @@ class ResponsesStreamRestorer(ResponseRestorer):
         }:
             data = {**data, "part": self._restore.content([data.get("part")])[0]}
         elif kind in _TERMINAL:
+            self.completed = kind == "response.completed"
+            self.terminal_error = self.terminal_error or not self.completed
             if self._visible or any(not tool.emitted for tool in self._calls.values()):
                 raise StreamError("response completed with unfinished output")
             self._ended = True
@@ -300,6 +304,7 @@ class ResponsesStreamRestorer(ResponseRestorer):
             if isinstance(response, dict) and "output" in response:
                 data = {**data, "response": self._restore.response(response)}
         elif kind == "error":
+            self.terminal_error = True
             self._ended = True
             self._visible.clear()
             self._calls.clear()
