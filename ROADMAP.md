@@ -8,6 +8,39 @@ This is an ordered plan, not a release-date commitment. Checked items are
 implemented in this branch; they do not imply a published package or validation
 of every supported client feature. The current package version remains 0.4.1.
 
+## Where we are now
+
+**Stage: late alpha, preparing for a small external beta.** The core workflow is
+implemented; the remaining 1.0 work centers on evidence from real use, privacy
+review, and a dependable release process.
+
+| Area | Implemented in this checkout | Still needed for 1.0 |
+| --- | --- | --- |
+| Mask and restore | Python API, persistent mappings, streaming, built-in patterns including US SSNs, and private entity registration. | Published measurements of missed values and false positives on representative fictional documents. |
+| Setup and daily use | Codex setup/undo, CLI launchers, assistant skills, background controls, diagnostics, and request verification. | New users completing install, verification, recovery, and removal on each advertised platform. |
+| Client compatibility | Claude Code and experimental Codex adapters, scripted regression tests, and selected live round trips. | Broader desktop and long-session coverage, live API-key checks, and a maintained client/version/feature matrix. |
+| Privacy and storage | Local masking, owner-only storage, bounded activity metadata, retention, and explicit deletion commands. | A written threat model, storage/encryption decisions, independent review, and resolved findings within the supported scope. |
+| Release readiness | Automated tests, package builds, and wheel smoke checks. | Integrate reviewed changes, resolve failing checks, test upgrades/rollback, publish release artifacts, and complete an external beta. |
+
+Implemented features still in open pull requests need integration and testing
+together before a release. Passing unit tests or one echo demonstration is not
+enough to call the advertised workflows stable.
+
+The next sequence is:
+
+1. Finish reviewing and integrating the pending compatibility, verification,
+   and detection work; resolve CI failures before cutting a beta build.
+2. Run a small beta with people new to Veil, recording setup friction and failures
+   during ordinary work, including client updates and long conversations.
+3. Publish detection and compatibility results, complete the privacy/storage
+   review, and fix release-blocking findings.
+4. Ship 1.0 only when the [release gate](#10-release-gate) is met.
+
+Automatic login startup, local name recognition, secret/token detection, and
+additional media/providers are useful extensions. They can remain outside 1.0
+when the supported scope and exclusions are clear. The storage/security decisions
+and validation for the features we do advertise still need to be completed.
+
 ## The 1.0 promise
 
 **Mask supported, detected text locally before supported model calls, then
