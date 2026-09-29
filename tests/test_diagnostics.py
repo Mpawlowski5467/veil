@@ -157,3 +157,18 @@ def test_doctor_does_not_confuse_masked_context_with_masked_email(
         c["name"] == "local_round_trip" and c["state"] == "fail"
         for c in report["checks"]
     )
+
+
+def test_unsupported_platform_keeps_foreground_recovery_command(
+    configured, monkeypatch, capsys
+):
+    _, config, gateway = configured
+    gateway.secret = "wrong-secret"
+    monkeypatch.setattr(
+        "veil.service.service_status", lambda _: {"state": "unsupported"}
+    )
+    capsys.readouterr()
+    assert run_diagnostics(config=config, json_output=True) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["service_command"] is None
+    assert "gateway --api openai" in report["gateway_command"]

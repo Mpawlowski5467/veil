@@ -52,7 +52,9 @@ jobs:
           uv venv /tmp/smoke
           uv pip install --python /tmp/smoke/bin/python dist/*.whl
           /tmp/smoke/bin/python - <<'EOF'
+          import importlib.util
           from veil import Shield
+          assert importlib.util.find_spec("tomlkit") is None
           shield = Shield()
           shield.add_entity("Jan Nowak", "PERSON")
           masked = shield.mask("Email Jan Nowak at jan.n@example.com about the invoice.")
@@ -61,30 +63,71 @@ jobs:
           assert restored.text == "Hi Jan Nowak, following up on the invoice...", restored
           print("ok")
           EOF
-      - name: Install desktop extra and smoke-test setup, status, and undo
+      - name: Smoke-test bundled skill from the installed wheel
+        run: |
+          /tmp/smoke/bin/python - <<'EOF'
+          import json
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          from veil.cli import main
+
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              assert main(["skill", "install", "codex", "--skills-dir", tmp]) == 0
+              text = (root / "veil" / "runtime.md").read_text()
+              argv = json.loads(text.split("```json\n", 1)[1].split("\n```", 1)[0])
+              subprocess.run([*argv, "--help"], cwd=tmp, check=True)
+              assert (root / "veil" / "SKILL.md").is_file()
+              assert main(["skill", "uninstall", "codex", "--skills-dir", tmp]) == 0
+              assert not (root / "veil").exists()
+          EOF
+      - name: Smoke-test background controls without desktop dependencies
+        run: |
+          /tmp/smoke/bin/python - <<'EOF'
+          import socket
+          import tempfile
+          from pathlib import Path
+          from veil.service import run_service, service_status
+
+          with tempfile.TemporaryDirectory() as tmp:
+              data = Path(tmp) / "veil"
+              with socket.socket() as sock:
+                  sock.bind(("127.0.0.1", 0))
+                  port = sock.getsockname()[1]
+              try:
+                  assert run_service("start", data_dir=data,
+                                     api="anthropic", port=port) == 0
+                  assert service_status(data)["state"] == "running"
+              finally:
+                  run_service("stop", data_dir=data, remove=True)
+          EOF
+      - name: Install desktop extra and smoke-test setup, background status, and undo
         run: |
           for wheel in dist/*.whl; do
             uv pip install --python /tmp/smoke/bin/python "${wheel}[desktop]"
           done
           /tmp/smoke/bin/python - <<'EOF'
           import tempfile
+          import socket
           from pathlib import Path
-          from veil import Shield
           from veil.cli import main
-          from veil.gateway import Gateway, Sessions
+          from veil.service import run_service
 
           with tempfile.TemporaryDirectory() as tmp:
               root = Path(tmp)
               data = root / "veil"
               config = root / "codex" / "config.toml"
-              data.mkdir(mode=0o700)
-              (data / "gateway-secret").write_text("fictional-smoke-secret")
-              with Gateway(Sessions(lambda _: Shield(), api="openai"),
-                           secret="fictional-smoke-secret", api="openai",
-                           openai_auth="chatgpt") as gateway:
+              with socket.socket() as sock:
+                  sock.bind(("127.0.0.1", 0))
+                  port = sock.getsockname()[1]
+              try:
                   assert main(["--data-dir", str(data), "setup", "codex",
-                               "--config", str(config), "--port", str(gateway.port)]) == 0
+                               "--config", str(config), "--port", str(port)]) == 0
+                  assert run_service("start", config=config) == 0
                   assert main(["status", "--config", str(config)]) == 0
-                  assert main(["undo", "codex", "--config", str(config)]) == 0
-                  assert not config.exists()
+              finally:
+                  run_service("stop", data_dir=data, remove=True)
+              assert main(["undo", "codex", "--config", str(config)]) == 0
+              assert not config.exists()
           EOF

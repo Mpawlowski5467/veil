@@ -50,6 +50,23 @@ python -m pip install .
 
 Use a virtual environment if your Python installation requires one. This installs both the `veil` Python package and the `veil` command.
 
+### Add the assistant skill
+
+From a checkout containing the unreleased skill support:
+
+```bash
+veil skill install
+```
+
+This installs a personal skill for both clients: use `/veil` in Claude Code or
+`$veil` / the skills picker in Codex. Ask it to check readiness, help with setup,
+or mask a local text file. The skill calls your installed Veil package.
+
+**Installing or invoking the skill does not activate masking for the current
+conversation.** Use the gateway launch/setup workflow for automatic masking, and
+give the skill file paths rather than private text in an unprotected prompt.
+See [installation, examples, updates, and removal](docs/assistant-skills.md).
+
 ## Use Veil in Python
 
 ### Mask and restore
@@ -199,13 +216,14 @@ From the checkout, install the optional TOML editor used by setup and diagnostic
 ```bash
 python -m pip install '.[desktop]'
 veil setup codex
-veil gateway --api openai --auth chatgpt --port 8485
+veil start
 ```
 
 Setup preserves unrelated settings and comments, saves a private backup, and
 selects the Veil provider. It disables hosted search, apps, subagents, and
-analytics in those saved settings. Keep the gateway running, restart Codex,
-and start a fresh local task. In another terminal:
+analytics in those saved settings. On macOS/Linux, `veil start` keeps the gateway
+running in the background and follows the setup's data folder and port. Restart
+Codex and start a fresh local task, then check readiness:
 
 ```bash
 veil status
@@ -213,13 +231,20 @@ veil doctor
 veil doctor --json
 ```
 
+Use `veil restart` after changing detector settings or upgrading Veil, and
+`veil stop` when finished. `veil status --service` checks just the worker.
+These controls survive closing a terminal, but do not install automatic startup
+after login/reboot or automatic crash recovery. Windows users can run
+`veil gateway --api openai --auth chatgpt --port 8485` in a terminal.
+See [background operation and recovery](docs/background-gateway.md).
+
 These commands check saved settings and the local gateway; they do not prove
 that an already-open task used Veil. Doctor also checks local masking/restoration
 and credential environment without making a model call. `veil undo codex`
 restores the settings from before setup while preserving unrelated later edits.
 See [setup and recovery](docs/openai-integration.md#codex-desktop-setup-and-recovery).
-Background service management and per-task verification are next on the
-[roadmap](ROADMAP.md).
+Automatic startup, per-task verification, and private activity summaries remain
+on the [roadmap](ROADMAP.md).
 
 ## Use Veil with the ChatGPT app
 

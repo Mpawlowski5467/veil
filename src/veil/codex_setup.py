@@ -258,12 +258,17 @@ def setup_codex(data_dir: Path, config: Path, port: int, auth: Auth) -> int:
         print(f"Codex configured for Veil at 127.0.0.1:{port} ({auth}).")
         print(f"Private backup: {backup}")
         print("Web search, apps, subagents, and analytics disabled in these settings.")
-        print("Start the gateway using the same data folder:")
+        print("Start the background gateway (macOS/Linux):")
+        print(
+            f"  veil --data-dir {shlex.quote(str(data_dir))} start "
+            f"--config {shlex.quote(str(config))}"
+        )
+        print("Or keep a foreground gateway running in a terminal:")
         print(
             f"  veil --data-dir {shlex.quote(str(data_dir))} gateway "
             f"--api openai --auth {auth} --port {port}"
         )
-        print("Keep it running; restart Codex and start a fresh local task.")
+        print("Restart Codex and start a fresh local task.")
         print("Run `veil status` to check readiness; `veil undo codex` reverses setup.")
     return 0
 

@@ -424,11 +424,15 @@ def run_diagnostics(
             )
         )
     directory = directory or default_data_dir()
+    from .service import service_status
+
+    service = service_status(directory)
     if doctor:
         checks.extend(_doctor_checks(target, directory, provider))
     ready = all(check.state == "pass" for check in checks)
     endpoint = _local_endpoint(provider)
     command = None
+    service_command = None
     if endpoint and (data_dir is not None or receipt is not None):
         auth = "chatgpt" if provider.get("requires_openai_auth") is True else "api-key"
         command = shlex.join(
@@ -445,12 +449,32 @@ def run_diagnostics(
                 str(urlsplit(endpoint).port),
             ]
         )
+        service_command = shlex.join(
+            [
+                "veil",
+                "--data-dir",
+                str(directory),
+                "restart"
+                if service["state"] in {"running", "unresponsive"}
+                else "start",
+                "--api",
+                "openai",
+                "--auth",
+                auth,
+                "--port",
+                str(urlsplit(endpoint).port),
+            ]
+        )
+        if service["state"] == "unsupported":
+            service_command = None
     report = {
         "ready": ready,
         "config": str(target),
         "data_dir": str(directory),
         "gateway_url": endpoint,
         "gateway_command": command,
+        "service_command": service_command,
+        "service": service,
         "checks": [asdict(check) for check in checks],
         "scope": (
             "Saved user settings and local gateway only. "
@@ -466,6 +490,7 @@ def run_diagnostics(
     else:
         print("Veil readiness: " + ("checks passed" if ready else "needs attention"))
         print(f"Codex settings: {target}")
+        print(f"Background gateway: {service['state']}")
         if doctor:
             print(f"Veil data folder: {directory}")
         for check in checks:
@@ -475,7 +500,7 @@ def run_diagnostics(
         if command and any(
             check.name == "gateway" and check.state != "pass" for check in checks
         ):
-            print(f"Gateway start/restart command:\n  {command}")
+            print(f"Gateway start/restart command:\n  {service_command or command}")
         print(report["scope"])
         print(report["next_step"])
     return 0 if ready else 1
