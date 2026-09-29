@@ -460,7 +460,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 # Never forwarded and never printed: the details may hold data.
                 # A bug fails the same way every time: not worth a retry.
                 message = compat.failure_message(
-                    "failed", self._client, sent=self._forwarded
+                    "failed",
+                    self._client,
+                    sent=self._forwarded,
+                    claude=gateway.api != "openai",
                 )
                 self._fail(_RefusedError(500, "api_error", message))
 
@@ -609,8 +612,8 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                 except _RefusedError:
                     raise
                 except UnsupportedRequestError as error:
-                    refusal = _refusal(error, client)
-                    if refusal.final:
+                    refusal = _refusal(error, client, claude=claude)
+                    if refusal.final and claude:
                         # Only these are lost: the rest are sent again,
                         # without the feature, by the client.
                         gateway.refusals.add(error, body, client)
@@ -627,7 +630,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     raise _RefusedError(
                         500,
                         "api_error",
-                        compat.failure_message("failed while masking", client),
+                        compat.failure_message(
+                            "failed while masking", client, claude=claude
+                        ),
                     ) from None
                 self._json_text = claude and _asks_for_json(request)
                 self._forward(
@@ -761,7 +766,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     except Exception:
                         # The model already ran: don't have it run again.
                         text = compat.failure_message(
-                            "failed while restoring the reply", self._client, sent=True
+                            "failed while restoring the reply",
+                            self._client,
+                            sent=True,
+                            claude=gateway.api != "openai",
                         )
                         raise _RefusedError(500, "api_error", text) from None
                     data = json.dumps(restored).encode()
@@ -905,9 +913,17 @@ def _prefixed(message: str) -> str:
     return message if message.startswith(f"{APP}:") else f"{APP}: {message}"
 
 
-def _refusal(error: UnsupportedRequestError, client: str | None) -> _RefusedError:
-    """The response for a request that can't be masked."""
-    message = compat.refusal_message(error.problems, client)
+def _refusal(
+    error: UnsupportedRequestError, client: str | None, *, claude: bool = True
+) -> _RefusedError:
+    """The response for a request that can't be masked.
+
+    Only Claude Code (``claude``) knows the final kind and its droppable
+    features; another client gets a plain refusal.
+    """
+    message = compat.refusal_message(error.problems, client, claude=claude)
+    if not claude:
+        return _RefusedError(400, "invalid_request_error", message)
     if all(_DROPPABLE.match(path) for path, _, _ in error.problems):
         # Claude Code sends it again without that feature.
         return _RefusedError(400, "invalid_request_error", message, final=False)

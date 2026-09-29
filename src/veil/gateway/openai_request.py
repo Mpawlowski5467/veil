@@ -96,13 +96,19 @@ class ResponsesRequestMasker(RequestMasker):
         ``client_version`` is a Claude Code version, for the Messages masker's
         billing line; a Responses request has none, so it isn't used.
         """
-        _object(body, "$", _ROOT_KEYS)
         self._notice_a_cleared_vault()
         out: dict[str, Any] = {}
-        for key, value in body.items():
-            out[key] = self._field(key, value)
-        if "input" not in out:
-            raise UnsupportedRequestError("input", "required")
+        try:
+            _object(body, "$", _ROOT_KEYS)
+            for key, value in body.items():
+                out[key] = self._field(key, value)
+            if "input" not in out:
+                raise UnsupportedRequestError("input", "required")
+        except UnsupportedRequestError as error:
+            # Named as the Messages masker names them: a key that holds a
+            # known value is shown as <key>.
+            found = [self._safe(path, problem) for path, problem in error.found]
+            raise UnsupportedRequestError(*found[0], more=found[1:]) from None
         out["store"] = False
         if self._note:
             instructions = out.get("instructions") or ""

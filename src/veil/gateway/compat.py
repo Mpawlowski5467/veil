@@ -117,31 +117,41 @@ def in_conversation(problems: Sequence[tuple[str, str, int]]) -> bool:
 
 
 def refusal_message(
-    problems: Sequence[tuple[str, str, int]], client: str | None
+    problems: Sequence[tuple[str, str, int]],
+    client: str | None,
+    *,
+    claude: bool = True,
 ) -> str:
     """The one-line message for a request that couldn't be masked.
 
     The advice comes first: Claude Code shows the start of a long message.
+    Without ``claude`` (another client, such as Codex), there is no advice
+    about Claude Code's versions or its /rewind.
     """
-    parts = [
-        f"{APP}: can't mask this request, so nothing was sent.",
-        version_advice(client),
-    ]
-    if in_conversation(problems):
-        parts.append(
-            "If it happens on every prompt, it is in the conversation: /rewind "
-            "to before the prompt that brought it in, or start a new one."
-        )
-    else:
-        parts.append("It is part of every request, so /rewind won't help.")
+    parts = [f"{APP}: can't mask this request, so nothing was sent."]
+    if claude:
+        parts.append(version_advice(client))
+        if in_conversation(problems):
+            parts.append(
+                "If it happens on every prompt, it is in the conversation: /rewind "
+                "to before the prompt that brought it in, or start a new one."
+            )
+        else:
+            parts.append("It is part of every request, so /rewind won't help.")
     parts.append(f"Not handled: {_listed(problems)}")
     return " ".join(" ".join(parts).split())
 
 
-def failure_message(what: str, client: str | None, *, sent: bool = False) -> str:
-    """The one-line message for a failure of the gateway's own (a bug)."""
+def failure_message(
+    what: str, client: str | None, *, sent: bool = False, claude: bool = True
+) -> str:
+    """The one-line message for a failure of the gateway's own (a bug).
+
+    Without ``claude``, there is no advice about Claude Code's versions.
+    """
     where = "the masked request reached the API" if sent else "so nothing was sent"
-    text = f"{APP}: {what} (a bug), {where}. {version_advice(client)}"
+    advice = version_advice(client) if claude else ""
+    text = f"{APP}: {what} (a bug), {where}. {advice}"
     return " ".join(text.split())
 
 
