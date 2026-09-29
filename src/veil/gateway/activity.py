@@ -102,13 +102,13 @@ class ObservedLedger:
     def record_seen(self, value: Any) -> None:
         """Preserve optional tracking of unchanged provider blocks."""
         record = getattr(self.ledger, "record_seen", None)
-        if record is not None:
+        if callable(record):
             record(value)
 
     def was_seen(self, value: Any) -> bool:
         """Look up provider blocks without observing their contents."""
         lookup = getattr(self.ledger, "was_seen", None)
-        return bool(lookup is not None and lookup(value))
+        return bool(callable(lookup) and lookup(value))
 
 
 class Activity:

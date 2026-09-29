@@ -215,6 +215,8 @@
     }
   },
   "exact_restorations": 30,
+  "fully_covered_annotations": 38,
+  "expected_annotations": 53,
   "mismatches": [
     {
       "id": "support-email",
@@ -406,7 +408,7 @@
   ],
   "mask_latency_ms": {
     "samples": 600,
-    "median": 0.0477,
-    "p95": 0.0817
+    "median": 0.0476,
+    "p95": 0.0855
   }
 }

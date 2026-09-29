@@ -100,6 +100,8 @@ The skill helps with these steps. If you prefer terminal commands, choose **one*
 
 The CLI launchers keep a private gateway running for that client process and stop it when the process exits. Desktop setup preserves unrelated settings and saves a backup; `veil start` keeps its gateway running after the terminal closes. Automatic startup after reboot is not installed. On Windows, use the [foreground desktop gateway](docs/openai-integration.md#codex-desktop-setup-and-recovery).
 
+For a fresh disposable session, use `veil --forget-after-run claude` or `veil --forget-after-run codex`. These commands use temporary mappings and remove them after exit; client transcripts remain, and an abrupt process/OS termination can leave files. Do not use this mode for later restoration or resuming an old conversation. [Storage and cleanup →](docs/threat-model.md#storage-and-encryption-decision)
+
 Use `veil restart` after changing a desktop gateway's detector settings or upgrading Veil. For CLI workflows, exit and relaunch through Veil. If you chose a custom `--data-dir`, use it consistently for setup, registration, masking, and verification.
 
 Veil was tested with Claude Code 2.1.283. After a client update, run verification again and check the [compatibility guidance](docs/claude-code.md#when-a-request-is-refused).
@@ -285,7 +287,7 @@ Keep the same session label for the conversation and choose a new one for the ne
 | `SSN` | US numbers with hyphens; compact or space-separated numbers require an explicit SSN label. Invalid area/group/serial ranges are rejected. |
 | Your types | Exact registered values or custom regular expressions. |
 
-Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible.
+Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible. See the [measured examples and limitations](docs/detection-results.md); exact registration improves coverage without making names or secrets automatically detectable.
 
 ## Understand the boundaries
 
@@ -296,6 +298,8 @@ Detection is based on patterns and explicit registration. Names, organizations, 
 - **Your provider still authenticates you.** Masking prompt content does not hide your account or prevent local transcripts.
 - **Restoration depends on placeholders surviving.** Unknown placeholders remain unchanged and produce warnings. Use exact restoration (`tolerant=False`) for library output that will be executed or written as tool arguments.
 - **Warnings need handling.** Direct `mask()` and `restore()` calls return warnings; `wrap()` emits them by default. Use `strict=True` to raise and `redact_warnings=True` to avoid quoting leaked values in warnings.
+
+Veil stores original values in **plaintext local storage** with private permissions; it does not encrypt the vault. On Windows, native ACL checks allow your account, SYSTEM, and Administrators. Use a private local folder and OS disk encryption. Read the [threat model](docs/threat-model.md) and [security reporting guide](SECURITY.md).
 
 ## Troubleshooting
 
@@ -311,13 +315,15 @@ Detection is based on patterns and explicit registration. Names, organizations, 
 
 ## Road to version 1.0
 
-The core masking/restoration, local gateways, assistant skills, private registration,
-and request verification are implemented in this development checkout. Veil remains
-**alpha**, with some features still in review and unreleased.
+The 0.5.0 checkout has the core workflows, a skill-first quickstart, native
+macOS/Linux/Windows checks, detection measurements, temporary session storage,
+and tested upgrade/rollback. It is preparing for an external beta, **not 1.0**.
 
-The next milestone is a small beta: finish integration testing, watch new users
-complete setup and normal work, measure detection quality, and address privacy,
-storage, and upgrade findings. Stable 1.0 requires the [release gates in the roadmap](ROADMAP.md#10-release-gate).
+Next come new-user beta journeys on all three platforms, live API-key validation,
+long-session and desktop UI checks, and an independent security review. The
+[compatibility matrix](docs/compatibility.md), [beta checklist](docs/release-checklist.md),
+and [roadmap](ROADMAP.md#10-release-gate) distinguish completed evidence from
+remaining release gates. See [upgrade and recovery](docs/upgrading.md).
 
 ## Development
 

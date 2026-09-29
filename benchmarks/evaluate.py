@@ -60,6 +60,8 @@ def evaluate(*, registered=False, repeats=20):
     timings = []
     total = Counter()
     restores = 0
+    covered = 0
+    expected_count = 0
     for doc in documents:
         text, expected = unpack(doc)
         shield = Shield()
@@ -69,6 +71,11 @@ def evaluate(*, registered=False, repeats=20):
                     shield.add_entity(text[start:end], kind)
         masked = shield.mask(text)
         actual = {(e.entity_type, e.start, e.end) for e in masked.entities}
+        expected_count += len(expected)
+        covered += sum(
+            any(a <= start and b >= end for _, a, b in actual)
+            for _, start, end in expected
+        )
         for label, spans in (
             ("tp", actual & expected),
             ("fp", actual - expected),
@@ -110,6 +117,8 @@ def evaluate(*, registered=False, repeats=20):
         "by_language": {k: score(v) for k, v in sorted(languages.items())},
         "by_format": {k: score(v) for k, v in sorted(formats.items())},
         "exact_restorations": restores,
+        "fully_covered_annotations": covered,
+        "expected_annotations": expected_count,
         "mismatches": failures,
         "mask_latency_ms": {
             "samples": len(timings),

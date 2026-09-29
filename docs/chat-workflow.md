@@ -14,7 +14,7 @@ Each label has independent mappings. Use a fresh label for each conversation. Th
 
 Warnings cause a nonzero exit and no output or clipboard replacement. An unknown placeholder or a placeholder absent from the selected session is held back. Veil cannot recognize a wrong session if it happens to contain the same placeholder; keep labels consistent.
 
-Clipboard mode uses macOS's `pbpaste`/`pbcopy`, Windows PowerShell, or Linux `wl-paste`/`wl-copy` or `xclip`. Veil does not manage OS clipboard history or synchronization. Clipboard dispatch is tested with mocked subprocesses; native Windows/Linux clipboard behavior has not been validated here.
+Clipboard mode uses macOS's `pbpaste`/`pbcopy`, Windows PowerShell, or Linux `wl-paste`/`wl-copy` or `xclip`. Veil does not manage OS clipboard history or synchronization. Native clipboard round trips, including Unicode and empty text, are checked in macOS, Windows PowerShell, and Linux X11 CI. Wayland dispatch is covered by mocked tests; a native Wayland session remains unvalidated.
 
 ## Files and pipelines
 

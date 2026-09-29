@@ -215,6 +215,8 @@
     }
   },
   "exact_restorations": 30,
+  "fully_covered_annotations": 47,
+  "expected_annotations": 53,
   "mismatches": [
     {
       "id": "chinese-adjacent",
@@ -319,7 +321,7 @@
   ],
   "mask_latency_ms": {
     "samples": 600,
-    "median": 0.0496,
-    "p95": 0.0872
+    "median": 0.0497,
+    "p95": 0.0892
   }
 }

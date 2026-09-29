@@ -19,7 +19,8 @@ is masked. Replies are restored locally, including tool arguments, so file edits
 can use real values. See [coverage and limits](../README.md#understand-the-boundaries).
 
 New text fields and block types are masked generically. Keys, types, numbers,
-file bytes, and opaque values that cannot safely be masked are refused.
+unrecognized file-byte fields, and opaque values that cannot safely be masked
+are refused. Known image/PDF attachment contents pass through unmasked.
 Provider-origin blocks can be replayed unchanged, unless they contain registered
 private text. Hooks check routing
 before each prompt and inspect tool arguments for known real values. Shell calls
