@@ -1,8 +1,8 @@
 # Register private values
 
 Names, organizations, addresses, and other values that patterns cannot recognize
-can be registered locally. This feature is unreleased; from the checkout use
-`uv run veil` in place of `veil`.
+can be registered locally in Veil 0.5.0. From a source checkout, use `uv run veil`
+in place of `veil` if the environment is not activated.
 
 ## Hidden terminal input
 
@@ -73,4 +73,3 @@ before removing `.veil-entities.lock` in the data directory. An interrupted edit
 may also leave an owner-only `.veil-config-*` temporary file containing private
 settings; inspect or remove it locally. Avoid editing config.json in another
 program at the same time.
-

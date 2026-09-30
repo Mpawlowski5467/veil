@@ -8,11 +8,28 @@
 
 Veil runs on your computer. It replaces detected private values with placeholders such as `[EMAIL_1]`, then puts the originals back into the model's response. Use the assistant skill to manage Veil in Codex or Claude Code, or use the Python package with your own AI provider.
 
-**[v0.4.1 · Alpha](CHANGELOG.md) · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
+**[v0.5.0 · Prerelease](https://github.com/Mpawlowski5467/veil/releases/tag/v0.5.0) · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
 
-[Start with the skill](#start-with-the-veil-skill) · [Python quickstart](#use-veil-in-python) · [What gets masked](#what-veil-detects) · [Troubleshooting](#troubleshooting) · [Road to 1.0](ROADMAP.md)
+[First five minutes](docs/first-five-minutes.md) · [Start with the skill](#start-with-the-veil-skill) · [Python quickstart](#use-veil-in-python) · [What gets masked](#what-veil-detects) · [Troubleshooting](#troubleshooting) · [Road to 1.0](ROADMAP.md)
 
-> These instructions describe this source checkout, including unreleased features. Installing the skill gives your assistant commands for managing Veil. Automatic masking requires a session routed through the Veil gateway. Names need registration; detection can miss values.
+> Start with the [released 0.5.0 wheel](docs/first-five-minutes.md#1-install-the-released-version) or install from this source checkout. Installing the skill gives your assistant commands for managing Veil. Automatic masking requires a session routed through the Veil gateway. Names need registration; detection can miss values.
+
+## Try it in five minutes
+
+[Follow the quickstart](docs/first-five-minutes.md) to install Veil and run a local
+round trip with fictional data. No account or API key is needed for the first
+exercise. You can then verify a real request in Claude Code or Codex.
+
+![Veil masks fictional contact details into placeholders and restores them locally. The reply is simulated; no model call is made.](docs/assets/veil-demo.gif)
+
+[Watch/download the 36-second video](docs/assets/veil-demo.mp4) ·
+[Run the demo yourself](examples/first_round_trip.py) ·
+[Share beta feedback](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml)
+
+The animation uses actual Veil 0.5.0 masking and restoration output with a
+**simulated model reply**. It demonstrates the local transformation; the
+[verification walkthrough](docs/first-five-minutes.md#3-optional-try-your-ai-client)
+checks a real client exchange.
 
 ## See the round trip
 
@@ -42,7 +59,9 @@ The **package** does the masking and restoration. The **skill** lets you ask an 
 
 ### 1. Install Veil and the skill
 
-Open a terminal in your Veil repository folder. To get a new copy, run `git clone https://github.com/Mpawlowski5467/veil.git`, then `cd veil`. If you are reading an unmerged pull request, use that PR's branch. Published packages may not yet contain these commands.
+If you installed the release using the [five-minute guide](docs/first-five-minutes.md), run `veil skill install` in that environment (Windows: `.\.venv\Scripts\veil.exe skill install`) and continue to step 2.
+
+To install from source instead, open a terminal in your Veil repository folder. To get a new copy, run `git clone https://github.com/Mpawlowski5467/veil.git`, then `cd veil`. If you are reading an unmerged pull request, use that PR's branch.
 
 On macOS/Linux, with Python 3.10+:
 
@@ -315,9 +334,9 @@ Veil stores original values in **plaintext local storage** with private permissi
 
 ## Road to version 1.0
 
-The 0.5.0 checkout has the core workflows, a skill-first quickstart, native
+The 0.5.0 prerelease has the core workflows, a skill-first quickstart, native
 macOS/Linux/Windows checks, detection measurements, temporary session storage,
-and tested upgrade/rollback. It is preparing for an external beta, **not 1.0**.
+and tested upgrade/rollback. It is available for external beta testing, **not 1.0**.
 
 Next come new-user beta journeys on all three platforms, live API-key validation,
 long-session and desktop UI checks, and an independent security review. The
@@ -354,6 +373,10 @@ uv run python -m tests.live.census --update   # also refresh the census after a 
 With `--update`, a run without failures refreshes the census and the protocol words (`src/veil/gateway/vocab.py`); new paths go in only with `--accept-new`, after you've checked the gateway handles them. Once `-p`, `/compact` and an interactive session ran clean on all four models, with nothing new (or with `--accept-new`), it also moves the tested Claude Code version forward. A failed run is kept: `--from DIR` analyzes it again, and `--resume DIR` reruns what the harness couldn't finish.
 
 ## Contributing
+
+New to Veil? Try the [five-minute guide](docs/first-five-minutes.md) and send
+[beta feedback](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml),
+including successful setups. To invite others, use the [demo and invitation kit](docs/beta-launch.md).
 
 Useful contributions include reproducible missed matches, false-positive reports, integration adapters, and tests for new client request formats. Use fictional data when sharing examples.
 

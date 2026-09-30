@@ -4,12 +4,14 @@ Veil includes a local assistant skill that calls the installed Python package.
 It can check readiness, guide setup, and mask or restore a text file. Installing
 the skill does **not** enable gateway routing or protect the prompt invoking it.
 
-For the first run, follow the [README's install → setup → verify walkthrough](../README.md#start-with-the-veil-skill).
+For the first run, follow the [five-minute release quickstart](first-five-minutes.md)
+or the [README's install → setup → verify walkthrough](../README.md#start-with-the-veil-skill).
 This guide covers installation options and everyday file workflows in more detail.
 
 ## Install
 
-From a checkout containing this feature:
+After installing the [0.5.0 release](first-five-minutes.md#1-install-the-released-version),
+run `veil skill install`. To install from a source checkout instead:
 
 ```sh
 python -m pip install '.[desktop]'
@@ -18,8 +20,7 @@ veil skill install
 
 Or use `uv run veil skill install` in the checkout. The `desktop` extra is needed
 for Codex configuration editing; skill installation and mask/restore work with
-the base package. This feature is unreleased; the published version may not
-include it yet.
+the base package. These commands are included in the 0.5.0 prerelease.
 
 The installer creates a personal `veil` skill in `~/.agents/skills` for Codex and
 `~/.claude/skills` for Claude Code. Install just one with `veil skill install

@@ -1,4 +1,29 @@
-# Veil logo
+# Veil assets
+
+## Demo
+
+- [veil-demo.gif](veil-demo.gif): a captioned, looping 36-second README demo.
+- [veil-demo.mp4](veil-demo.mp4): the same demo as H.264 video for sharing.
+- [Runnable source](../../examples/first_round_trip.py) and [captured output](../demo/transcript.json).
+
+The masking and restoration output was captured using the released 0.5.0 wheel.
+The reply is simulated, with fictional contact data, no network calls, and an
+in-memory vault. Every scene identifies this boundary. This is a rendered
+walkthrough, not a screen recording of an AI client.
+
+To rebuild, install Veil 0.5.0 in a separate environment, then run from the repo
+root (replace `python` with that environment's interpreter):
+
+```sh
+python examples/first_round_trip.py --json > docs/demo/transcript.json
+```
+
+Run `python docs/demo/render.py` in an environment with **Pillow** installed and
+**ffmpeg** on PATH. The renderer uses available system Arial/Menlo or DejaVu
+fonts; it does not bundle them or add dependencies to Veil. These commands replace
+the generated assets. The demo contains all captions on screen and has no audio.
+
+## Logo
 
 [veil-logo.png](veil-logo.png) is the selected privacy ribbon logo (concept D), prepared for the main README. Its opaque white background keeps the charcoal mark readable in light and dark interfaces.
 
@@ -15,4 +40,3 @@ Composition: wide banner approximately 3:1 aspect ratio, centered logo occupying
 Background: completely opaque solid pure white including every corner and all negative space, so the black logo remains readable in both light and dark README interfaces. Do not create transparency. Flat vector-like edges, no gradients, no texture, no shadows.
 Text verbatim: "veil".
 ```
-

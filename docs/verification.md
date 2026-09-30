@@ -4,9 +4,9 @@ Readiness means a gateway is running and configured. Verification means Veil
 observed a particular test request being masked, forwarded, and restored. It
 does not guarantee that every request, every value, or other traffic is covered.
 
-This feature is unreleased. Upgrade Veil and restart an existing gateway to load
-it. Finish active requests before restarting. A gateway from an older version
-reports that activity/verification support is unavailable.
+Verification is included in the 0.5.0 prerelease. Upgrade Veil and restart an
+existing gateway to load it. Finish active requests before restarting. A gateway
+from an older version reports that activity/verification support is unavailable.
 
 ## Run the test in your intended conversation
 

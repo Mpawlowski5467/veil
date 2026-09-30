@@ -1,0 +1,23 @@
+{
+  "version": "0.5.0",
+  "network_calls": 0,
+  "reply_source": "simulated",
+  "stages": [
+    {
+      "title": "Your original text",
+      "text": "Draft a reminder for Jane Doe.\nEmail: jane.doe@example.com\nPhone: (202) 555-0147"
+    },
+    {
+      "title": "Masked text for the model",
+      "text": "Draft a reminder for [PERSON_1].\nEmail: [EMAIL_1]\nPhone: [PHONE_1]"
+    },
+    {
+      "title": "Simulated model reply",
+      "text": "Hi [PERSON_1], your appointment is tomorrow.\nContact: [EMAIL_1] | [PHONE_1]"
+    },
+    {
+      "title": "Reply restored locally",
+      "text": "Hi Jane Doe, your appointment is tomorrow.\nContact: jane.doe@example.com | (202) 555-0147"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+name: Beta feedback
+description: Tell us how your first Veil round trip or client setup went.
+title: "[Beta] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Veil. Success reports and confusing steps are both useful.
+        Use fictional examples only. Do not upload private text, credentials, configuration secrets, vaults, or full transcripts.
+        For a security vulnerability, follow [SECURITY.md](https://github.com/Mpawlowski5467/veil/blob/main/SECURITY.md).
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows (native)
+        - Windows (WSL)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Veil, Python, OS version, and client version if used. No account details.
+      placeholder: "Veil 0.5.0, Python 3.14, macOS 26; local Python demo only"
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: What did you try?
+      options:
+        - Local Python demo
+        - Claude Code
+        - Codex CLI
+        - Codex desktop
+        - Clipboard / another provider
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How far did you get?
+      options:
+        - Installation failed
+        - Installed, but local demo failed
+        - Local demo worked
+        - Client setup or verification did not complete
+        - Client request verified
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: What worked, and where did you get stuck?
+      description: Include the guide step, expected result, actual result, and a redacted error if relevant. If everything worked, say so.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: What would stop you from using Veil again?
+      description: Was its scope clear? Did you need help? Roughly how long did setup take?
