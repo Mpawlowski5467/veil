@@ -281,6 +281,41 @@ def test_label_that_opens_a_string_ends_with_it(source, masked):
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        'password = getpass("Password: ")\nuser = "jan"\ndb.connect(user, password)\n',
+        'input("Enter your password: ")\nprint(1)',
+        "getpass('Database password: ')\nprint(2)",
+        'read -p "Password: " password\necho done',
+        'print("Your token: ", token)\nprint(3)',
+        'log.info("token: " + token)\nlog.info("done")',
+        'prompt: "Enter password: "\nuser: jan\n',
+    ],
+)
+def test_label_at_the_end_of_a_prompt_string_has_no_value(source):
+    assert Shield().mask(source).text == source
+    assert [s for s in RegexDetector().detect(source) if s.source == "secret"] == []
+    assert not candidates(source)
+
+
+@pytest.mark.parametrize(
+    ("source", "masked"),
+    [
+        (f"It's the password: '{K}'", "It's the password: '[PASSWORD_1]'"),
+        (
+            f'Don\'t forget the password: "{K}" ok',
+            'Don\'t forget the password: "[PASSWORD_1]" ok',
+        ),
+        (f'msg = "x"; password: "{K}"', 'msg = "x"; password: "[PASSWORD_1]"'),
+    ],
+)
+def test_quoted_values_after_other_quotes_stay_masked(source, masked):
+    shield = Shield()
+    assert shield.mask(source).text == masked
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize(
     ("source", "masked"),
     [
         ("password: hunter2", "password: [PASSWORD_1]"),
@@ -335,6 +370,8 @@ def test_compact_multiword_and_sentence_cut_still_ask(source, value):
         ("password: " + "A" * 120 + " ") * 2000,
         ('"password: ' + "A" * 120 + " x ") * 2000,
         "password=" + "a=password=" * 20000,
+        'input("password: ") ' * 20000,
+        'print("token: ")\n' * 20000,
     ],
 )
 def test_long_clause_stays_bounded(text):

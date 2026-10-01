@@ -46,7 +46,9 @@ after `:` or a spaced `=` (YAML, INI, or a label such as `Password: …`) is
 masked through the end of its clause: the end of the line, an inline ` #` or
 ` //` comment, or `,` `;` `.` `!` `?` followed by a space. When the label opens
 a quoted string, as in `curl -H "X-Api-Key: …" https://…`, the value also ends
-at that string's closing quote. A compact `NAME=value` reads one shell word, as
+at that string's closing quote. A label at the end of a prompt string, such as
+`input("Password: ")` or `read -p "Password: " pw`, has no value and stays
+readable. A compact `NAME=value` reads one shell word, as
 in command prefixes like `DB_PASSWORD=… ./run`. Quote multiword `.env` values.
 This is not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.

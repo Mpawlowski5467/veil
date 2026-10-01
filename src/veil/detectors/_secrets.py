@@ -258,6 +258,25 @@ def _annotated(text: str, start: int) -> int | None:
     return match.end() if depth == 0 else None
 
 
+def _ends_string(text: str, match: re.Match[str]) -> bool:
+    """Whether the quote after a label closes the string that holds the label.
+
+    In input("Password: ") or read -p "Password: " pw that quote is no value;
+    reading it as an unterminated one would hide the rest of the text.
+    """
+    start = match.end()
+    quote = text[start]
+    following = text.find(quote, start + 1)
+    # Only the last such quote on its line, after an odd number of them, so
+    # each line is counted at most once.
+    if _CLOSING[quote].match(text, start) is None or (
+        following >= 0 and text.find("\n", start, following) < 0
+    ):
+        return False
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    return text.count(quote, line_start, match.start()) % 2 == 1
+
+
 def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | None:
     """Value offsets after an assignment, past any type annotation; flag quotes."""
     start = match.end()
@@ -276,6 +295,8 @@ def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | 
             return None
         # A misread annotation must not leave part of a bare value visible.
         return start, offsets[1], False
+    if text[start : start + 1] in _QUOTES and _ends_string(text, match):
+        return None
     offsets = _assignment_value(text, start, clause=clause, closer=closer)
     return None if offsets is None else (*offsets, text[start : start + 1] in _QUOTES)
 
