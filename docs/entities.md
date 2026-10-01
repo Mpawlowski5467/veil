@@ -1,7 +1,7 @@
 # Register private values
 
 Names, organizations, addresses, and other values that patterns cannot recognize
-can be registered locally in Veil 0.5.0. From a source checkout, use `uv run veil`
+can be registered locally in Veil 0.6.0b1. From a source checkout, use `uv run veil`
 in place of `veil` if the environment is not activated.
 
 ## Hidden terminal input

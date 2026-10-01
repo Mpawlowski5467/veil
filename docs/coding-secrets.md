@@ -1,7 +1,7 @@
 # Mask coding secrets
 
-**Available in the source checkout after 0.5.0; the published 0.5.0 wheel does
-not include these rules.** Install the updated checkout and restart existing
+**Included in the 0.6.0b1 beta; the older 0.5.0 wheel lacks these rules.**
+Upgrade Veil and restart existing
 gateways or relaunch clients to use them.
 
 Veil replaces supported coding secrets with placeholders and continues the
@@ -168,3 +168,15 @@ percentage. The [30-document detection baseline](detection-results.md) records
 the earlier published 0.5.0 behavior; it does not measure these new secret rules.
 The [52-document workflow evaluation](leak-evaluation.md) measures current automatic
 masking and review separately and records their remaining limitations.
+
+## Code references and uncertain prose
+
+Unquoted credential properties rooted at `settings`, `config`, `self`, or `this`
+are treated as code references, for example `password = settings.database_password`.
+Quoted lookalikes such as `password = "settings.database_password"` are still
+masked, as are weak bare values such as `PASSWORD=letmein`. This is a syntax
+heuristic; explicitly register a real credential that looks like a code reference.
+Parsed JSON credential strings remain protected regardless of spelling.
+Ordinary instructions such as “Store API keys in a password manager” stay readable.
+“The password is stored in the operating system keychain” is ambiguous and still
+requires review when review is enabled; it could be a literal passphrase.

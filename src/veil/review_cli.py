@@ -24,6 +24,15 @@ from .verification import Endpoint, endpoint
 _HTML = Path(__file__).with_name("review.html").read_text(encoding="utf-8")
 
 
+def _validate_review_choice(choice: dict[str, Any]) -> None:
+    if set(choice) != {"id", "index", "choice"} or (
+        not isinstance(choice["id"], str)
+        or type(choice["index"]) is not int
+        or choice["choice"] not in CHOICES
+    ):
+        raise ValueError
+
+
 def _gateway_request(target: Endpoint, choice: dict[str, Any] | None) -> dict[str, Any]:
     if not _gateway_answers(target.url, target.secret):
         raise SettingsError("gateway identity could not be verified")
@@ -55,11 +64,21 @@ class ReviewServer(HTTPServer):
     """Short-lived browser bridge; its token never grants model/gateway access."""
 
     def __init__(
-        self, request: Callable[[dict[str, Any] | None], dict[str, Any]]
+        self,
+        request: Callable[[dict[str, Any] | None], dict[str, Any]],
+        *,
+        html: str = _HTML,
+        max_body: int = 4096,
+        validate: Callable[[dict[str, Any]], None] = _validate_review_choice,
+        error: str = "Review unavailable or expired",
     ) -> None:
         """Bind only to loopback with a new capability for this review window."""
         self.token = secrets.token_urlsafe(32)
         self.review_request = request
+        self.html = html
+        self.max_body = max_body
+        self.validate = validate
+        self.error = error
         super().__init__(("127.0.0.1", 0), _ReviewHandler)
         self.timeout = 1
 
@@ -99,9 +118,9 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._reply(403, b"Refused")
             return
         if self.path == "/" and self.command == "GET":
-            script = _HTML.split("<script>")[1].split("</script>")[0]
+            script = server.html.split("<script>")[1].split("</script>")[0]
             digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
-            self._reply(200, _HTML.encode(), html=True, script_hash=digest)
+            self._reply(200, server.html.encode(), html=True, script_hash=digest)
             return
         if self.path != "/data" or not hmac.compare_digest(
             self.headers.get("X-Veil-Review", "").encode(), server.token.encode()
@@ -116,26 +135,17 @@ class _ReviewHandler(BaseHTTPRequestHandler):
                     self.headers.get("Transfer-Encoding")
                     or self.headers.get("Content-Encoding")
                     or not length.isdecimal()
-                    or not 0 < int(length) <= 4096
+                    or not 0 < int(length) <= server.max_body
                 ):
                     raise ValueError
                 choice = json.loads(self.rfile.read(int(length)))
-                if not isinstance(choice, dict) or set(choice) != {
-                    "id",
-                    "index",
-                    "choice",
-                }:
+                if not isinstance(choice, dict):
                     raise ValueError
-                if (
-                    not isinstance(choice["id"], str)
-                    or type(choice["index"]) is not int
-                    or choice["choice"] not in CHOICES
-                ):
-                    raise ValueError
+                server.validate(choice)
             result = server.review_request(choice)
             self._reply(200, json.dumps(result).encode())
         except Exception:
-            self._reply(400, b"Review unavailable or expired")
+            self._reply(400, server.error.encode())
 
     def _reply(
         self, status: int, body: bytes, *, html: bool = False, script_hash: str = ""

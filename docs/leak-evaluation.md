@@ -1,6 +1,6 @@
 # Workflow leak evaluation
 
-Veil's source checkout has an offline evaluation of **52 authored, fictional
+Veil 0.6.0b1 has an offline evaluation of **52 authored, fictional
 requests, 52 annotated private occurrences, and 15 requests with no private
 values**. It covers 14 formats, including emails, `.env` files, JSON, YAML,
 shell commands, HTTP headers, logs, diffs, and conversations with tool output.
@@ -11,7 +11,7 @@ This is an intentionally difficult regression corpus, including unsupported
 formats and future detection targets. It is **not an independently sampled
 accuracy study, a security audit, or a guarantee that every secret is hidden**.
 All values are invented; no credentials are validated and no model is called.
-The results apply to the source checkout after 0.5.0, not the published wheel.
+The results apply to the 0.6.0b1 beta; the older 0.5.0 wheel lacks these secret rules.
 
 ## Current results
 
@@ -27,8 +27,8 @@ does not approve anything automatically or learn the answers from the labels.
 | Requests held for local review | 0 / 52 | 12 / 52 |
 | Annotated occurrences still exposed in requests ready to send | 11 | 0 |
 | Requests with no private values held for review | 0 / 15 | 3 / 15 |
-| Extra or inexact mask spans | 9 | 9 |
-| Harmless characters masked | 88 | 88 |
+| Extra or inexact mask spans | 7 | 7 |
+| Harmless characters masked | 48 | 48 |
 | Prepared requests restored exactly as Python text | 52 / 52 | 52 / 52 |
 
 The 12 review holds contain nine requests with private values and three harmless
@@ -39,13 +39,18 @@ review, the 11 occurrences in the table remain exposed.
 
 The same unchanged corpus originally had 27 fully masked occurrences and 17
 still exposed with review on. The preceding update reached 34 automatic masks
-and zero exposure with review. This update raises automatic masks from **34 to
+and zero exposure with review. The preceding automatic-syntax update raised automatic masks from **34 to
 41 (65.38% to 78.85%)**, moving seven formerly held requests to automatic
 forwarding. These are the YAML block, command option, quoted support-email
 password, Polish and Spanish password phrases, recovery code, and password
 containing an email. Extra/inexact masks fall from 11 to 9; harmless characters
 masked fall from 89 to 88. No case regresses against the preceding baseline.
 Corpus labels and difficult cases were not removed.
+
+The 0.6.0b1 precision change then removes two harmless property-reference masks
+from the `code-attribute-reference` case. Extra/inexact spans fall from nine to
+seven and harmless characters masked from 88 to 48. All other occurrence coverage,
+review holds, and exact restoration are unchanged; every per-case check passes.
 
 The local HTTP retry tests simulate confirming each actual finding using its
 suggested type, without using corpus labels to find values. After that explicit
@@ -54,8 +59,8 @@ exactly. This is conditional workflow validation, **not automatic detection or a
 study of whether users make correct decisions**. Choosing to allow a private
 value can still expose it.
 
-Exact span/type precision is 82% and recall is 78.85% on these deliberately
-selected examples: 41 exact true positives, nine extra/inexact spans, and 11 exact
+Exact span/type precision is 85.42% and recall is 78.85% on these deliberately
+selected examples: 41 exact true positives, seven extra/inexact spans, and 11 exact
 misses. A partial mask, wrong type, or oversized replacement can count as both
 an extra span and a miss. Full character coverage therefore differs from exact
 span recall. These figures should not be advertised as overall Veil accuracy.
@@ -91,7 +96,9 @@ with a Unix LF checkout; line-ending escapes inside corpus text stay intact.
   driver's-license examples now have dedicated local review classifications.
   These are scoped context cues, not automatic recognition of arbitrary people
   or addresses. Unlabelled or differently formatted values can still be missed.
-- **False positives:** code attribute/self references still get masked; hashes,
+- **False positives:** known unquoted `settings`/`config`/`self`/`this` credential
+  properties remain readable, while quoted lookalikes and weak bare passwords
+  remain protected. Other code-looking strings may still get masked; hashes,
   trace IDs, and explanatory prose can trigger review. The YAML block marker is
   now preserved while its content is masked. URL credential masking preserves
   neighboring query parameters in the measured cases.
@@ -176,8 +183,8 @@ uv run python benchmarks/leaks.py --write-baseline --output benchmarks/leak_resu
 
 Review every changed case before committing that update. Never delete a hard
 case or change its intended privacy label merely to improve the score. Reports
-contain the imported source hash because the unreleased checkout still carries
-the 0.5.0 version string.
+include the version and imported source hash so results can be tied to an exact
+implementation.
 
 ## Scope still to validate
 

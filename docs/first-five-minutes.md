@@ -4,7 +4,7 @@ Try a real masking/restoration round trip on your own computer with **fictional
 data, no account, and no API key**. Then, if you use Claude Code or Codex, verify
 one real request through the gateway.
 
-Veil 0.5.0 is a prerelease. This first local exercise does not change your client
+Veil 0.6.0b1 is a prerelease. This first local exercise does not change your client
 settings or contact a model. Its model reply is explicitly simulated.
 
 ![Veil demo: fictional contact details become placeholders and are restored locally. The model reply is simulated.](assets/veil-demo.gif)
@@ -16,7 +16,7 @@ settings or contact a model. Its model reply is explicitly simulated.
 
 You need **Python 3.10 or newer**. Create a folder called `veil-try` wherever you
 keep projects, and open a terminal in it. These commands install the wheel from
-the [0.5.0 GitHub release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.5.0),
+the [0.6.0b1 GitHub release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b1),
 not a similarly named package from a registry.
 
 **macOS / Linux**
@@ -24,7 +24,7 @@ not a similarly named package from a registry.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.5.0/veil-0.5.0-py3-none-any.whl'
+python -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.6.0b1/veil-0.6.0b1-py3-none-any.whl'
 python -c "import veil; print(veil.__version__)"
 ```
 
@@ -32,12 +32,12 @@ python -c "import veil; print(veil.__version__)"
 
 ```powershell
 py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.5.0/veil-0.5.0-py3-none-any.whl'
+.\.venv\Scripts\python.exe -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.6.0b1/veil-0.6.0b1-py3-none-any.whl'
 .\.venv\Scripts\python.exe -c "import veil; print(veil.__version__)"
 ```
 
-The last line should print **`0.5.0`**. The optional `desktop` extra makes Codex
-configuration editing available. [Package files and checksums are on the release page.](https://github.com/Mpawlowski5467/veil/releases/tag/v0.5.0)
+The last line should print **`0.6.0b1`**. The optional `desktop` extra makes Codex
+configuration editing available. [Package files and checksums are on the release page.](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b1)
 
 ## 2. See the text change and come back
 

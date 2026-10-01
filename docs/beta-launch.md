@@ -16,7 +16,7 @@ For example, `jane.doe@example.com` becomes `[EMAIL_1]`. Names can be registered
 explicitly. It includes a Claude Code gateway, an experimental Codex integration,
 and Python/clipboard workflows for other providers.
 
-Version **0.5.0 is a prerelease**, and I'm looking for **5–10 people** to try it on
+Version **0.6.0b1 is a prerelease**, and I'm looking for **5–10 people** to try it on
 macOS, Linux, or native Windows. The first exercise needs no API key and uses
 fictional data. Its demo reply is simulated; there's a separate verification
 step for a real client request.
@@ -42,7 +42,7 @@ It works with Python and Claude Code, with experimental Codex support. Try a
 local round trip in about five minutes, then optionally verify a real client
 request. macOS, Linux, and Windows testers welcome.
 
-0.5.0 is a prerelease: use fictional data, expect detection limits, and send me
+0.6.0b1 is a prerelease: use fictional data, expect detection limits, and send me
 the confusing parts of setup.
 
 Start here: https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md

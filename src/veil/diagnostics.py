@@ -408,14 +408,13 @@ def _doctor_checks(
     return checks
 
 
-def run_diagnostics(
+def collect_diagnostics(
     *,
     config: Path | None = None,
     data_dir: Path | None = None,
     doctor: bool = False,
-    json_output: bool = False,
-) -> int:
-    """Print readiness plus explicit limits, without printing credentials or PII."""
+) -> dict[str, Any]:
+    """Collect local diagnostics; paths in this result are not for public sharing."""
     target = config_path(config)
     checks, provider = inspect_configuration(target)
     directory = data_dir
@@ -509,6 +508,23 @@ def run_diagnostics(
             "No model call was made."
         ),
     }
+    return report
+
+
+def run_diagnostics(
+    *,
+    config: Path | None = None,
+    data_dir: Path | None = None,
+    doctor: bool = False,
+    json_output: bool = False,
+) -> int:
+    """Print readiness plus explicit limits, without printing credentials or PII."""
+    report = collect_diagnostics(config=config, data_dir=data_dir, doctor=doctor)
+    ready = report["ready"]
+    target, directory = report["config"], report["data_dir"]
+    service, activity = report["service"], report["activity"]
+    command, service_command = report["gateway_command"], report["service_command"]
+    checks = [Check(**check) for check in report["checks"]]
     if json_output:
         print(json.dumps(report, indent=2))
     else:

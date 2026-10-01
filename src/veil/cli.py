@@ -510,6 +510,19 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="ask in the terminal instead of a browser",
     )
+    report = commands.add_parser(
+        "report", help="generate an allowlisted support report locally"
+    )
+    report.add_argument("--client", choices=("codex", "claude"), default="codex")
+    report.add_argument("--config", type=Path, help="Codex configuration path")
+    report.add_argument("--gateway-url", help="explicit loopback gateway")
+    report.add_argument("--verification", help="check one existing verification ID")
+    preview = commands.add_parser("preview", help="open a local masking playground")
+    preview.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="print the private URL without opening a browser",
+    )
     skill = commands.add_parser("skill", help="install or remove assistant skills")
     skill.add_argument("operation", choices=("install", "uninstall"))
     skill.add_argument(
@@ -702,6 +715,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 data_dir=options.data_dir,
                 gateway_url=options.gateway_url,
                 terminal=options.terminal,
+            )
+        if options.command == "preview":
+            from .preview import run_preview
+
+            return run_preview(no_browser=options.no_browser)
+        if options.command == "report":
+            from .support_report import run_report
+
+            return run_report(
+                client=options.client,
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+                verification=options.verification,
             )
         if options.command == "status" and (
             options.activity or options.verification or options.gateway_url

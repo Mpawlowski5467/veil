@@ -1,4 +1,4 @@
-"""Exercise v0.4.1 -> current -> v0.4.1 -> current with installed wheels.
+"""Exercise previous -> current -> previous -> current with installed wheels.
 
 Run from the repository root. Uses only fictional values in a temporary folder.
 No running gateway or personal configuration is touched. The old release runs
@@ -28,8 +28,13 @@ with SQLiteVault(folder / "vault.db", session="upgrade") as vault:
     if phase == "upgrade":
         shield.add_entity("Mira Quill", "PERSON")
         assert shield.mask("Mira Quill").text == "[PERSON_1]"
+        # Simulate a newly confirmed credential; older versions must retain
+        # its mapping even though they cannot detect this class automatically.
+        shield.add_entity("fictional upgrade phrase", "PASSWORD")
+        assert shield.mask("fictional upgrade phrase").text == "[PASSWORD_1]"
     if phase in ("rollback", "return"):
         assert shield.restore("[PERSON_1]").text == "Mira Quill"
+        assert shield.restore("[PASSWORD_1]").text == "fictional upgrade phrase"
 ledger = SQLiteLedger(folder / "ledger.db", "upgrade")
 try:
     if phase == "seed":

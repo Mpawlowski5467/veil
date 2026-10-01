@@ -1,7 +1,7 @@
 # Veil threat model and storage decision
 
 Status: maintainer review, 2026-09-29; independent review pending. Applies to the
-0.5.0 checkout and the supported text workflows in the [compatibility matrix](compatibility.md).
+0.6.0b1 checkout and the supported text workflows in the [compatibility matrix](compatibility.md).
 
 ## Assets and boundary
 

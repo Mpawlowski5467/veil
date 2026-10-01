@@ -52,6 +52,7 @@ _CODE_REFERENCE = re.compile(
     r"(?:os\.(?:environ|getenv)|(?:process\.env|import\.meta\.env)"
     r"(?:\.[A-Za-z_]\w*)?)\Z"
 )
+_PROPERTY_REFERENCE = re.compile(r"(?:settings|config|self|this)(?:\.[A-Za-z_]\w*)+\Z")
 _AUTH = re.compile(
     r"(?i:\b(?P<scheme>Bearer|Basic))[ \t]+(?P<value>[A-Za-z0-9._~+/-]{8,}=*)"
     r"(?![\w.~+/=-])"
@@ -174,13 +175,17 @@ def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
     match = _BARE.match(text, start)
     if match is None:
         return None
-    value = match[0]
+    value = match[0].rstrip(",;")
     next_char = match.end()
     while next_char < len(text) and text[next_char] in " \t":
         next_char += 1
     if (
         (next_char < len(text) and text[next_char] in "([")
         or _CODE_REFERENCE.fullmatch(value)
+        # Only known configuration/object roots and a credential attribute.
+        # Quoted lookalikes are literals and were handled above. Arbitrary bare
+        # identifiers remain protected: they may be weak passwords.
+        or (_PROPERTY_REFERENCE.fullmatch(value) and credential_type(value))
         or value in {"None", "null", "true", "false", "str", "string", "int", "bytes"}
     ):
         return None

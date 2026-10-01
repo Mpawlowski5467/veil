@@ -21,11 +21,13 @@ must stay separate from public issue attachments and source control.
 
 ## What was tested
 
-`benchmarks/upgrade.py` runs **0.4.1 → 0.5.0 → 0.4.1 → 0.5.0** in separate
-installed environments. It verifies stable existing placeholders, new mappings,
+`benchmarks/upgrade.py` runs **previous → 0.6.0b1 → previous → 0.6.0b1** in separate
+installed environments, for both previous releases **0.4.1 and 0.5.0**. It verifies
+stable existing placeholders, new person and confirmed-password mappings,
 old masked ledger text, additive provider-block hashes, and deletion after
 returning to the candidate. The test uses fictional local data and no provider.
-This does not promise downgrade compatibility with every historical/future
+CI performs this installed-wheel check on Linux. This does not promise downgrade
+compatibility with every historical/future
 schema or client conversation. Native Windows privacy validation is new in 0.5.0;
 rolling back to 0.4.1 on Windows loses those checks.
 
@@ -36,6 +38,11 @@ mixing files from different points in time. Mappings created after that backup
 will be absent, so later replies may no longer restore.
 
 ## Rollback and failure recovery
+
+The 0.6.0b1 configuration can contain `secret_review`, which older versions do
+not accept. Restore the old configuration from the private backup as well as
+the old runtime; do not expect new commands or detection rules after rollback.
+Mapping compatibility does not make an older detector equivalent to the beta.
 
 Stop every writer first. Restore the complete private backup into its original
 folder, reinstall the previous wheel, reinstall the matching skill, and relaunch.
@@ -55,3 +62,23 @@ They are for fresh disposable sessions, not an upgrade/resume strategy. Abnormal
 process termination can leave a `veil-run-*` temporary folder; inspect and remove
 only the abandoned folder once its process has stopped. Deletion is not secure
 erasure, and client transcripts/backups remain separate.
+
+## Retry and resume
+
+Keep the same data directory and client conversation/session identity when
+resuming. Persistent mappings and the reply ledger survive gateway restart;
+activity evidence, verification probes, held reviews, and ignore decisions do
+not. A confirmed masking choice is persisted when the retry reaches the masker.
+After a restart, rerun verification and review any newly held request.
+
+Rate limits and incomplete streams do not erase mappings. Retry in the same
+session after the provider permits it. Veil does not replay a cancelled request
+automatically. If an API stream ends before completion, it reports a stream
+error; a partial answer is not verification success. Upstream work already sent
+can still consume quota even when you cancel locally.
+
+The regression suite uses fictional local providers: 36 turns across three
+gateway instances per adapter, growing replayed history, forced session-cache
+eviction, 32 concurrent conversations, client disconnects, rate-limit recovery,
+and incomplete streams. This evidence does not replace long real-client beta
+journeys, provider outage testing, or independent security review.
