@@ -20,7 +20,21 @@ ACTIVITY_PATH = "/_gateway/activity"
 VERIFY_PATH = "/_gateway/verify"
 PROBE_TTL = 600
 ACTIVITY_TTL = 3600
-_TYPES = {"EMAIL", "PHONE", "IPV4", "IPV6", "CREDIT_CARD", "IBAN", "PERSON", "SSN"}
+_TYPES = {
+    "EMAIL",
+    "PHONE",
+    "IPV4",
+    "IPV6",
+    "CREDIT_CARD",
+    "IBAN",
+    "PERSON",
+    "SSN",
+    "API_KEY",
+    "TOKEN",
+    "PASSWORD",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
+}
 
 
 def probe_prompt(token: str) -> str:

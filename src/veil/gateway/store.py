@@ -17,6 +17,7 @@ from .. import _windows
 from ..detectors.literal import LiteralPlaceholderDetector
 from ..detectors.regex import RegexDetector
 from ..placeholders import placeholder_type
+from ..secret_review import REVIEW_TYPES
 from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
 from .config import Settings
@@ -198,7 +199,12 @@ class SQLiteLedger:
 def literal_types(settings: Settings, identity: Mapping[str, str]) -> set[str]:
     """The types whose placeholder-shaped text is masked as literal text."""
     detector = RegexDetector(settings.patterns)
-    return {*detector.entity_types, *settings.entities, *identity.values()}
+    return {
+        *detector.entity_types,
+        *REVIEW_TYPES,
+        *settings.entities,
+        *identity.values(),
+    }
 
 
 def registered_values(
@@ -273,7 +279,13 @@ def open_sessions(
         shield = make_shield(session_id)
         session_ledger = SQLiteLedger(ledger_path, session_id)
         masker_type = ResponsesRequestMasker if api == "openai" else RequestMasker
-        masker = masker_type(shield, session_ledger, note=note, registered=registered)
+        masker = masker_type(
+            shield,
+            session_ledger,
+            note=note,
+            registered=registered,
+            secret_review=settings.secret_review,
+        )
         return Session(shield, session_ledger, masker)
 
     make_shield = shield_factory(settings, vault_path, identity)

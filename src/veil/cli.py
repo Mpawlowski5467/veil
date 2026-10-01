@@ -500,6 +500,16 @@ def _parser() -> argparse.ArgumentParser:
         "--gateway-url", help="explicit loopback gateway; secret from --data-dir"
     )
     verify.add_argument("--json", action="store_true")
+    review = commands.add_parser("review", help="privately review uncertain secrets")
+    review.add_argument("--config", type=Path, help="Codex config.toml path")
+    review.add_argument(
+        "--gateway-url", help="loopback gateway; secret from --data-dir"
+    )
+    review.add_argument(
+        "--terminal",
+        action="store_true",
+        help="ask in the terminal instead of a browser",
+    )
     skill = commands.add_parser("skill", help="install or remove assistant skills")
     skill.add_argument("operation", choices=("install", "uninstall"))
     skill.add_argument(
@@ -594,6 +604,12 @@ def _parser() -> argparse.ArgumentParser:
             text_command.add_argument(
                 "--exact", action="store_true", help="restore exact placeholders only"
             )
+        else:
+            text_command.add_argument(
+                "--review",
+                action="store_true",
+                help="ask locally about uncertain secrets",
+            )
     gateway.add_argument("--port", type=int, default=8484)
     gateway.add_argument("--api", choices=("anthropic", "openai"), default="anthropic")
     gateway.add_argument("--auth", choices=("api-key", "chatgpt"), default="api-key")
@@ -678,6 +694,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 data_dir=options.data_dir,
                 gateway_url=options.gateway_url,
             )
+        if options.command == "review":
+            from .review_cli import run_review
+
+            return run_review(
+                config=options.config,
+                data_dir=options.data_dir,
+                gateway_url=options.gateway_url,
+                terminal=options.terminal,
+            )
         if options.command == "status" and (
             options.activity or options.verification or options.gateway_url
         ):
@@ -757,6 +782,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 session=options.session,
                 clipboard=options.clipboard,
                 exact=getattr(options, "exact", False),
+                review=getattr(options, "review", False),
             )
         if options.command == "hook":
             return _hook(options.event, data_dir, options.expect_url)

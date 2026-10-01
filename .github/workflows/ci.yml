@@ -45,6 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Review page startup, recovery, and classification
+        run: node --test tests/review_ui.test.cjs
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv build
       - name: Install the wheel alone and run the README example
@@ -54,6 +56,8 @@ jobs:
           /tmp/smoke/bin/python - <<'EOF'
           import importlib.util
           from veil import Shield
+          from veil.review_cli import _HTML
+          assert "Review before sending" in _HTML
           assert importlib.util.find_spec("tomlkit") is None
           shield = Shield()
           shield.add_entity("Jan Nowak", "PERSON")
@@ -169,9 +173,17 @@ jobs:
           tests/test_gateway_request.py tests/test_gateway_blocks.py
           tests/test_gateway_golden.py tests/test_gateway_leaks.py
           tests/test_gateway_request_fuzz.py tests/test_openai_gateway.py
-          tests/test_ssn.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
+          tests/test_ssn.py tests/test_secrets.py tests/test_secret_automatic.py tests/test_secret_review.py tests/test_privacy_context.py tests/test_leak_evaluation.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
           tests/test_masker.py tests/test_restorer.py tests/test_stream.py
           tests/test_fuzz.py tests/test_readme.py
+      - name: Measure fictional workflow leaks and check the baseline
+        run: uv run python benchmarks/leaks.py --check --output leak-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: leak-evaluation-${{ runner.os }}-py${{ matrix.python }}
+          path: leak-report.json
+          if-no-files-found: warn
       - name: Install native Linux clipboard tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xclip xvfb

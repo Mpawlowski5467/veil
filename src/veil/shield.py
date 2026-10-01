@@ -134,18 +134,21 @@ class Shield:
         """
         self._manual.add(value, entity_type)
 
-    def mask(self, text: str) -> MaskResult:
+    def mask(self, text: str, *, field_name: str | None = None) -> MaskResult:
         """Replace PII in ``text`` with placeholders.
 
         Args:
             text: Text about to be sent to a model.
+            field_name: Optional name of a parsed string field, e.g. ``password``.
+                Built-in secret detection uses this context without masking
+                the field name. Other detectors still see the value normally.
 
         Returns:
             A `MaskResult` with the masked text, the replacements made, and any
             warnings (for example a known value that still appears in the
             masked text).
         """
-        return self._masker.mask(text)
+        return self._masker.mask(text, field_name=field_name)
 
     def restore(self, text: str, *, tolerant: bool | None = None) -> RestoreResult:
         """Replace placeholders in ``text`` with the original values.

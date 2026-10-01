@@ -23,3 +23,12 @@ class Detector(Protocol):
         Each span's ``value`` must equal ``text[span.start:span.end]``.
         """
         ...
+
+
+@runtime_checkable
+class _FieldDetector(Protocol):
+    """Optional extension for detectors that understand a parsed field's name."""
+
+    def detect_field(self, text: str, name: str) -> list[Span]:
+        """Return spans in the value; the field name is context, not input text."""
+        ...

@@ -45,6 +45,11 @@ def test_builtin_types(detector):
         "CREDIT_CARD",
         "IBAN",
         "SSN",
+        "API_KEY",
+        "TOKEN",
+        "PASSWORD",
+        "PRIVATE_KEY",
+        "CREDENTIAL",
     )
 
 
@@ -799,6 +804,11 @@ class TestCustomPatterns:
             "IBAN",
             "SSN",
             "ORDER",
+            "API_KEY",
+            "TOKEN",
+            "PASSWORD",
+            "PRIVATE_KEY",
+            "CREDENTIAL",
         )
 
     def test_compiled_pattern(self):
@@ -834,6 +844,11 @@ class TestCustomPatterns:
             "IBAN",
             "SSN",
             "PHONE",
+            "API_KEY",
+            "TOKEN",
+            "PASSWORD",
+            "PRIVATE_KEY",
+            "CREDENTIAL",
         )
 
     def test_capture_groups_do_not_change_the_span(self):
@@ -899,7 +914,8 @@ class TestGeneral:
     def test_repr(self, detector):
         assert repr(detector) == (
             "RegexDetector(entity_types=('EMAIL', 'PHONE', 'IPV4', 'IPV6', "
-            "'CREDIT_CARD', 'IBAN', 'SSN'))"
+            "'CREDIT_CARD', 'IBAN', 'SSN', 'API_KEY', 'TOKEN', 'PASSWORD', "
+            "'PRIVATE_KEY', 'CREDENTIAL'))"
         )
 
 

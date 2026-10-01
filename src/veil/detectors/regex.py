@@ -17,6 +17,7 @@ from typing import ClassVar, TypeAlias
 from .._text import MARK_CLASS, UNSPACED_CLASS
 from ..placeholders import validate_entity_type
 from ..types import Span
+from . import _secrets
 
 PatternLike: TypeAlias = str | re.Pattern[str]
 
@@ -514,10 +515,11 @@ class _Rule:
 
 
 class RegexDetector:
-    r"""Detects emails, phones, IP addresses, cards, IBANs, SSNs, and custom patterns.
+    r"""Detects personal data, supported coding secrets, and custom patterns.
 
     Built-in entity types are ``EMAIL``, ``PHONE``, ``IPV4``, ``IPV6``,
-    ``CREDIT_CARD``, ``IBAN``, and ``SSN``. Custom
+    ``CREDIT_CARD``, ``IBAN``, ``SSN``, ``API_KEY``, ``TOKEN``, ``PASSWORD``,
+    ``PRIVATE_KEY``, and ``CREDENTIAL``. Custom
     patterns add new types, or replace a built-in type when they reuse its
     name. On a tie between spans of equal length, custom patterns win over
     built-in ones.
@@ -553,6 +555,11 @@ class RegexDetector:
             TypeError: If a pattern is neither a string nor a compiled pattern.
         """
         custom = dict(custom_patterns or {})
+        self._secret_types = tuple(
+            kind
+            for kind in _secrets.SECRET_TYPES
+            if include_builtins and kind not in custom
+        )
         rules: list[_Rule] = []
         if include_builtins:
             rules.extend(r for r in _BUILTIN_RULES if r.entity_type not in custom)
@@ -566,7 +573,19 @@ class RegexDetector:
     @property
     def entity_types(self) -> tuple[str, ...]:
         """The entity types this detector can report, in rule order."""
-        return tuple(dict.fromkeys(rule.entity_type for rule in self._rules))
+        return tuple(
+            dict.fromkeys(
+                [rule.entity_type for rule in self._rules] + list(self._secret_types)
+            )
+        )
+
+    def detect_field(self, text: str, name: str) -> list[Span]:
+        """Detect a parsed credential string using its field name as context."""
+        return [
+            s
+            for s in _secrets.detect_field(text, name)
+            if s.entity_type in self._secret_types
+        ]
 
     def detect(self, text: str) -> list[Span]:
         """Return every match of every pattern, sorted by position.
@@ -622,7 +641,32 @@ class RegexDetector:
                         break
                     i += 1
             result.setdefault((span.start, span.end, span.entity_type), span)
-        return sorted(result.values(), key=lambda s: (s.start, -len(s)))
+        secrets = (
+            [s for s in _secrets.detect(text) if s.entity_type in self._secret_types]
+            if self._secret_types
+            else []
+        )
+        # URL userinfo can resemble an email (password@host). Keep the host
+        # outside the credential placeholder, without suppressing custom rules.
+        credentials = sorted(
+            (s for s in secrets if s.entity_type == "CREDENTIAL"), key=lambda s: s.end
+        )
+        ends = [s.end for s in credentials]
+        values = []
+        for span in result.values():
+            at = bisect.bisect_right(ends, span.start)
+            if (
+                span.entity_type == "EMAIL"
+                and span.priority == self.BUILTIN_PRIORITY
+                and at < len(credentials)
+                and credentials[at].start <= span.start < credentials[at].end < span.end
+            ):
+                continue
+            values.append(span)
+        unique: dict[tuple[int, int, str], Span] = {}
+        for span in [*values, *secrets]:
+            unique.setdefault((span.start, span.end, span.entity_type), span)
+        return sorted(unique.values(), key=lambda s: (s.start, -len(s)))
 
     def __repr__(self) -> str:
         """Show which entity types the detector reports."""

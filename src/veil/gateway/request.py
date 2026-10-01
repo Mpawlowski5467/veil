@@ -19,7 +19,10 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
+from ..detectors._secrets import credential_type
+from ..detectors.manual import ManualDetector
 from ..placeholders import placeholder_type
+from ..secret_review import Candidate, request_candidates
 from ..shield import Shield
 from ..vault.base import Vault
 from .ledger import Ledger
@@ -172,6 +175,10 @@ class _KnownValues:
 
     def __init__(self, vault: Vault, registered: Mapping[str, str]) -> None:
         self._vault = vault
+        self._short_registered = ManualDetector()
+        for value, kind in registered.items():
+            if len(value) < self.MIN_LENGTH:
+                self._short_registered.add(value, kind)
         self._registered = {
             value: kind
             for value, kind in registered.items()
@@ -240,6 +247,22 @@ class _KnownValues:
         pattern = self._registered_pattern
         return pattern is not None and pattern.search(text) is not None
 
+    def unprotected(self, text: str) -> str:
+        """Blank known values without moving offsets, for partial-secret review."""
+        pattern = self._current()
+        visible = (
+            text
+            if pattern is None
+            else pattern.sub(
+                lambda match: " " * len(match[0]) if match["v"] else match[0], text
+            )
+        )
+        for span in reversed(self._short_registered.detect(text)):
+            visible = (
+                visible[: span.start] + " " * len(span.value) + visible[span.end :]
+            )
+        return visible
+
     def folded_in(self, text: str, *, min_length: int) -> bool:
         """Whether ``text`` holds a known value, however it is spelled.
 
@@ -290,6 +313,8 @@ class RequestMasker:
             vault has them.
         memo_limit: Roughly how many characters of masked text to keep for
             reuse (see above).
+        secret_review: Collect uncertain findings for the gateway's local
+            review gate. Direct users must call `review_findings` before sending.
     """
 
     def __init__(
@@ -300,6 +325,7 @@ class RequestMasker:
         note: str | None = DEFAULT_NOTE,
         registered: Mapping[str, str] | None = None,
         memo_limit: int = 64_000_000,
+        secret_review: bool = False,
     ) -> None:
         """Create a masker for one conversation."""
         self._shield = shield
@@ -308,6 +334,7 @@ class RequestMasker:
         self._memo_limit = memo_limit
         self._memo = _Memo(memo_limit)
         self._known = _KnownValues(shield.vault, registered or {})
+        self._registered = dict(registered or {})
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
         self._problems: list[tuple[str, str]] = []
         self._client_version: str | None = None
@@ -319,8 +346,54 @@ class RequestMasker:
         #: Where the last `mask` call found content without a rule of its
         #: own, which it masked generically (paths with indices dropped).
         self.last_generic: tuple[str, ...] = ()
+        self.secret_review = secret_review
+        self._review_texts: set[str] = set()
+
+    def confirm_secret(self, value: str, kind: str) -> None:
+        """Remember an explicitly reviewed secret and invalidate earlier text."""
+        if self._registered.get(value) == kind and self._shield.vault.get_placeholder(
+            value
+        ):
+            return
+        self._shield.add_entity(value, kind)
+        self._shield.vault.get_or_create(value, kind)
+        self._registered[value] = kind
+        self._known = _KnownValues(self._shield.vault, self._registered)
+        self._memo = _Memo(self._memo_limit)
 
     def mask(
+        self, body: dict[str, Any], *, client_version: str | None = None
+    ) -> dict[str, Any]:
+        """Learn values across the request, then mask with that complete context.
+
+        Repeat the adapter's own traversal, never a blind rewrite of protocol
+        fields. Memoized detection keeps the second traversal inexpensive.
+        """
+        self._review_texts.clear()
+        try:
+            before = len(self._shield.vault)
+            out = self._mask_once(body, client_version=client_version)
+            if len(self._shield.vault) != before:
+                self._review_texts.clear()
+                out = self._mask_once(body, client_version=client_version)
+            return out
+        except Exception:
+            self._review_texts.clear()
+            raise
+
+    def review_findings(self) -> tuple[Candidate, ...]:
+        """Scan supported model text locally, after automatic masking finishes."""
+        try:
+            return request_candidates(
+                [
+                    (text, self._known.unprotected(text))
+                    for text in sorted(self._review_texts)
+                ]
+            )
+        finally:
+            self._review_texts.clear()
+
+    def _mask_once(
         self, body: dict[str, Any], *, client_version: str | None = None
     ) -> dict[str, Any]:
         """Return a copy of a request body with every model-read text masked.
@@ -958,6 +1031,14 @@ class RequestMasker:
         texts = [json.dumps(number)]
         if isinstance(number, float) and number.is_integer() and abs(number) < 1e21:
             texts.append(str(int(number)))
+        if (
+            key
+            and credential_type(key)
+            and any(
+                self._shield.mask(text, field_name=key).text != text for text in texts
+            )
+        ):
+            return False
         if key is not None and _SETTING_KEY.fullmatch(key):
             # A setting may hold a registered number by chance (64000 when
             # 4000 is registered), but not be one, or a card.
@@ -1057,9 +1138,14 @@ class RequestMasker:
                 raise UnsupportedRequestError(path, "opaque data that can't be masked")
             if key == "type" and self._ident_ok(value):
                 return value
-            if key is not None and _ID_KEY.fullmatch(key) and self._id_ok(value):
+            if (
+                key is not None
+                and credential_type(key) is None
+                and _ID_KEY.fullmatch(key)
+                and self._id_ok(value)
+            ):
                 return value
-            return self._text(value)
+            return self._text(value, field_name=key)
         if isinstance(value, list):
             return [
                 self._data(item, f"{path}[{i}]", key, opaque=opaque)
@@ -1187,15 +1273,21 @@ class RequestMasker:
         masked = self._ledger.masked_text(text)
         return self._known.mask(masked) if masked is not None else self._text(text)
 
-    def _text(self, text: str) -> str:
+    def _text(self, text: str, *, field_name: str | None = None) -> str:
         if not text:
             return text
-        key = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        # Always encode both parts: a literal JSON-looking prompt must not
+        # collide with the cache entry for a parsed credential field.
+        context = json.dumps([field_name, text])
+        key = hashlib.sha256(context.encode("utf-8", "surrogatepass")).hexdigest()
         cached = self._memo.get(key)
         if cached is not None:
-            return cached
-        masked = _mask_text(self._shield, self._known, text)
-        self._memo.put(key, masked)
+            masked = self._known.mask(cached)
+        else:
+            masked = _mask_text(self._shield, self._known, text, field_name=field_name)
+            self._memo.put(key, masked)
+        if self.secret_review:
+            self._review_texts.add(text)
         return masked
 
     def _known_everywhere(self, value: Any, path: str) -> Any:
@@ -1937,12 +2029,19 @@ def _spellings(value: str) -> set[str]:
     }
 
 
-def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
+def _mask_text(
+    shield: Shield, known: _KnownValues, text: str, *, field_name: str | None = None
+) -> str:
     """Mask ``text``, then any known value left in it, even glued to a word.
 
     A line that still holds a known value after that is withheld.
     """
-    masked = known.mask(shield.mask(text).text)
+    result = (
+        shield.mask(text)
+        if field_name is None
+        else shield.mask(text, field_name=field_name)
+    )
+    masked = known.mask(result.text)
     if not known.found_in(masked):
         return masked
     # Withhold, from the masked text, each line where a known value remains

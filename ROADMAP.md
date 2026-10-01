@@ -36,7 +36,7 @@ The next sequence is:
    review, and fix release-blocking findings.
 4. Ship 1.0 only when the [release gate](#10-release-gate) is met.
 
-Automatic login startup, local name recognition, secret/token detection, and
+Automatic login startup, local name recognition, and
 additional media/providers are useful extensions. They can remain outside 1.0
 when the supported scope and exclusions are clear. The storage/security decisions
 and validation for the features we do advertise still need to be completed.
@@ -104,8 +104,24 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
   false-positive rules; replace the ad hoc demo regex for normal use.
 - [x] Add easy commands to register, list, and remove names, organizations, and
   custom values, with private storage and clear case/variant behavior.
-- [ ] Evaluate opt-in secret/token detection against realistic examples before
-  promising API-key or password coverage.
+- [x] Add scoped coding-secret masking with explicit format/context rules,
+  code/reference negatives, and gateway regression coverage. Available in the
+  source checkout after 0.5.0; see [supported formats](docs/coding-secrets.md).
+- [x] Add optional local review of uncertain secrets, request-scoped decisions,
+  and whole-request context within supported fields. See [secret review](docs/secret-review.md).
+- [ ] Evaluate coding-secret detection on independently reviewed real-workflow
+  samples, including false positives, before making broader coverage claims.
+- [x] Add an authored workflow leak evaluation for both gateways, with local
+  review off/on, per-occurrence regression checks, and local HTTP verification.
+  [52-document results and remaining gaps](docs/leak-evaluation.md). This does
+  not complete independent sampling or security review.
+- [x] Address the initial 17 exposed occurrences using scoped cookie/query/JSON
+  masking and optional local review of contextual credentials and labelled PII.
+  [Before/after results](docs/leak-evaluation.md) distinguish automatic masks from
+  review holds; original corpus labels remain unchanged.
+- [ ] Broaden independent testing of cookie/link formats, encodings, fragment
+  layouts, languages and PII cues; reduce code/prose false positives and review
+  burden without silently allowing ambiguous secrets.
 - [x] Maintain labeled, fictional test corpora; measure missed values and false
   positives by entity type, format, and language, plus masking latency.
   [Initial 30-document baseline](docs/detection-results.md); broader sampling remains.
