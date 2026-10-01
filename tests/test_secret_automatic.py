@@ -181,6 +181,17 @@ def test_repeated_labels_and_long_nonmatching_tokens_stay_bounded():
         ("export GITHUBTOKEN=fictional-orchard-42", "fictional-orchard-42", "TOKEN"),
         ("'password' => 'Fict-Meadow-46',", "Fict-Meadow-46", "PASSWORD"),
         (":api_key => 'fictional-orchard-42'", "fictional-orchard-42", "API_KEY"),
+        (
+            r'{"httpMethod": "POST", "body": "{\"username\": \"jan\", '
+            r'\"password\": \"Fict-Meadow-45\"}"}',
+            "Fict-Meadow-45",
+            "PASSWORD",
+        ),
+        (
+            r'{"body": "{\\\"password\\\": \\\"Fict-Meadow-45\\\"}"}',
+            "Fict-Meadow-45",
+            "PASSWORD",
+        ),
     ],
 )
 def test_new_syntax_is_masked_before_the_http_provider_and_restored(

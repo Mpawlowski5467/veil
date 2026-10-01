@@ -150,6 +150,72 @@ def test_json_escaped_password_and_parsed_field_are_lossless(value):
 
 
 @pytest.mark.parametrize(
+    "value",
+    ["FictPass1", 'fict"tok42', "ends\\", "two words", "a\nb", '\\"', "Ada Quill 🦊"],
+)
+@pytest.mark.parametrize("depth", [1, 2, 3])
+def test_stringified_json_password_is_lossless(depth, value):
+    source = json.dumps({"user": "jan@example.com", "password": value})
+    for _ in range(depth):
+        source = json.dumps({"body": source})
+    shield = Shield()
+    masked = shield.mask(source)
+    assert shield.restore(masked.text).text == source
+    decoded = json.loads(masked.text)
+    for _ in range(depth):
+        decoded = json.loads(decoded["body"])
+    assert decoded == {"user": "[EMAIL_1]", "password": "[PASSWORD_1]"}
+    assert {e.entity_type for e in masked.entities} == {"EMAIL", "PASSWORD"}
+
+
+@pytest.mark.parametrize(
+    ("source", "masked_text"),
+    [
+        (
+            r'{"httpMethod": "POST", "path": "/login", "body": "{\"username\": '
+            r'\"jan\", \"password\": \"Fict-Meadow-45\"}"}',
+            r'{"httpMethod": "POST", "path": "/login", "body": "{\"username\": '
+            r'\"jan\", \"password\": \"[PASSWORD_1]\"}"}',
+        ),
+        (
+            r'"postData": {"mimeType": "application/json", "text": '
+            r'"{\"email\":\"jan.nowak@example.com\",'
+            r'\"api_key\":\"fictional-orchard-42\"}"}',
+            r'"postData": {"mimeType": "application/json", "text": '
+            r'"{\"email\":\"[EMAIL_1]\",\"api_key\":\"[API_KEY_1]\"}"}',
+        ),
+        (
+            r'{"log": "{\"body\": \"{\\\"access_token\\\": '
+            r'\\\"fictional-orchard-42\\\"}\"}"}',
+            r'{"log": "{\"body\": \"{\\\"access_token\\\": \\\"[TOKEN_1]\\\"}\"}"}',
+        ),
+        (r'{"body":"{\"password\":\"Fict', r'{"body":"{\"password\":\"[PASSWORD_1]'),
+    ],
+)
+def test_stringified_json_from_events_logs_and_truncated_input(source, masked_text):
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == masked_text
+    assert shield.restore(masked.text).text == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        r"{\"password\": \"${DB_PASSWORD}\"}",
+        r"{\"password\": \"\"}",
+        r"{\"password\": null}",
+        r"{\"password_length\": \"12\"}",
+        r"{\"tokenizer\": \"bpe\"}",
+        r'\\"password\\":\\"x\\"',
+        r"{\"password\": \"[PASSWORD_1]\"}",
+    ],
+)
+def test_stringified_json_references_and_other_fields_stay_readable(source):
+    assert Shield().mask(source).text == source
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "password = os.environ['PASSWORD']",
@@ -379,6 +445,10 @@ def test_large_coding_text_and_unterminated_quotes_complete_promptly():
     text = "'password' => 'x" * 20000
     start = time.monotonic()
     detector.detect(text)
+    assert time.monotonic() - start < 5
+    text = r"{\"password\":\"x" * 20000
+    start = time.monotonic()
+    assert any(s.end == len(text) for s in detector.detect(text))
     assert time.monotonic() - start < 5
 
 

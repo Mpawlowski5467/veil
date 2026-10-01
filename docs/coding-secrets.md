@@ -45,6 +45,15 @@ constants after `=>` (`$password`, `env('DB_PASSWORD')`, `ENV['DB_PASSWORD']`)
 stay readable, and so do JavaScript arrow functions such as
 `token => token.trim()`.
 
+Stringified JSON, meaning a JSON document stored inside a JSON string, is also
+recognized. Examples are an API Gateway/Lambda event `body`, a HAR
+`postData.text`, or a logged `json.dumps` payload. The key and a string value
+must use matching escaped quotes (`{\"password\": \"…\"}`), at one to four
+levels of escaping. Only the value's escaped source spelling is replaced and
+restored, so the outer JSON stays valid. Numeric or bare values inside
+stringified JSON, and other encodings such as base64 or form-encoded bodies,
+are outside this rule.
+
 Additional automatic rules recognize:
 
 - Explicit prose labels such as `My password is "fictional meadow phrase"`,
@@ -162,10 +171,11 @@ gateway's attachment/tool-definition coverage. See [boundaries](../README.md#und
 ## Validation
 
 [The fictional regression fixtures](../tests/test_secrets.py) exercise supported
-prefixes and labels, code/reference negatives, quoted/escaped/multiline values,
-private-key blocks, URL userinfo, streamed restoration, custom overrides,
-persistent sessions, parsed tool arguments, and real local HTTP gateway round
-trips with scripted provider replies. Assertions check the bytes received by the
+prefixes and labels, code/reference negatives,
+quoted/escaped/stringified-JSON/multiline values, private-key blocks, URL
+userinfo, streamed restoration, custom overrides, persistent sessions, parsed
+tool arguments, and real local HTTP gateway round trips with scripted provider
+replies. Assertions check the bytes received by the
 fake provider and the restored response; no live keys or external calls are used.
 The [automatic syntax tests](../tests/test_secret_automatic.py) add prose and
 language variants, shell quoting, YAML boundaries, references, custom overrides,

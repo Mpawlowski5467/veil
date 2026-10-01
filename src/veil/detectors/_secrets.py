@@ -94,6 +94,14 @@ _COOKIE_NAMES = frozenset(
     }
 )
 _JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
+# A key and string value inside stringified JSON: the same backslash run escapes
+# each quote, e.g. {\"password\": \"...\"} in a Lambda event or HAR body. The
+# leading literal backslash keeps the scan fast; the lookbehind after it makes
+# the run start there.
+_ESCAPED_KEY = re.compile(
+    r'\\(?<!\\\\)(?P<escape>\\{0,14})"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})'
+    r'\\(?P=escape)"[ \t]*:[ \t]*\\(?P=escape)"'
+)
 # PHP/Perl hash keys and Ruby symbols before '=>'; only quoted values follow.
 # Arrow functions make '=>' common, so keys are read back from each arrow.
 _HASH_ROCKET = re.compile(r"=>[ \t]*(?=[\"'])")
@@ -373,8 +381,39 @@ def _cookies(text: str) -> tuple[list[Span], set[int]]:
     return found, handled
 
 
+def _escaped_string_end(text: str, start: int, depth: int) -> int:
+    """Find the end of a string value written at one JSON escape depth."""
+    # At depth k = 2**n - 1, a run of r backslashes before '"' encodes
+    # j = (r - k) / (k + 1) inner backslashes; the quote closes the value when
+    # j is even. Encoded trailing backslashes stay inside the value.
+    end = start
+    while end < len(text):
+        if text[end] in '"\r\n':
+            return end
+        if text[end] != "\\":
+            end += 1
+            continue
+        run_end = end
+        while run_end < len(text) and text[run_end] == "\\":
+            run_end += 1
+        if run_end < len(text) and text[run_end] == '"':
+            run = run_end - end
+            if run < depth:  # An enclosing string ended: malformed input.
+                return end
+            inner, remainder = divmod(run - depth, depth + 1)
+            if remainder == 0 and inner % 2 == 0:
+                return run_end - depth
+            run_end += 1
+        end = run_end
+    # Truncated input: protect through the end, not a partial value.
+    return len(text)
+
+
 def _escaped_fields(text: str) -> Iterator[Span]:
-    """Decode JSON field names only; mask the original source value losslessly."""
+    """Decode escaped JSON field names and stringified JSON keys.
+
+    The original source value is masked, so restoration is lossless.
+    """
     if "\\" not in text:
         return
     for field in _JSON_KEY.finditer(text):
@@ -390,6 +429,20 @@ def _escaped_fields(text: str) -> Iterator[Span]:
             start, end = offsets
             if _literal(text[start:end]):
                 yield _span(text, start, end, kind)
+    cursor = 0
+    while key := _ESCAPED_KEY.search(text, cursor):
+        start = cursor = key.end()
+        depth = len(key["escape"]) + 1
+        # Only 1, 3, 7 and 15 backslashes are JSON escape levels one to four.
+        if depth not in {1, 3, 7, 15}:
+            continue
+        kind = credential_type(key["name"])
+        if kind is None:
+            continue
+        end = _escaped_string_end(text, start, depth)
+        cursor = max(start, end)
+        if end > start and _literal(text[start:end]):
+            yield _span(text, start, end, kind)
 
 
 def _hash_rocket_values(text: str) -> Iterator[Span]:
