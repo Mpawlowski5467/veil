@@ -31,9 +31,18 @@
   <main id="reviews"></main>
 <script>
 const token = location.hash.slice(1);
-history.replaceState(null, '', location.pathname);
 const status = document.getElementById('status');
 const root = document.getElementById('reviews');
+const refreshButton = document.getElementById('refresh');
+const localPage = location.protocol === 'http:' && location.hostname === '127.0.0.1';
+const launchHelp = 'Run veil review in your own terminal and use the private page it opens. Keep that terminal running.';
+// A file preview has no review server. Never send the capability to another host.
+const startupError = !localPage
+  ? 'This file is a preview; it cannot load review findings. ' + launchHelp
+  : !token
+    ? 'This page is missing its private access link, which can happen after a browser reload. ' + launchHelp
+    : '';
+if (localPage && token) history.replaceState(null, '', location.pathname);
 const labels = {
   API_KEY: 'API key',
   PASSWORD: 'Password or passphrase',
@@ -49,14 +58,23 @@ const labels = {
 };
 
 async function request(choice) {
-  const response = await fetch('/data', {
-    method: choice ? 'POST' : 'GET',
-    cache: 'no-store',
-    headers: { 'X-Veil-Review': token, 'Content-Type': 'application/json' },
-    body: choice ? JSON.stringify(choice) : undefined
-  });
+  if (startupError) throw Error(startupError);
+  let response;
+  try {
+    response = await fetch('/data', {
+      method: choice ? 'POST' : 'GET',
+      cache: 'no-store',
+      headers: { 'X-Veil-Review': token, 'Content-Type': 'application/json' },
+      body: choice ? JSON.stringify(choice) : undefined
+    });
+  } catch {
+    throw Error('Cannot reach the local review server. It may have closed or reached its ten-minute limit. ' + launchHelp);
+  }
+  if (response.status === 403) {
+    throw Error('This private review link is no longer accepted. ' + launchHelp);
+  }
   if (!response.ok) {
-    throw Error('Review unavailable or expired. Refresh, or retry your original request.');
+    throw Error('Review unavailable or expired. Check that your Veil gateway is running, then retry your original request and use Refresh findings.');
   }
   return response.json();
 }
@@ -130,7 +148,8 @@ async function refresh() {
     status.textContent = error.message;
   }
 }
-document.getElementById('refresh').onclick = refresh;
+refreshButton.onclick = refresh;
+refreshButton.disabled = Boolean(startupError);
 refresh();
 </script>
 </body>

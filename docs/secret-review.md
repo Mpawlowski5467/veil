@@ -50,6 +50,15 @@ Use the address where your gateway actually listens (the Anthropic default is
 The command proves gateway identity before sending its local secret. It does
 not print that secret or put it into the review page.
 
+Open the page through `veil review`, not by opening `src/veil/review.html` from
+disk: the HTML file alone has no server to fetch findings from. From a source
+checkout, use `uv run veil review`. Keep the terminal running while reviewing.
+Use **Refresh findings** inside the page; reloading the browser loses its
+in-memory access token. If you reload, close the terminal command, or reach the
+ten-minute limit, run the command again to open a new private page. If it reports
+that gateway identity cannot be verified, check `veil status --json` and restore
+your existing gateway using its original data folder and port first.
+
 1. Reveal a value locally if needed. Values start collapsed.
 2. Choose a credential or personal-data classification: **API key**, **Password or
    passphrase**, **Access token**, **Private key**, **Other credential**, **Person's
