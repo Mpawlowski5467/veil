@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping, Sequence, Set
 from ._normalize import KeyIndex, Normalizer
 from ._search import CachedIndex
 from ._text import is_word_char
-from .detectors.base import Detector
+from .detectors.base import Detector, _FieldDetector
 from .detectors.manual import ManualDetector
 from .placeholders import (
     LOOSE_PLACEHOLDER_RE,
@@ -293,7 +293,7 @@ class Masker:
         self._leak_index = CachedIndex()
         self._lock = threading.Lock()
 
-    def mask(self, text: str) -> MaskResult:
+    def mask(self, text: str, *, field_name: str | None = None) -> MaskResult:
         """Mask ``text``.
 
         Placeholders are assigned in reading order, and replacements are made
@@ -301,6 +301,7 @@ class Masker:
 
         Args:
             text: The text to mask.
+            field_name: Optional parsed field name for contextual detectors.
 
         Returns:
             The masked text, every replacement made, and any warnings.
@@ -312,15 +313,20 @@ class Masker:
         """
         if not isinstance(text, str):
             raise TypeError(f"mask() expects str, got {type(text).__name__}")
+        if field_name is not None and not isinstance(field_name, str):
+            raise TypeError("field_name must be a string or None")
         if not text:
             return MaskResult(text=text)
         with self._lock:
-            return self._mask(text)
+            return self._mask(text, field_name)
 
-    def _mask(self, text: str) -> MaskResult:
+    def _mask(self, text: str, field_name: str | None = None) -> MaskResult:
         candidates: list[Span] = []
         for detector in self._detectors:
-            for span in detector.detect(text):
+            detected = detector.detect(text)
+            if field_name is not None and isinstance(detector, _FieldDetector):
+                detected = [*detected, *detector.detect_field(text, field_name)]
+            for span in detected:
                 if span.end > len(text) or text[span.start : span.end] != span.value:
                     raise ValueError(
                         f"{type(detector).__name__} returned a span at "

@@ -1,5 +1,9 @@
 # Detection baseline
 
+This page records the published 0.5.0 baseline. The newer source-checkout
+[coding-secret rules](coding-secrets.md) have separate fictional regression
+fixtures and are not measured by the numbers below.
+
 Measured 2026-09-29 with Veil 0.5.0. This is a small, authored regression corpus:
 **30 fictional documents, 53 annotated occurrences, 8 language tags**, and
 email, invoice, JSON, URL, log, negative, and unsupported-format examples.

@@ -867,7 +867,7 @@ class TestReviewCases:
     def test_two_keys_that_would_mask_alike_are_refused(self, monkeypatch):
         masker = make_masker()
         monkeypatch.setattr(masker, "_ident_ok", lambda name: False)
-        monkeypatch.setattr(masker, "_text", lambda text: "[EMAIL_1]")
+        monkeypatch.setattr(masker, "_text", lambda text, **kwargs: "[EMAIL_1]")
         block = {
             "type": "tool_use",
             "id": "toolu_01AbCdEfGhIjKl",

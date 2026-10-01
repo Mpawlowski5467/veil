@@ -169,7 +169,7 @@ jobs:
           tests/test_gateway_request.py tests/test_gateway_blocks.py
           tests/test_gateway_golden.py tests/test_gateway_leaks.py
           tests/test_gateway_request_fuzz.py tests/test_openai_gateway.py
-          tests/test_ssn.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
+          tests/test_ssn.py tests/test_secrets.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
           tests/test_masker.py tests/test_restorer.py tests/test_stream.py
           tests/test_fuzz.py tests/test_readme.py
       - name: Install native Linux clipboard tools

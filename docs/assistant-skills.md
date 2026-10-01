@@ -108,6 +108,11 @@ need registration. Compact or space-separated SSNs need an explicit label, and
 impossible SSN ranges are rejected. Undetected values can remain in output. Neither
 the skill nor the gateway is a sandbox for every local tool or network action.
 
+The source checkout after 0.5.0 also includes [coding-secret detection](coding-secrets.md)
+for supported keys, tokens, passwords, private-key blocks, and URL credentials.
+The skill uses whatever rules its installed Veil runtime supplies; upgrade that
+runtime and restart/relaunch gateways before testing new detection rules.
+
 ## Register private values
 
 Ask the skill to register a value **from a local file path**, or ask for the

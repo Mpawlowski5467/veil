@@ -304,9 +304,18 @@ Keep the same session label for the conversation and choose a new one for the ne
 | `CREDIT_CARD` | Supported layouts checked against issuer prefixes, lengths, and the Luhn checksum. |
 | `IBAN` | Supported country codes and layouts with checksum validation. |
 | `SSN` | US numbers with hyphens; compact or space-separated numbers require an explicit SSN label. Invalid area/group/serial ranges are rejected. |
+| Coding secrets (source checkout) | Supported API keys, tokens, labelled passwords, private-key blocks, and URL credentials. [Formats, examples, and limits](docs/coding-secrets.md). Not included in the published 0.5.0 wheel. |
 | Your types | Exact registered values or custom regular expressions. |
 
 Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible. See the [measured examples and limitations](docs/detection-results.md); exact registration improves coverage without making names or secrets automatically detectable.
+
+Coding-secret matches are masked into placeholders such as `[API_KEY_1]` and
+`[PASSWORD_1]`; supported requests continue, and replies restore locally.
+Credential names inside parsed tool data are preserved as detection context.
+As with other mappings, persistent vaults retain the original values in plaintext
+under private file permissions. Install from this checkout and restart/relaunch
+Veil to try the new rules; [the coding-secret guide](docs/coding-secrets.md) lists
+the boundaries and Python examples.
 
 ## Understand the boundaries
 

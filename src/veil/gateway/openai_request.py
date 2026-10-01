@@ -218,20 +218,38 @@ class ResponsesRequestMasker(RequestMasker):
         # A value registered since an earlier request must not evade a cached mask.
         return self._known.mask(masked)
 
-    def _value(self, value: Any, *, known_only: bool = False) -> Any:
+    def _value(
+        self, value: Any, *, known_only: bool = False, field_name: str | None = None
+    ) -> Any:
         mask = self._known.mask if known_only else self._mask_string
         if isinstance(value, str):
-            return mask(value)
+            return (
+                mask(value)
+                if known_only
+                else self._known.mask(self._text(value, field_name=field_name))
+            )
         if isinstance(value, list):
-            return [self._value(item, known_only=known_only) for item in value]
+            return [
+                self._value(item, known_only=known_only, field_name=field_name)
+                for item in value
+            ]
         if isinstance(value, dict):
             out = {
-                mask(key): self._value(item, known_only=known_only)
+                mask(key): self._value(item, known_only=known_only, field_name=key)
                 for key, item in value.items()
             }
             if len(out) != len(value):
                 raise UnsupportedRequestError("input", "masked object keys collide")
             return out
+        if (
+            not known_only
+            and not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and not self._number_clean(value, field_name)
+        ):
+            raise UnsupportedRequestError(
+                "input", "a number that may hold private data"
+            )
         return value
 
     def _item(self, value: Any, path: str) -> dict[str, Any]:

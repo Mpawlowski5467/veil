@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Default coding-secret masking for supported provider key/token prefixes, JWT-shaped strings, Bearer/Basic values in text, labelled credentials, private-key blocks, and URL userinfo. Matches use `API_KEY`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, and `CREDENTIAL` placeholders and restore locally. See [formats and limits](docs/coding-secrets.md).
+- `Shield.mask(text, field_name=...)` retains context for parsed credential strings. Both gateways apply it to supported tool/data fields; numeric credential fields are refused instead of silently changing their type. Activity summaries expose only the new standard type counts.
+- Fictional detection and code/reference regression fixtures, persistent-session and local HTTP round trips for both adapters, and large-input checks. No live credentials or provider calls are needed.
+
 ## 0.5.0
 
 ### Added

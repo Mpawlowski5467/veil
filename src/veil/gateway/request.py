@@ -19,6 +19,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
+from ..detectors._secrets import credential_type
 from ..placeholders import placeholder_type
 from ..shield import Shield
 from ..vault.base import Vault
@@ -958,6 +959,14 @@ class RequestMasker:
         texts = [json.dumps(number)]
         if isinstance(number, float) and number.is_integer() and abs(number) < 1e21:
             texts.append(str(int(number)))
+        if (
+            key
+            and credential_type(key)
+            and any(
+                self._shield.mask(text, field_name=key).text != text for text in texts
+            )
+        ):
+            return False
         if key is not None and _SETTING_KEY.fullmatch(key):
             # A setting may hold a registered number by chance (64000 when
             # 4000 is registered), but not be one, or a card.
@@ -1057,9 +1066,14 @@ class RequestMasker:
                 raise UnsupportedRequestError(path, "opaque data that can't be masked")
             if key == "type" and self._ident_ok(value):
                 return value
-            if key is not None and _ID_KEY.fullmatch(key) and self._id_ok(value):
+            if (
+                key is not None
+                and credential_type(key) is None
+                and _ID_KEY.fullmatch(key)
+                and self._id_ok(value)
+            ):
                 return value
-            return self._text(value)
+            return self._text(value, field_name=key)
         if isinstance(value, list):
             return [
                 self._data(item, f"{path}[{i}]", key, opaque=opaque)
@@ -1187,14 +1201,17 @@ class RequestMasker:
         masked = self._ledger.masked_text(text)
         return self._known.mask(masked) if masked is not None else self._text(text)
 
-    def _text(self, text: str) -> str:
+    def _text(self, text: str, *, field_name: str | None = None) -> str:
         if not text:
             return text
-        key = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        # Always encode both parts: a literal JSON-looking prompt must not
+        # collide with the cache entry for a parsed credential field.
+        context = json.dumps([field_name, text])
+        key = hashlib.sha256(context.encode("utf-8", "surrogatepass")).hexdigest()
         cached = self._memo.get(key)
         if cached is not None:
-            return cached
-        masked = _mask_text(self._shield, self._known, text)
+            return self._known.mask(cached)
+        masked = _mask_text(self._shield, self._known, text, field_name=field_name)
         self._memo.put(key, masked)
         return masked
 
@@ -1937,12 +1954,19 @@ def _spellings(value: str) -> set[str]:
     }
 
 
-def _mask_text(shield: Shield, known: _KnownValues, text: str) -> str:
+def _mask_text(
+    shield: Shield, known: _KnownValues, text: str, *, field_name: str | None = None
+) -> str:
     """Mask ``text``, then any known value left in it, even glued to a word.
 
     A line that still holds a known value after that is withheld.
     """
-    masked = known.mask(shield.mask(text).text)
+    result = (
+        shield.mask(text)
+        if field_name is None
+        else shield.mask(text, field_name=field_name)
+    )
+    masked = known.mask(result.text)
     if not known.found_in(masked):
         return masked
     # Withhold, from the masked text, each line where a known value remains
