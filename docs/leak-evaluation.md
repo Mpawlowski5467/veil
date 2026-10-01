@@ -21,26 +21,31 @@ does not approve anything automatically or learn the answers from the labels.
 
 | Measurement, per adapter | Review off | Review on |
 | --- | ---: | ---: |
-| Annotated occurrences fully masked | 34 / 52 | 34 / 52 |
-| Annotated occurrences partially masked | 2 | 2 |
-| Annotated occurrences not masked | 16 | 16 |
-| Requests held for local review | 0 / 52 | 19 / 52 |
-| Annotated occurrences still exposed in requests ready to send | 18 | 0 |
+| Annotated occurrences fully masked | 41 / 52 | 41 / 52 |
+| Annotated occurrences partially masked | 1 | 1 |
+| Annotated occurrences not masked | 10 | 10 |
+| Requests held for local review | 0 / 52 | 12 / 52 |
+| Annotated occurrences still exposed in requests ready to send | 11 | 0 |
 | Requests with no private values held for review | 0 / 15 | 3 / 15 |
-| Extra or inexact mask spans | 11 | 11 |
-| Harmless characters masked | 89 | 89 |
+| Extra or inexact mask spans | 9 | 9 |
+| Harmless characters masked | 88 | 88 |
 | Prepared requests restored exactly as Python text | 52 / 52 | 52 / 52 |
 
-The 19 review holds contain 16 requests with private values and three harmless
-requests. All 18 occurrences not fully masked automatically are fully covered by
+The 12 review holds contain nine requests with private values and three harmless
+requests. All 11 occurrences not fully masked automatically are fully covered by
 actual review findings. A test checks this per occurrence: an incidental hold
 for an unrelated value cannot satisfy it. **Review is off by default.** Without
-review, the 18 occurrences in the table remain exposed.
+review, the 11 occurrences in the table remain exposed.
 
-Before these fixes, the same unchanged corpus had 27 fully masked occurrences
-and 17 still exposed with review on. Of those 17, five are now masked automatically
-and 12 trigger review. The fixes also improve previously held S3 signatures and
-simple code concatenations. Corpus labels and difficult cases were not removed.
+The same unchanged corpus originally had 27 fully masked occurrences and 17
+still exposed with review on. The preceding update reached 34 automatic masks
+and zero exposure with review. This update raises automatic masks from **34 to
+41 (65.38% to 78.85%)**, moving seven formerly held requests to automatic
+forwarding. These are the YAML block, command option, quoted support-email
+password, Polish and Spanish password phrases, recovery code, and password
+containing an email. Extra/inexact masks fall from 11 to 9; harmless characters
+masked fall from 89 to 88. No case regresses against the preceding baseline.
+Corpus labels and difficult cases were not removed.
 
 The local HTTP retry tests simulate confirming each actual finding using its
 suggested type, without using corpus labels to find values. After that explicit
@@ -49,8 +54,8 @@ exactly. This is conditional workflow validation, **not automatic detection or a
 study of whether users make correct decisions**. Choosing to allow a private
 value can still expose it.
 
-Exact span/type precision is 75.56% and recall is 65.38% on these deliberately
-selected examples: 34 exact true positives, 11 extra/inexact spans, and 18 exact
+Exact span/type precision is 82% and recall is 78.85% on these deliberately
+selected examples: 41 exact true positives, nine extra/inexact spans, and 11 exact
 misses. A partial mask, wrong type, or oversized replacement can count as both
 an extra span and a miss. Full character coverage therefore differs from exact
 span recall. These figures should not be advertised as overall Veil accuracy.
@@ -72,24 +77,30 @@ with a Unix LF checkout; line-ending escapes inside corpus text stay intact.
   headers; credential/signature query parameters (including the tested SAS and
   S3 examples); percent-encoded query names; Unicode-escaped JSON field names;
   and simple quoted credential concatenations. Values keep their source spelling.
-- **Review coverage:** sign-in instructions, specific Polish/Spanish password
-  phrases, recovery/backup codes, explicitly labelled webhook endpoints, explicit
+- **Additional automatic syntax:** quoted credential assertions and delimited
+  token-like values, specific Polish/Spanish password phrases, recovery/backup
+  codes, supported shell credential options, and indented YAML credential blocks.
+  Full-value masks replace partial email masking inside a quoted password. The
+  raw YAML block, including indentation, becomes one placeholder; exact textual
+  restoration is tested, not execution of masked YAML.
+- **Review coverage:** ambiguous sign-in instructions and multiword values,
+  explicitly labelled webhook endpoints, explicit
   base64 payloads, and short token-like fields accompanied by a credential-split
   cue in the same request. No recursive decoding or code execution is performed.
 - **Labelled PII review:** the name, street address, birth date, passport, and
   driver's-license examples now have dedicated local review classifications.
   These are scoped context cues, not automatic recognition of arbitrary people
   or addresses. Unlabelled or differently formatted values can still be missed.
-- **False positives:** code attribute/self references get masked; hashes, trace
-  IDs, and explanatory prose can trigger review. A YAML block marker is still
-  masked as a password. URL credential masking now preserves neighboring query
-  parameters in the measured cases.
+- **False positives:** code attribute/self references still get masked; hashes,
+  trace IDs, and explanatory prose can trigger review. The YAML block marker is
+  now preserved while its content is masked. URL credential masking preserves
+  neighboring query parameters in the measured cases.
 
-The new webhook finding covers the entire labelled endpoint, adding 41 harmless
-URL characters to review on that one case. This was an intentional, reviewed
-baseline change: approval protects the whole endpoint instead of guessing which
-path component is sensitive. These characters are not automatically masked before
-approval. The existing three harmless-request holds did not increase.
+The webhook finding still covers the entire labelled endpoint, including 41
+harmless URL characters: approval protects the whole endpoint instead of guessing
+which path component is sensitive. This earlier baseline tradeoff is unchanged;
+these characters are not automatically masked before approval. The existing three
+harmless-request holds did not increase.
 
 Do not silently allow all hashes or code-looking values to improve a score:
 real secrets can have those forms too. Each change needs positive and negative
@@ -103,6 +114,7 @@ From an updated source checkout:
 uv run python benchmarks/leaks.py --check --output /tmp/veil-leak-results.json
 uv run pytest -q tests/test_leak_evaluation.py
 uv run pytest -q tests/test_privacy_context.py
+uv run pytest -q tests/test_secret_automatic.py
 ```
 
 On Windows, use a local output path such as `veil-leak-results.json` instead of
@@ -120,7 +132,10 @@ fake provider has no external network destination and uses no real credentials.
 The privacy-context tests add different values, casing, accents, quoting,
 line endings, URL/JSON encodings, code and cookie negatives, review bounds,
 persistent CLI mappings, and actual gateway confirmation/retry for every original
-document. The native CI jobs run these tests too.
+document. Automatic-syntax tests add other values, multilingual label variants,
+clause boundaries, shell quoting/escapes, YAML dedents/indicators/comments,
+references, custom-rule overrides, long nonmatches, and real HTTP masking and
+restoration with review on and off. The native CI jobs run these tests too.
 
 Native CI runs this evaluation and its transport checks on macOS, Linux, and
 Windows with Python 3.10 and 3.14. Each native job uploads its measured JSON as a

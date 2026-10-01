@@ -91,19 +91,19 @@
         "id": "yaml-multiline",
         "status": "ready",
         "masked_characters": [
-          0
+          39
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          39
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -151,18 +151,18 @@
         "id": "shell-command-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -270,7 +270,7 @@
         "masked_characters": [
           16,
           14,
-          0
+          24
         ],
         "review_characters": [
           0,
@@ -280,12 +280,12 @@
         "masked_or_flagged_characters": [
           16,
           14,
-          0
+          24
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 2,
+        "exposed_annotations": 0,
+        "exact_tp": 3,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -316,18 +316,18 @@
         "id": "polish-credential-prose",
         "status": "ready",
         "masked_characters": [
-          0
+          15
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          15
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -337,18 +337,18 @@
         "id": "spanish-credential-prose",
         "status": "ready",
         "masked_characters": [
-          0
+          18
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          18
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -592,18 +592,18 @@
         "id": "recovery-code",
         "status": "ready",
         "masked_characters": [
-          0
+          22
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -733,18 +733,18 @@
         "id": "partial-pii-inside-credential",
         "status": "ready",
         "masked_characters": [
-          16
+          37
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          16
+          37
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1138,23 +1138,23 @@
       },
       {
         "id": "yaml-multiline",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          39
         ],
         "review_characters": [
-          39
+          0
         ],
         "masked_or_flagged_characters": [
           39
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1198,23 +1198,23 @@
       },
       {
         "id": "shell-command-password",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
-          28
+          0
         ],
         "masked_or_flagged_characters": [
           28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1315,29 +1315,29 @@
       },
       {
         "id": "support-email",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           16,
           14,
-          0
+          24
         ],
         "review_characters": [
           0,
           0,
-          24
+          0
         ],
         "masked_or_flagged_characters": [
           16,
           14,
           24
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 2,
+        "exposed_annotations": 0,
+        "exact_tp": 3,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1363,44 +1363,44 @@
       },
       {
         "id": "polish-credential-prose",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          15
         ],
         "review_characters": [
-          15
+          0
         ],
         "masked_or_flagged_characters": [
           15
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
         "id": "spanish-credential-prose",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          18
         ],
         "review_characters": [
-          18
+          0
         ],
         "masked_or_flagged_characters": [
           18
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1639,23 +1639,23 @@
       },
       {
         "id": "recovery-code",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          22
         ],
         "review_characters": [
-          22
+          0
         ],
         "masked_or_flagged_characters": [
           22
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1780,23 +1780,23 @@
       },
       {
         "id": "partial-pii-inside-credential",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          16
+          37
         ],
         "review_characters": [
-          37
+          0
         ],
         "masked_or_flagged_characters": [
           37
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -2189,19 +2189,19 @@
         "id": "yaml-multiline",
         "status": "ready",
         "masked_characters": [
-          0
+          39
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          39
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -2249,18 +2249,18 @@
         "id": "shell-command-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2368,7 +2368,7 @@
         "masked_characters": [
           16,
           14,
-          0
+          24
         ],
         "review_characters": [
           0,
@@ -2378,12 +2378,12 @@
         "masked_or_flagged_characters": [
           16,
           14,
-          0
+          24
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 2,
+        "exposed_annotations": 0,
+        "exact_tp": 3,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2414,18 +2414,18 @@
         "id": "polish-credential-prose",
         "status": "ready",
         "masked_characters": [
-          0
+          15
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          15
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2435,18 +2435,18 @@
         "id": "spanish-credential-prose",
         "status": "ready",
         "masked_characters": [
-          0
+          18
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          18
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2690,18 +2690,18 @@
         "id": "recovery-code",
         "status": "ready",
         "masked_characters": [
-          0
+          22
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2831,18 +2831,18 @@
         "id": "partial-pii-inside-credential",
         "status": "ready",
         "masked_characters": [
-          16
+          37
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          16
+          37
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3236,23 +3236,23 @@
       },
       {
         "id": "yaml-multiline",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          39
         ],
         "review_characters": [
-          39
+          0
         ],
         "masked_or_flagged_characters": [
           39
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -3296,23 +3296,23 @@
       },
       {
         "id": "shell-command-password",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
-          28
+          0
         ],
         "masked_or_flagged_characters": [
           28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -3413,29 +3413,29 @@
       },
       {
         "id": "support-email",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           16,
           14,
-          0
+          24
         ],
         "review_characters": [
           0,
           0,
-          24
+          0
         ],
         "masked_or_flagged_characters": [
           16,
           14,
           24
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 2,
+        "exposed_annotations": 0,
+        "exact_tp": 3,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -3461,44 +3461,44 @@
       },
       {
         "id": "polish-credential-prose",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          15
         ],
         "review_characters": [
-          15
+          0
         ],
         "masked_or_flagged_characters": [
           15
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
         "id": "spanish-credential-prose",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          18
         ],
         "review_characters": [
-          18
+          0
         ],
         "masked_or_flagged_characters": [
           18
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -3737,23 +3737,23 @@
       },
       {
         "id": "recovery-code",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          22
         ],
         "review_characters": [
-          22
+          0
         ],
         "masked_or_flagged_characters": [
           22
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -3878,23 +3878,23 @@
       },
       {
         "id": "partial-pii-inside-credential",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          16
+          37
         ],
         "review_characters": [
-          37
+          0
         ],
         "masked_or_flagged_characters": [
           37
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {

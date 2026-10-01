@@ -86,6 +86,34 @@ _COOKIE_NAMES = frozenset(
     }
 )
 _JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
+_PROSE_LABEL = re.compile(
+    r"(?i:\b(?P<name>api[ _-]?key|access[ _-]?token|refresh[ _-]?token|"
+    r"password|passphrase|client[ _-]?secret|private[ _-]?key))"
+    r"[ \t]+(?i:is|was|equals)[ \t]+"
+)
+_LOCAL_PASSWORD = re.compile(
+    r"(?i:\b(?:hasło|haslo)[ \t]+(?:to|jest)|"
+    r"\bcontrase(?:ñ|n)a[ \t]+es)\b[ \t:]*"
+)
+_RECOVERY_CODE = re.compile(
+    r"(?i:\b(?:recovery|backup|one[- ]time recovery)[ -]+code)[ \t]*[:=][ \t]*"
+)
+# Unquoted prose needs a token-like value AND an explicit end to the clause.
+# Ordinary explanations ("password is stored in ...") remain review candidates.
+_LABELLED_TOKEN = re.compile(
+    r"(?:[^\W_]+(?:[-_/@+][^\W_]+)+|[A-Za-z_]*[0-9][A-Za-z0-9_]*)"
+    r"(?=[ \t]*(?:[.,;!?](?=\s|$)|\r?\n|$))"
+)
+_FLAG_LABEL = re.compile(
+    r"(?<![\w-])--(?P<name>password|passwd|passphrase|api-key|access-token|"
+    r"refresh-token|token|secret|client-secret|private-key)(?:[ \t]+|=)"
+)
+_BLOCK_HEADER = re.compile(
+    r"(?m)^(?P<indent> *)(?P<item>-[ ]+)?"
+    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)"
+    r":[ \t]*(?P<marker>[|>](?:[1-9][+-]?|[+-][1-9]?)?)"
+    r"[ \t]*(?:#[^\r\n]*)?\r?\n"
+)
 
 
 def credential_type(name: str) -> str | None:
@@ -172,6 +200,103 @@ def _private_keys(text: str) -> Iterator[Span]:
         # truncated key. Never validate key material or call a remote service.
         cursor = len(text) if end < 0 else end + len(ending)
         yield _span(text, match.start(), cursor, "PRIVATE_KEY")
+
+
+def _labelled_values(text: str) -> Iterator[Span]:
+    """Promote explicit credential labels only when value boundaries are clear."""
+    for pattern, fixed_kind in (
+        (_PROSE_LABEL, None),
+        (_LOCAL_PASSWORD, "PASSWORD"),
+        (_RECOVERY_CODE, "CREDENTIAL"),
+    ):
+        cursor = 0
+        while match := pattern.search(text, cursor):
+            cursor = match.end()
+            kind = fixed_kind or credential_type(match["name"].replace(" ", "_"))
+            if text[cursor : cursor + 1] in {'"', "'", "`"}:
+                offsets = _assignment_value(text, cursor)
+                # An unfinished prose quote has uncertain boundaries: review it.
+                if offsets is None or offsets[1] == len(text):
+                    continue
+            else:
+                token = _LABELLED_TOKEN.match(text, cursor)
+                if token is None:
+                    continue
+                offsets = token.span()
+            start, end = offsets
+            cursor = end
+            if kind and _literal(text[start:end]):
+                yield _span(text, start, end, kind)
+
+
+def _flag_values(text: str) -> Iterator[Span]:
+    """Read one shell word without evaluating references, escapes, or commands."""
+    cursor = 0
+    while match := _FLAG_LABEL.search(text, cursor):
+        start = cursor = match.end()
+        if text.startswith(("--", "$", "`"), start):
+            continue
+        quote = ""
+        first_close = None
+        while cursor < len(text):
+            char = text[cursor]
+            if char == "\\" and quote != "'":
+                cursor = min(cursor + 2, len(text))
+            elif quote:
+                if char == quote:
+                    quote = ""
+                    if first_close is None:
+                        first_close = cursor
+                cursor += 1
+            elif char in "\"'":
+                quote = char
+                cursor += 1
+            elif char.isspace() or char in ";|&()<>":
+                break
+            else:
+                cursor += 1
+        end = cursor
+        if quote:  # Incomplete commands remain for review, not a guessed token.
+            continue
+        # Keep a single pair of surrounding quotes visible. Mixed shell words
+        # such as 'first'"second" are replaced together with their source quotes.
+        if start < end and text[start] in "\"'" and first_close == end - 1:
+            start, end = start + 1, end - 1
+        kind = credential_type(match["name"])
+        value = text[start:end]
+        if (value.startswith("$(") and value.endswith(")")) or (
+            value.startswith("`") and value.endswith("`")
+        ):
+            continue
+        if kind and end > start and _literal(value):
+            yield _span(text, start, end, kind)
+
+
+def _block_values(text: str) -> tuple[list[Span], set[int]]:
+    """Protect raw YAML credential blocks through the last indented content line."""
+    found, handled = [], set()
+    cursor = 0
+    while header := _BLOCK_HEADER.search(text, cursor):
+        cursor = header.end()
+        kind = credential_type(header["name"])
+        if kind is None:
+            continue
+        handled.add(header.start("marker"))
+        parent_indent = len(header["indent"]) + len(header["item"] or "")
+        start = cursor
+        end = cursor
+        while cursor < len(text):
+            newline = text.find("\n", cursor)
+            line_end = len(text) if newline < 0 else newline
+            line = text[cursor:line_end].rstrip("\r")
+            if line.strip():
+                if len(line) - len(line.lstrip(" ")) <= parent_indent:
+                    break
+                end = cursor + len(line)
+            cursor = line_end + 1
+        if end > start and _literal(text[start:end]):
+            found.append(_span(text, start, end, kind))
+    return found, handled
 
 
 def _url_parameters(text: str) -> tuple[list[Span], set[int]]:
@@ -291,6 +416,11 @@ def detect(text: str) -> list[Span]:
     cookie_spans, cookie_starts = _cookies(text)
     found.extend(cookie_spans)
     query_starts.update(cookie_starts)
+    block_spans, block_starts = _block_values(text)
+    found.extend(block_spans)
+    query_starts.update(block_starts)
+    found.extend(_labelled_values(text))
+    found.extend(_flag_values(text))
     found.extend(_escaped_fields(text))
     for match in _PREFIXED.finditer(text):
         kind = "API_KEY" if match["api"] is not None else "TOKEN"

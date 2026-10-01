@@ -81,7 +81,7 @@ def test_corpus_validation(tmp_path, mutation):
 
 def test_partial_mask_is_still_exposed_even_when_full_value_disappears():
     doc = document(
-        "My password is '[[PASSWORD|mira@example.org plus fictional words]]'"
+        "Use '[[PASSWORD|mira@example.org plus fictional words]]' to sign in."
     )
     row = leaks.measure(doc, "openai", False)
     assert row["masked_characters"] == [16]
@@ -94,7 +94,7 @@ def test_partial_mask_is_still_exposed_even_when_full_value_disappears():
 
 
 def test_review_is_not_credited_as_a_mask_or_an_automatic_confirmation():
-    doc = document("My password is '[[PASSWORD|fictional four word phrase]]'")
+    doc = document("Use '[[PASSWORD|fictional four word phrase]]' to sign in.")
     row = leaks.measure(doc, "openai", True)
     assert row["masked_characters"] == [0]
     assert row["review_characters"] == [26]
@@ -199,7 +199,7 @@ def test_removed_review_hold_must_not_expose_a_miss(report):
     row = next(
         row
         for row in changed["runs"]["openai/review"]["cases"]
-        if row["id"] == "shell-command-password"
+        if row["id"] == "unlabelled-short-credential"
     )
     row["status"] = "ready"
     assert any(
@@ -213,10 +213,10 @@ def test_automatic_mask_can_replace_review_without_being_a_regression(report):
     row = next(
         row
         for row in changed["runs"]["openai/review"]["cases"]
-        if row["id"] == "shell-command-password"
+        if row["id"] == "unlabelled-short-credential"
     )
     row.update(
-        masked_characters=[28],
+        masked_characters=[11],
         review_characters=[0],
         status="ready",
         exposed_annotations=0,

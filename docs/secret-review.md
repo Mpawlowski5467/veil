@@ -27,7 +27,7 @@ it applies only to requests actually routed through the updated gateway.
 Try a **fictional** prompt in your client:
 
 ```text
-My password is "fictional four word password". Help me describe this configuration.
+Use "fictional four word phrase" to sign in. Help me describe this configuration.
 ```
 
 An uncertain request returns a local 403 refusal with a review ID. **That request
@@ -98,15 +98,19 @@ registrations and automatic rules, or handle the gateway's review refusal.
 
 ## What the extra pass checks
 
-- Prose such as `my password is "…"` and `API key is …`.
-- Credential command options and supported URL query parameter names.
-- Unquoted credential assignments with trailing words and indented YAML-style
-  block values. An ambiguous unquoted phrase conservatively covers the remaining
+- Ambiguous prose such as `password is four fictional words here`. Clear quoted
+  labels and delimited credential-like tokens now mask automatically.
+- Credential command options and URL parameters whose values are not already
+  fully covered by the automatic rules.
+- Unquoted credential assignments with trailing words and unsupported block
+  forms. Supported indented YAML credential blocks now mask automatically.
+  An ambiguous unquoted phrase conservatively covers the remaining
   line; quote values to make their boundary clear.
 - Long tokens with varied characters, including unknown provider formats. A
   random-looking hash can also trigger review; randomness does not prove secrecy.
 - Sign-in instructions such as `Use "…" to sign in`, recovery/backup-code labels,
-  and the explicit Polish `hasło to/jest …` and Spanish `contraseña es …` phrases.
+  and the explicit Polish `hasło to/jest …` and Spanish `contraseña es …` phrases
+  when their values do not satisfy the automatic boundary checks.
 - Labelled webhook endpoints and JSON payloads explicitly marked as base64 or
   base64url. The whole original endpoint or encoded value is offered for review;
   no decoded content is sent anywhere. Benign encoded data can also be flagged.

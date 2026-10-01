@@ -37,6 +37,28 @@ and escapes. **Quote complex passwords.** Unquoted detection reads a single
 token, not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.
 
+Additional automatic rules recognize:
+
+- Explicit prose labels such as `My password is "fictional meadow phrase"`,
+  `API key equals "…"`, and `refresh token was "…"`. Complete quotes delimit
+  multiword values. Unquoted values require a token with digits or supported
+  separators and a clear clause ending; ordinary explanations remain uncertain.
+- The specific Polish `hasło/haslo to/jest …` and Spanish `contraseña/contrasena
+  es …` password phrases, with the same value-boundary checks. This is not
+  general multilingual understanding.
+- `recovery code:` and `backup code:` followed by a quoted value or a delimited
+  token, using `CREDENTIAL` placeholders.
+- Supported long command options such as `--password`, `--api-key`,
+  `--access-token`, and `--client-secret`, with a space or `=`. One shell word
+  includes quotes, escaped spaces, and adjacent quoted fragments. Environment
+  references and standalone command substitutions remain references; nothing is
+  executed. Incomplete words still need review.
+- Credential fields using indented YAML `|` or `>` block values, including
+  chomping/indent indicators and header comments. The whole raw block, including
+  its content indentation, becomes one placeholder; sibling fields stay visible.
+  This protects text and restores its exact spelling, but the masked block is
+  not necessarily executable YAML. Do not run masked configuration as code.
+
 Removed diff lines are included. Simple quoted concatenations such as
 `password = "first part" + "second part"` mask each literal separately without
 evaluating code. JSON field names may use Unicode escapes, such as
@@ -93,7 +115,7 @@ an ordinary text assignment, such as `password=1234`, can be masked normally.
 
 ## Ask about uncertain values
 
-Enable [local secret review](secret-review.md) to review prose credentials,
+Enable [local secret review](secret-review.md) to review ambiguous prose credentials,
 ambiguous multiword values, and unfamiliar token-like strings before sending.
 The gateway holds uncertain requests until you classify each finding locally.
 Automatic masks still continue normally; no remote classifier receives the input.
@@ -137,6 +159,9 @@ private-key blocks, URL userinfo, streamed restoration, custom overrides,
 persistent sessions, parsed tool arguments, and real local HTTP gateway round
 trips with scripted provider replies. Assertions check the bytes received by the
 fake provider and the restored response; no live keys or external calls are used.
+The [automatic syntax tests](../tests/test_secret_automatic.py) add prose and
+language variants, shell quoting, YAML boundaries, references, custom overrides,
+and HTTP masking/restoration with review both enabled and disabled.
 
 These authored cases establish regression coverage, not a general accuracy
 percentage. The [30-document detection baseline](detection-results.md) records

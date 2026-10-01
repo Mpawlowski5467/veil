@@ -148,7 +148,7 @@ def test_gateway_requires_review_then_masks_complete_value(tmp_path, api, value)
             ) as sessions,
             Gateway(sessions, api=api, upstream=fake.host, secure=False) as gateway,
         ):
-            request = body(api, f'My password is "{value}"')
+            request = body(api, f'Use "{value}" to sign in.')
             response, raw = send(gateway, request)
             assert response.status == 403
             assert value.encode() not in raw if len(value) > 2 else True
@@ -188,7 +188,7 @@ def test_gateway_requires_review_then_masks_complete_value(tmp_path, api, value)
             assert len(fake.received) == 1
             sent = json.loads(fake.received[0][3])
             text = sent["input"] if api == "openai" else sent["messages"][0]["content"]
-            assert text == 'My password is "[PASSWORD_1]"'
+            assert text == 'Use "[PASSWORD_1]" to sign in.'
             assert sessions.get("test").shield.restore("[PASSWORD_1]").text == value
     finally:
         fake.close()
@@ -297,7 +297,7 @@ def test_settings_boolean_only(tmp_path):
 def test_cli_review_confirm_and_restore(tmp_path, monkeypatch, capsys):
     directory = prepare_data_dir(tmp_path / "private")
     (directory / "config.json").write_text('{"identity":false}')
-    source = f'My password is "{PHRASE}"'
+    source = f'Use "{PHRASE}" to sign in.'
     monkeypatch.setattr("sys.stdin", io.StringIO(source))
     seen = []
     monkeypatch.setattr(
@@ -307,7 +307,7 @@ def test_cli_review_confirm_and_restore(tmp_path, monkeypatch, capsys):
     args = ["--data-dir", str(directory), "mask", "--session", "s", "--review"]
     assert cli.main(args) == 0
     masked = capsys.readouterr().out
-    assert masked == 'My password is "[PASSWORD_1]"'
+    assert masked == 'Use "[PASSWORD_1]" to sign in.'
     assert seen == [PHRASE]
     monkeypatch.setattr("sys.stdin", io.StringIO(masked))
     assert cli.main(["--data-dir", str(directory), "restore", "--session", "s"]) == 0
@@ -418,21 +418,33 @@ def test_browser_bridge_boundaries_and_private_rendering():
 
 @pytest.mark.parametrize("api", ["anthropic", "openai"])
 @pytest.mark.parametrize(
-    "source",
+    ("source", "automatic_value"),
     [
-        "password=fictional four word phrase",
-        "password: |\n  fictional four word phrase\n  another line\n",
-        "My password is 'brackets[within]aSecret'",
-        "FictionalABCdef123-45-6789Zyxwvut098",
+        ("password=fictional four word phrase", None),
+        (
+            "password: |\n  fictional four word phrase\n  another line\n",
+            "  fictional four word phrase\n  another line",
+        ),
+        ("My password is 'brackets[within]aSecret'", "brackets[within]aSecret"),
+        ("FictionalABCdef123-45-6789Zyxwvut098", None),
     ],
 )
-def test_partial_masks_cannot_hide_remaining_candidate(tmp_path, api, source):
+def test_partial_masks_cannot_hide_remaining_candidate(
+    tmp_path, api, source, automatic_value
+):
     with open_sessions(
         tmp_path, Settings(identity=False, note=False, secret_review=True), {}, api=api
     ) as sessions:
         masker = sessions.get("s").masker
-        masker.mask(body(api, source))
+        masked = masker.mask(body(api, source))
         findings = masker.review_findings()
+        if automatic_value:
+            text = (
+                masked["input"] if api == "openai" else masked["messages"][0]["content"]
+            )
+            assert text == source.replace(automatic_value, "[PASSWORD_1]")
+            assert not findings
+            return
         assert findings
         for finding in findings:
             masker.confirm_secret(finding.value, finding.kind)
@@ -487,11 +499,11 @@ def test_confirmed_secret_masks_changed_retry_but_does_not_cross_sessions(
             ) as sessions,
             Gateway(sessions, api=api, upstream=fake.host, secure=False) as gateway,
         ):
-            request = body(api, f'My password is "{PHRASE}"')
+            request = body(api, f'Use "{PHRASE}" to sign in.')
             assert send(gateway, request)[0].status == 403
             review = gateway.reviews.report()["reviews"][0]
             gateway.reviews.decide(review["id"], 0, "PASSWORD")
-            changed = body(api, f'On retry, my password is "{PHRASE}"')
+            changed = body(api, f'On retry, use "{PHRASE}" to sign in.')
             send(gateway, changed)
             assert len(fake.received) == 1
             assert PHRASE.encode() not in fake.received[0][3]
