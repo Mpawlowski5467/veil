@@ -21,10 +21,10 @@ After:  password: "[PASSWORD_1]"
 
 | Type | Supported evidence |
 | --- | --- |
-| `API_KEY` | Supported key prefixes for OpenAI/Anthropic (`sk-` family), Google (`AIza`), AWS access-key IDs (`AKIA`, `ASIA`), and Stripe secret/restricted keys. Explicit fields such as `API_KEY`, `apiKey`, `x-api-key`, `AWS_SECRET_ACCESS_KEY`, `client_secret`, and `signing_secret`. |
-| `TOKEN` | Supported GitHub, GitLab, Slack, npm, and Hugging Face prefixes; three-part JWT-shaped strings with a JSON header containing `alg`; Bearer values and valid Basic user/password encodings in text; explicit token fields such as `access_token`, `refreshToken`, and `session_token`; supported auth/session cookie values in pasted HTTP headers and signature query parameters. |
-| `PASSWORD` | Explicit fields ending in `password`, `passwd`, `passphrase`, `pwd`, or `pass`, including `DB_PASSWORD` and `dbPass`. |
-| `PRIVATE_KEY` | PEM-style PRIVATE KEY blocks, including RSA, EC, DSA, OpenSSH, and encrypted private keys; explicit private-key fields. An unfinished block is masked through the end of the input. |
+| `API_KEY` | Supported key prefixes for OpenAI/Anthropic (`sk-` family), Google (`AIza`), AWS access-key IDs (`AKIA`, `ASIA`), and Stripe secret/restricted keys. Explicit fields such as `API_KEY`, `apiKey`, `x-api-key`, `AWS_SECRET_ACCESS_KEY`, `client_secret`, and `signing_secret`, and run-together names such as `OPENAIAPIKEY` and `awssecretkey`. |
+| `TOKEN` | Supported GitHub, GitLab, Slack, npm, and Hugging Face prefixes; three-part JWT-shaped strings with a JSON header containing `alg`; Bearer values and valid Basic user/password encodings in text; explicit token fields such as `access_token`, `refreshToken`, and `session_token`; run-together names with a credential qualifier such as `APITOKEN`, `GITHUBTOKEN`, and `authtoken` (an unqualified ending such as `nexttoken` or `ERRORTOKEN` is not a credential); supported auth/session cookie values in pasted HTTP headers and signature query parameters. |
+| `PASSWORD` | Explicit fields whose last word is `password`, `passwd`, `passphrase`, `pwd`, or `pass`, including `DB_PASSWORD`, `dbPass`, and `MYSQL_PWD`, and run-together names ending in `password` or `passphrase`, such as `PGPASSWORD` and `dbpassword`. Run-together endings that also finish ordinary words (`bypass`, `OLDPWD`, `htpasswd`) need a separator, so `adminpass` and `dbpasswd` are not recognized. |
+| `PRIVATE_KEY` | PEM-style PRIVATE KEY blocks, including RSA, EC, DSA, OpenSSH, and encrypted private keys; explicit private-key fields, including run-together `sshprivatekey`. An unfinished block is masked through the end of the input. |
 | `CREDENTIAL` | The `username:password` portion of supported PostgreSQL, MySQL/MariaDB, MongoDB, Redis, AMQP, and HTTP(S) URLs. Percent-encoded spelling is preserved. |
 
 Prefix checks require plausible lengths and character sets. They do not validate

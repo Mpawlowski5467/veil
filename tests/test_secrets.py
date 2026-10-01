@@ -9,6 +9,7 @@ import pytest
 
 from test_gateway_server import FakeAPI, call
 from veil import RegexDetector, Shield, Span
+from veil.detectors._secrets import credential_type
 from veil.detectors.base import Detector
 from veil.gateway import Gateway, Settings, UnsupportedRequestError, open_sessions
 
@@ -89,6 +90,18 @@ def test_standalone_formats_round_trip(value, kind):
         ("session_token", "TOKEN"),
         ("token", "TOKEN"),
         ("PRIVATE_KEY", "PRIVATE_KEY"),
+        ("PGPASSWORD", "PASSWORD"),
+        ("MY_PGPASSWORD", "PASSWORD"),
+        ("dbpassword", "PASSWORD"),
+        ("KEYSTOREPASSWORD", "PASSWORD"),
+        ("masterpassphrase", "PASSWORD"),
+        ("APITOKEN", "TOKEN"),
+        ("GITHUBTOKEN", "TOKEN"),
+        ("authtoken", "TOKEN"),
+        ("x-authtoken", "TOKEN"),
+        ("OPENAIAPIKEY", "API_KEY"),
+        ("awssecretkey", "API_KEY"),
+        ("sshprivatekey", "PRIVATE_KEY"),
     ],
 )
 @pytest.mark.parametrize(
@@ -172,10 +185,46 @@ def test_json_escaped_password_and_parsed_field_are_lossless(value):
         "sk-short",
         "ghp_short",
         "password: [PASSWORD_1]",
+        "passwordless=enabled",
+        "tokenizer=bpe",
+        "monkey=banana",
+        "bypass=fictional-proxy",
+        "compass=north",
+        "lowpass=1000",
+        "OLDPWD=/home/jan",
+        "htpasswd=/etc/nginx/.htpasswd",
+        "ERRORTOKEN = 67",
+        "nexttoken=abc123",
+        "maxtokens=4096",
     ],
 )
 def test_code_and_references_are_not_secret_values(text):
     assert not [s for s in RegexDetector().detect(text) if s.source == "secret"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "adminpass",
+        "dbpasswd",
+        "CLIENTSECRET",
+        "nexttoken",
+        "stoken",
+        "URLToken",
+        "passwordless",
+        "tokenizer",
+    ],
+)
+def test_run_together_endings_shared_with_ordinary_words_need_a_separator(name):
+    assert credential_type(name) is None
+
+
+def test_run_together_shell_password_keeps_the_command():
+    source = "PGPASSWORD=Fict-Meadow-47 psql -h db.example.com"
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == "PGPASSWORD=[PASSWORD_1] psql -h db.example.com"
+    assert shield.restore(masked.text).text == source
 
 
 @pytest.mark.parametrize("scheme", ["Bearer", "bearer", "Basic"])

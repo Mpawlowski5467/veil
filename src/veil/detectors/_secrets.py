@@ -17,6 +17,13 @@ from ..types import Span
 
 SECRET_TYPES = ("API_KEY", "TOKEN", "PASSWORD", "PRIVATE_KEY", "CREDENTIAL")
 _CONCAT = re.compile(r"[ \t]*\+[ \t]*")
+# Run-together names need an unambiguous ending: "pass", "pwd", "passwd", "key"
+# and an arbitrary "...token" also finish ordinary identifiers (bypass, OLDPWD,
+# htpasswd, monkey, ERRORTOKEN), so those still need a separator.
+_QUALIFIED_TOKEN = re.compile(
+    r"(?:api|auth|access|refresh|bearer|session|oauth|bot|app|deploy|personal"
+    r"|service|github|gitlab|slack|npm|pypi|hf|vault)token\Z"
+)
 
 _PREFIXED = re.compile(
     r"(?<![\w-])(?:"
@@ -123,17 +130,20 @@ def credential_type(name: str) -> str | None:
     parts = re.split(r"[_.-]+", separated.lower())
     last = parts[-1]
     joined = "_".join(parts)
-    if last in {"password", "passwd", "passphrase", "pwd", "pass"}:
+    if last in {"password", "passwd", "passphrase", "pwd", "pass"} or last.endswith(
+        ("password", "passphrase")
+    ):
         return "PASSWORD"
-    if joined.endswith("private_key") or last == "privatekey":
+    if joined.endswith("private_key") or last.endswith("privatekey"):
         return "PRIVATE_KEY"
     if (
         joined.endswith(("api_key", "access_key_id", "secret_access_key"))
         or last in {"apikey", "secret", "secretkey"}
+        or last.endswith(("apikey", "secretkey"))
         or joined.endswith("secret_key")
     ):
         return "API_KEY"
-    if last == "token":
+    if last == "token" or _QUALIFIED_TOKEN.search(last) is not None:
         return "TOKEN"
     return None
 

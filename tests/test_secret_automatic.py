@@ -177,6 +177,8 @@ def test_repeated_labels_and_long_nonmatching_tokens_stay_bounded():
         ),
         ("Hasło to fikcyjny-fern-94.", "fikcyjny-fern-94", "PASSWORD"),
         ("Recovery code: fictional-fern-94.", "fictional-fern-94", "CREDENTIAL"),
+        ("export PGPASSWORD=Fict-Meadow-47", "Fict-Meadow-47", "PASSWORD"),
+        ("export GITHUBTOKEN=fictional-orchard-42", "fictional-orchard-42", "TOKEN"),
     ],
 )
 def test_new_syntax_is_masked_before_the_http_provider_and_restored(
