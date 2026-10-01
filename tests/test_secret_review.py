@@ -379,7 +379,12 @@ def test_cancelled_review_never_writes_stdout_or_clipboard(
     assert "review cancelled" in captured.err
 
 
-def test_review_command_refuses_pipes_before_reading_private_findings(monkeypatch):
+def test_review_command_refuses_pipes_before_reading_private_findings(
+    tmp_path, monkeypatch
+):
+    # Never this machine's data folder, which may hold a running launch.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr("sys.stdin", io.StringIO())
     with pytest.raises(SettingsError, match="local interactive terminal"):
         run_review()

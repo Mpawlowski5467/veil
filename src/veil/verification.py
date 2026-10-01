@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from .gateway import SECRET_HEADER, SettingsError, default_data_dir
 from .gateway.activity import ACTIVITY_PATH, VERIFY_PATH
 from .gateway.hooks import _gateway_answers, _secret_from_environment
+from .launches import Launch, find_launch, running_launches
 
 
 @dataclass(frozen=True)
@@ -31,33 +32,49 @@ def endpoint(
     data_dir: Path | None = None,
     gateway_url: str | None = None,
 ) -> Endpoint:
-    """Select an explicit gateway, inherited launcher, or saved Codex provider."""
-    from .codex_setup import config_path, parse_toml, read_private_file
+    """Select an explicit gateway, inherited or running launcher, or Codex settings.
 
+    A running launch in the data folder is used only when it is the only
+    running gateway; with several, the error lists their addresses, never a
+    secret.
+    """
+    from .codex_setup import read_private_file
+
+    directory = data_dir or default_data_dir()
     if gateway_url is not None:
         url = gateway_url
-        secret = read_private_file(
-            (data_dir or default_data_dir()) / "gateway-secret"
-        ).strip()
+        launch = _launch_at(directory, gateway_url)
+        secret = (
+            launch.secret
+            if launch is not None
+            else read_private_file(directory / "gateway-secret").strip()
+        )
     elif config is None and (
         "VEIL_GATEWAY_URL" in os.environ or "VEIL_GATEWAY_SECRET" in os.environ
     ):
         url = os.environ.get("VEIL_GATEWAY_URL", "")
         secret = os.environ.get("VEIL_GATEWAY_SECRET", "")
-    elif config is None and os.environ.get("ANTHROPIC_BASE_URL"):
+    elif (
+        config is None
+        and os.environ.get("ANTHROPIC_BASE_URL")
+        and (header := _secret_from_environment()) is not None
+    ):
+        # Manual Claude Code settings; a base URL alone may be any local proxy.
         url = os.environ["ANTHROPIC_BASE_URL"]
-        secret = _secret_from_environment() or ""
-    else:
-        document = parse_toml(read_private_file(config_path(config))).unwrap()
-        providers = document.get("model_providers", {})
-        provider = providers.get("veil", {}) if isinstance(providers, dict) else {}
-        if document.get("model_provider") != "veil" or not isinstance(provider, dict):
+        secret = header
+    elif config is None and (live := running_launches(directory)):
+        choices = [launch.describe() for launch in live]
+        codex = _live_codex_url(config)
+        if codex is not None and codex not in {launch.url for launch in live}:
+            choices.append(f"{codex} (saved Codex settings; use --config)")
+        if len(choices) > 1:
             raise SettingsError(
-                "saved Codex settings do not select Veil; configure it first"
+                "several local gateways are running; choose one with "
+                "--gateway-url: " + "; ".join(choices)
             )
-        url = provider.get("base_url", "")
-        headers = provider.get("http_headers", {})
-        secret = headers.get(SECRET_HEADER, "") if isinstance(headers, dict) else ""
+        url, secret = live[0].url, live[0].secret
+    else:
+        url, secret = _codex_settings(config)
     try:
         address = urlsplit(url) if isinstance(url, str) else None
         if (
@@ -81,6 +98,58 @@ def endpoint(
             "a loopback Veil gateway and local secret are required"
         ) from None
     return Endpoint(f"http://127.0.0.1:{address.port}", secret)
+
+
+def _launch_at(directory: Path, gateway_url: str) -> Launch | None:
+    """The running launch recorded for an explicit local address, if any."""
+    try:
+        address = urlsplit(gateway_url)
+        port = address.port
+    except ValueError:
+        return None
+    if address.hostname != "127.0.0.1" or not port:
+        return None
+    launch = find_launch(directory, port)
+    if launch is None or not _gateway_answers(launch.url, launch.secret):
+        return None
+    return launch
+
+
+def _codex_settings(config: Path | None) -> tuple[Any, Any]:
+    """The URL and secret of the Veil provider in Codex settings, unchecked."""
+    from .codex_setup import config_path, parse_toml, read_private_file
+
+    document = parse_toml(read_private_file(config_path(config))).unwrap()
+    providers = document.get("model_providers", {})
+    provider = providers.get("veil", {}) if isinstance(providers, dict) else {}
+    if document.get("model_provider") != "veil" or not isinstance(provider, dict):
+        raise SettingsError(
+            "saved Codex settings do not select Veil; configure it first"
+        )
+    headers = provider.get("http_headers", {})
+    secret = headers.get(SECRET_HEADER, "") if isinstance(headers, dict) else ""
+    return provider.get("base_url", ""), secret
+
+
+def _live_codex_url(config: Path | None) -> str | None:
+    """The gateway URL in Codex settings, if that gateway proves their secret."""
+    try:
+        url, secret = _codex_settings(config)
+        address = urlsplit(url) if isinstance(url, str) else None
+        port = address.port if address is not None else None
+    except (SettingsError, ValueError):
+        return None
+    if (
+        address is None
+        or address.scheme != "http"
+        or address.hostname != "127.0.0.1"
+        or not port
+        or not isinstance(secret, str)
+        or not secret
+    ):
+        return None
+    local = f"http://127.0.0.1:{port}"
+    return local if _gateway_answers(local, secret) else None
 
 
 def local_request(
