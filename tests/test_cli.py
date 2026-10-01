@@ -247,7 +247,10 @@ class TestClaude:
         assert stat.S_IMODE(os.stat(data_dir).st_mode) == 0o700
 
 
-def test_a_sigterm_is_passed_on_to_claude(fake_claude, data_dir, monkeypatch):
+@pytest.mark.parametrize(("name", "expected"), [("SIGTERM", 143), ("SIGHUP", 129)])
+def test_a_termination_signal_is_passed_on_to_claude(
+    fake_claude, data_dir, monkeypatch, name, expected
+):
     import signal
     import subprocess
 
@@ -262,8 +265,9 @@ def test_a_sigterm_is_passed_on_to_claude(fake_claude, data_dir, monkeypatch):
         time.sleep(0.05)
     time.sleep(0.2)
     child = json.loads(report_file.read_text())["pid"]
-    veil.send_signal(signal.SIGTERM)
-    veil.wait(10)
+    veil.send_signal(getattr(signal, name))
+    # The shell's code for a client ended by the signal: 128 + N.
+    assert veil.wait(10) == expected
     # Claude Code never outlives its gateway.
     deadline = time.time() + 5
     while time.time() < deadline:
@@ -273,7 +277,7 @@ def test_a_sigterm_is_passed_on_to_claude(fake_claude, data_dir, monkeypatch):
             break
         time.sleep(0.05)
     else:
-        pytest.fail("claude is still running after veil got SIGTERM")
+        pytest.fail(f"claude is still running after veil got {name}")
 
 
 class TestRefusals:
