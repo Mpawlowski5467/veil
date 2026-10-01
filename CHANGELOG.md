@@ -6,10 +6,14 @@
 
 - `veil claude` and `veil codex` (including `--forget-after-run`) no longer crash on native Windows right after starting the client. The launcher passed on SIGHUP, which Windows doesn't have; the client was left running against a stopped gateway. Signals are now handled per platform: Ctrl-C and Ctrl-Break reach the client directly, SIGTERM (and SIGHUP on macOS/Linux) is passed on, and the client is stopped whenever the launcher exits early.
 - A client ended by a signal now gives the launcher the shell's usual exit code (128 + the signal number, e.g. 143 for SIGTERM) instead of a wrapped value such as 241.
+- `veil review`, `veil verify`, `veil status --activity`, and `veil report` now find gateways started by `veil claude` and `veil codex`, including `--forget-after-run`, from your own terminal. Previously a request held for secret review under a launcher could not be approved. While it runs, each launch keeps an owner-only record of its local address and secret in the data folder's `launches` folder, and removes it on exit. Records of stopped launches are ignored and cleaned up. With several gateways running, the command lists their addresses instead of guessing.
+- The review refusal names the exact command to run, for example `veil review --gateway-url http://127.0.0.1:PORT`. With a non-default data folder it includes `--data-dir` and that folder's path.
+- An `ANTHROPIC_BASE_URL` exported in your shell no longer overrides saved Codex settings for `veil verify`, `veil status --activity`, `veil review`, and `veil report` unless it comes with the gateway's secret header.
 
 ### Tests
 
 - Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
+- Launchers run end to end with stub Claude Code and Codex clients: a request held for secret review is approved from a separate terminal, with plain `veil review` and with the command from the refusal, and the retried request goes out masked. Gateway selection is covered case by case, and launch records run in native CI on all three platforms.
 
 ## 0.6.0b1 — Beta
 
