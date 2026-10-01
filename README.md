@@ -311,12 +311,15 @@ Detection is based on patterns and explicit registration. Names, organizations, 
 
 For unfamiliar values, enable [local secret review](docs/secret-review.md) in the
 updated source checkout. Veil asks you to classify uncertain findings on a private
-local page before that request can be sent. Confirmed secrets are masked; unresolved
+local page before that request can be sent. This also covers specific labelled
+personal details such as names, birth dates, addresses, and document numbers.
+Confirmed private values are masked; unresolved
 findings keep the request local. For files, use `veil mask --session draft --review`.
 
 The [workflow leak evaluation](docs/leak-evaluation.md) measures both gateways on
 fictional prompts, configuration files, diffs, and tool outputs. It records known
-misses and false positives, including cases that local review does not catch.
+misses and false positives. The current authored corpus has no exposed occurrences
+in ready requests with review enabled; that is not a guarantee for other inputs.
 
 Coding-secret matches are masked into placeholders such as `[API_KEY_1]` and
 `[PASSWORD_1]`; supported requests continue, and replies restore locally.

@@ -143,6 +143,21 @@ def test_corpus_baseline(report):
     )
 
 
+def test_original_workflow_corpus_has_no_exposed_ready_requests_with_review(report):
+    for api in ("anthropic", "openai"):
+        run = report["runs"][f"{api}/review"]
+        assert run["total"]["exposed_in_ready_requests"] == 0
+        # Credit only masks or findings that cover the actual annotation;
+        # an incidental hold for an unrelated value is not enough.
+        for document, row in zip(leaks.load_corpus(), run["cases"], strict=True):
+            lengths = [
+                mark.end - mark.start
+                for section in document.sections
+                for mark in section.marks
+            ]
+            assert row["masked_or_flagged_characters"] == lengths, document.id
+
+
 def test_windows_checkout_line_endings_do_not_change_baseline(tmp_path, report):
     corpus = tmp_path / "crlf.json"
     corpus.write_bytes(

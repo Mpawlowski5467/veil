@@ -409,18 +409,18 @@
         "id": "session-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -430,18 +430,18 @@
         "id": "set-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -451,18 +451,18 @@
         "id": "signed-s3-url",
         "status": "ready",
         "masked_characters": [
-          0
+          64
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          64
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -472,18 +472,18 @@
         "id": "azure-sas-url",
         "status": "ready",
         "masked_characters": [
-          0
+          29
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          29
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -502,10 +502,10 @@
           24
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 10,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -514,18 +514,18 @@
         "id": "encoded-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -622,10 +622,10 @@
           16
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 17,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -824,7 +824,7 @@
         "status": "ready",
         "masked_characters": [
           10,
-          0
+          10
         ],
         "review_characters": [
           0,
@@ -832,12 +832,12 @@
         ],
         "masked_or_flagged_characters": [
           10,
-          0
+          10
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 2,
         "exact_fp": 3,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 24,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -847,18 +847,18 @@
         "id": "code-unicode-escaped-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1342,15 +1342,15 @@
       },
       {
         "id": "unlabelled-short-credential",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          11
         ],
         "masked_or_flagged_characters": [
-          0
+          11
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -1358,20 +1358,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "polish-credential-prose",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          15
         ],
         "masked_or_flagged_characters": [
-          0
+          15
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -1379,20 +1379,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "spanish-credential-prose",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          18
         ],
         "masked_or_flagged_characters": [
-          0
+          18
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -1400,7 +1400,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -1458,18 +1458,18 @@
         "id": "session-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1479,18 +1479,18 @@
         "id": "set-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1498,41 +1498,41 @@
       },
       {
         "id": "signed-s3-url",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          64
         ],
         "review_characters": [
-          64
+          0
         ],
         "masked_or_flagged_characters": [
           64
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
         "id": "azure-sas-url",
         "status": "ready",
         "masked_characters": [
-          0
+          29
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          29
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1551,10 +1551,10 @@
           24
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 10,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -1563,18 +1563,18 @@
         "id": "encoded-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1618,36 +1618,36 @@
       },
       {
         "id": "webhook-url-path",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          22
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
         "exact_fp": 0,
         "exact_fn": 1,
         "overmasked_characters": 0,
-        "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_harmless_characters": 41,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "recovery-code",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          22
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -1655,7 +1655,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -1671,10 +1671,10 @@
           16
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 17,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -1825,18 +1825,18 @@
       },
       {
         "id": "split-key-across-sections",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           14,
           0
         ],
         "review_characters": [
           0,
-          0
+          13
         ],
         "masked_or_flagged_characters": [
           14,
-          0
+          13
         ],
         "exposed_annotations": 1,
         "exact_tp": 1,
@@ -1844,20 +1844,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "base64-wrapped-credential",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          16
         ],
         "masked_or_flagged_characters": [
-          0
+          16
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -1865,7 +1865,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -1873,7 +1873,7 @@
         "status": "held",
         "masked_characters": [
           10,
-          0
+          10
         ],
         "review_characters": [
           0,
@@ -1881,12 +1881,12 @@
         ],
         "masked_or_flagged_characters": [
           10,
-          0
+          10
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 2,
         "exact_fp": 3,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 24,
         "review_harmless_characters": 9,
         "review_findings": 1,
@@ -1896,18 +1896,18 @@
         "id": "code-unicode-escaped-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2005,7 +2005,7 @@
       },
       {
         "id": "support-pii",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0,
@@ -2013,15 +2013,15 @@
           22
         ],
         "review_characters": [
-          0,
-          0,
-          0,
+          10,
+          10,
+          25,
           0
         ],
         "masked_or_flagged_characters": [
-          0,
-          0,
-          0,
+          10,
+          10,
+          25,
           22
         ],
         "exposed_annotations": 3,
@@ -2030,23 +2030,23 @@
         "exact_fn": 3,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 3,
         "restored": true
       },
       {
         "id": "travel-document",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          9,
+          15
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          9,
+          15
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -2054,7 +2054,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "restored": true
       },
       {
@@ -2507,18 +2507,18 @@
         "id": "session-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2528,18 +2528,18 @@
         "id": "set-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2549,18 +2549,18 @@
         "id": "signed-s3-url",
         "status": "ready",
         "masked_characters": [
-          0
+          64
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          64
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2570,18 +2570,18 @@
         "id": "azure-sas-url",
         "status": "ready",
         "masked_characters": [
-          0
+          29
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          29
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2600,10 +2600,10 @@
           24
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 10,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -2612,18 +2612,18 @@
         "id": "encoded-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2720,10 +2720,10 @@
           16
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 17,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -2922,7 +2922,7 @@
         "status": "ready",
         "masked_characters": [
           10,
-          0
+          10
         ],
         "review_characters": [
           0,
@@ -2930,12 +2930,12 @@
         ],
         "masked_or_flagged_characters": [
           10,
-          0
+          10
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 2,
         "exact_fp": 3,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 24,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2945,18 +2945,18 @@
         "id": "code-unicode-escaped-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3440,15 +3440,15 @@
       },
       {
         "id": "unlabelled-short-credential",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          11
         ],
         "masked_or_flagged_characters": [
-          0
+          11
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -3456,20 +3456,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "polish-credential-prose",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          15
         ],
         "masked_or_flagged_characters": [
-          0
+          15
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -3477,20 +3477,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "spanish-credential-prose",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          18
         ],
         "masked_or_flagged_characters": [
-          0
+          18
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -3498,7 +3498,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -3556,18 +3556,18 @@
         "id": "session-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3577,18 +3577,18 @@
         "id": "set-cookie",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3596,41 +3596,41 @@
       },
       {
         "id": "signed-s3-url",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
-          0
+          64
         ],
         "review_characters": [
-          64
+          0
         ],
         "masked_or_flagged_characters": [
           64
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 1,
+        "review_findings": 0,
         "restored": true
       },
       {
         "id": "azure-sas-url",
         "status": "ready",
         "masked_characters": [
-          0
+          29
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          29
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3649,10 +3649,10 @@
           24
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 10,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -3661,18 +3661,18 @@
         "id": "encoded-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3716,36 +3716,36 @@
       },
       {
         "id": "webhook-url-path",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          22
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
         "exact_fp": 0,
         "exact_fn": 1,
         "overmasked_characters": 0,
-        "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_harmless_characters": 41,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "recovery-code",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          22
         ],
         "masked_or_flagged_characters": [
-          0
+          22
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -3753,7 +3753,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -3769,10 +3769,10 @@
           16
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 17,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -3923,18 +3923,18 @@
       },
       {
         "id": "split-key-across-sections",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           14,
           0
         ],
         "review_characters": [
           0,
-          0
+          13
         ],
         "masked_or_flagged_characters": [
           14,
-          0
+          13
         ],
         "exposed_annotations": 1,
         "exact_tp": 1,
@@ -3942,20 +3942,20 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
         "id": "base64-wrapped-credential",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0
         ],
         "review_characters": [
-          0
+          16
         ],
         "masked_or_flagged_characters": [
-          0
+          16
         ],
         "exposed_annotations": 1,
         "exact_tp": 0,
@@ -3963,7 +3963,7 @@
         "exact_fn": 1,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 1,
         "restored": true
       },
       {
@@ -3971,7 +3971,7 @@
         "status": "held",
         "masked_characters": [
           10,
-          0
+          10
         ],
         "review_characters": [
           0,
@@ -3979,12 +3979,12 @@
         ],
         "masked_or_flagged_characters": [
           10,
-          0
+          10
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 1,
+        "exposed_annotations": 0,
+        "exact_tp": 2,
         "exact_fp": 3,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 24,
         "review_harmless_characters": 9,
         "review_findings": 1,
@@ -3994,18 +3994,18 @@
         "id": "code-unicode-escaped-label",
         "status": "ready",
         "masked_characters": [
-          0
+          20
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          20
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -4103,7 +4103,7 @@
       },
       {
         "id": "support-pii",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0,
@@ -4111,15 +4111,15 @@
           22
         ],
         "review_characters": [
-          0,
-          0,
-          0,
+          10,
+          10,
+          25,
           0
         ],
         "masked_or_flagged_characters": [
-          0,
-          0,
-          0,
+          10,
+          10,
+          25,
           22
         ],
         "exposed_annotations": 3,
@@ -4128,23 +4128,23 @@
         "exact_fn": 3,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 3,
         "restored": true
       },
       {
         "id": "travel-document",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          9,
+          15
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          9,
+          15
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -4152,7 +4152,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "restored": true
       },
       {

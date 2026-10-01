@@ -17,6 +17,7 @@ from .. import _windows
 from ..detectors.literal import LiteralPlaceholderDetector
 from ..detectors.regex import RegexDetector
 from ..placeholders import placeholder_type
+from ..secret_review import REVIEW_TYPES
 from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
 from .config import Settings
@@ -198,7 +199,12 @@ class SQLiteLedger:
 def literal_types(settings: Settings, identity: Mapping[str, str]) -> set[str]:
     """The types whose placeholder-shaped text is masked as literal text."""
     detector = RegexDetector(settings.patterns)
-    return {*detector.entity_types, *settings.entities, *identity.values()}
+    return {
+        *detector.entity_types,
+        *REVIEW_TYPES,
+        *settings.entities,
+        *identity.values(),
+    }
 
 
 def registered_values(

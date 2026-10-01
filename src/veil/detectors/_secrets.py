@@ -10,11 +10,13 @@ import base64
 import binascii
 import json
 import re
+import urllib.parse
 from collections.abc import Iterator
 
 from ..types import Span
 
 SECRET_TYPES = ("API_KEY", "TOKEN", "PASSWORD", "PRIVATE_KEY", "CREDENTIAL")
+_CONCAT = re.compile(r"[ \t]*\+[ \t]*")
 
 _PREFIXED = re.compile(
     r"(?<![\w-])(?:"
@@ -58,6 +60,32 @@ _URL = re.compile(
     r"(?i:\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|https?)://)"
     r"(?P<value>[^\s/@:\"'<>]*:[^\s/@\"'<>]+)@"
 )
+_WEB_URL = re.compile(r"(?i:\b(?:https?|otpauth)://)[^\s<>\"'`]+")
+_QUERY_PARAMETER = re.compile(r"(?:\?|&)(?P<name>[^?&#=\s]+)=(?P<value>[^&#]*)")
+_COOKIE_HEADER = re.compile(
+    r"(?im)^[ \t]*(?:set-cookie|cookie):[ \t]*(?P<pairs>[^\r\n]+)"
+)
+_COOKIE_PAIR = re.compile(r"(?:^|;)[ \t]*(?P<name>[^=;\s]+)=(?P<value>[^;]*)")
+_COOKIE_NAMES = frozenset(
+    {
+        "sid",
+        "session",
+        "sessionid",
+        "session_id",
+        "session-id",
+        "connect.sid",
+        "jsessionid",
+        "phpsessid",
+        "auth",
+        "auth_token",
+        "access_token",
+        "refresh_token",
+        "csrftoken",
+        "xsrf-token",
+        "csrf_token",
+    }
+)
+_JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
 
 
 def credential_type(name: str) -> str | None:
@@ -146,6 +174,94 @@ def _private_keys(text: str) -> Iterator[Span]:
         yield _span(text, match.start(), cursor, "PRIVATE_KEY")
 
 
+def _url_parameters(text: str) -> tuple[list[Span], set[int]]:
+    """Mask only credential query values, retaining their original URL spelling."""
+    found, handled = [], set()
+    for url in _WEB_URL.finditer(text):
+        # A fragment is not part of the server-side query string.
+        raw = url[0].split("#", 1)[0]
+        if "?" not in raw:
+            continue
+        for parameter in _QUERY_PARAMETER.finditer(raw, raw.index("?")):
+            name = urllib.parse.unquote_plus(parameter["name"]).lower()
+            kind = credential_type(name)
+            if name in {"sig", "signature", "x-amz-signature", "x-goog-signature"}:
+                kind = "TOKEN"
+            if kind is None:
+                continue
+            start = url.start() + parameter.start("value")
+            end = url.start() + parameter.end("value")
+            # Do not let the generic assignment rule swallow '&next=...'.
+            if start != end or text[start : start + 1] not in {'"', "'", "`"}:
+                handled.add(start)
+            if end > start and _literal(text[start:end]):
+                found.append(_span(text, start, end, kind))
+    return found, handled
+
+
+def _cookies(text: str) -> tuple[list[Span], set[int]]:
+    """Recognize session/auth cookies in pasted HTTP headers, not theme cookies."""
+    found, handled = [], set()
+    for header in _COOKIE_HEADER.finditer(text):
+        for pair in _COOKIE_PAIR.finditer(header["pairs"]):
+            name = pair["name"].lower()
+            for prefix in ("__host-", "__secure-"):
+                if name.startswith(prefix):
+                    name = name[len(prefix) :]
+            if name not in _COOKIE_NAMES:
+                continue
+            start = header.start("pairs") + pair.start("value")
+            end = header.start("pairs") + pair.end("value")
+            handled.add(start)
+            while start < end and text[start].isspace():
+                start += 1
+            while end > start and text[end - 1].isspace():
+                end -= 1
+            if end - start >= 2 and text[start] == text[end - 1] == '"':
+                start, end = start + 1, end - 1
+            if end > start and _literal(text[start:end]):
+                found.append(_span(text, start, end, "TOKEN"))
+    return found, handled
+
+
+def _escaped_fields(text: str) -> Iterator[Span]:
+    """Decode JSON field names only; mask the original source value losslessly."""
+    if "\\" not in text:
+        return
+    for field in _JSON_KEY.finditer(text):
+        if "\\" not in field["name"]:
+            continue
+        try:
+            name = json.loads('"' + field["name"] + '"')
+        except ValueError:
+            continue
+        kind = credential_type(name)
+        offsets = _assignment_value(text, field.end()) if kind else None
+        if kind and offsets:
+            start, end = offsets
+            if _literal(text[start:end]):
+                yield _span(text, start, end, kind)
+
+
+def _concatenated_literals(text: str, end: int, kind: str) -> Iterator[Span]:
+    """Protect each literal in a simple quoted credential concatenation."""
+    cursor = end + 1  # end is just before the closing quote of the first literal
+    while cursor < len(text):
+        operator = _CONCAT.match(text, cursor)
+        if operator is None:
+            return
+        cursor = operator.end()
+        if text[cursor : cursor + 1] not in {'"', "'", "`"}:
+            return
+        offsets = _assignment_value(text, cursor)
+        if offsets is None:
+            return
+        start, end = offsets
+        if end > start and _literal(text[start:end]):
+            yield _span(text, start, end, kind)
+        cursor = end + 1
+
+
 def _jwt_header(value: str) -> bool:
     header = value.partition(".")[0]
     if len(header) > 4096:
@@ -170,6 +286,12 @@ def _basic_auth(value: str) -> bool:
 def detect(text: str) -> list[Span]:
     """Find supported prefixed keys, tokens, assignments, URLs, and PEM blocks."""
     found = list(_private_keys(text))
+    query_spans, query_starts = _url_parameters(text)
+    found.extend(query_spans)
+    cookie_spans, cookie_starts = _cookies(text)
+    found.extend(cookie_spans)
+    query_starts.update(cookie_starts)
+    found.extend(_escaped_fields(text))
     for match in _PREFIXED.finditer(text):
         kind = "API_KEY" if match["api"] is not None else "TOKEN"
         found.append(_span(text, match.start(), match.end(), kind))
@@ -189,7 +311,7 @@ def detect(text: str) -> list[Span]:
     while assignment := _ASSIGNMENT.search(text, cursor):
         cursor = assignment.end()
         assigned_type = credential_type(assignment["name"])
-        if assigned_type is None:
+        if assigned_type is None or cursor in query_starts:
             continue
         offsets = _assignment_value(text, cursor)
         if offsets is not None:
@@ -197,4 +319,8 @@ def detect(text: str) -> list[Span]:
             cursor = max(cursor, end)
             if _literal(text[start:end]):
                 found.append(_span(text, start, end, assigned_type))
+                if text[assignment.end() : assignment.end() + 1] in {'"', "'", "`"}:
+                    for fragment in _concatenated_literals(text, end, assigned_type):
+                        found.append(fragment)
+                        cursor = max(cursor, fragment.end + 1)
     return found

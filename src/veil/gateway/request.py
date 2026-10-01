@@ -22,7 +22,7 @@ from typing import Any, TypeVar
 from ..detectors._secrets import credential_type
 from ..detectors.manual import ManualDetector
 from ..placeholders import placeholder_type
-from ..secret_review import Candidate, candidates
+from ..secret_review import Candidate, request_candidates
 from ..shield import Shield
 from ..vault.base import Vault
 from .ledger import Ledger
@@ -384,13 +384,12 @@ class RequestMasker:
     def review_findings(self) -> tuple[Candidate, ...]:
         """Scan supported model text locally, after automatic masking finishes."""
         try:
-            found: dict[str, Candidate] = {}
-            for text in self._review_texts:
-                for candidate in candidates(
-                    text, visible=self._known.unprotected(text)
-                ):
-                    found[candidate.value] = candidate
-            return tuple(found.values())
+            return request_candidates(
+                [
+                    (text, self._known.unprotected(text))
+                    for text in sorted(self._review_texts)
+                ]
+            )
         finally:
             self._review_texts.clear()
 

@@ -18,6 +18,7 @@ from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
+from ._review_context import PII_REVIEW_TYPES, contextual_values, fragment_context
 from .detectors._secrets import (
     _ASSIGNMENT,
     SECRET_TYPES,
@@ -27,7 +28,9 @@ from .detectors._secrets import (
 )
 
 REVIEW_PATH = "/_veil/review"
-CHOICES = (*SECRET_TYPES, "IGNORE")
+REVIEW_TYPES = (*SECRET_TYPES, *PII_REVIEW_TYPES)
+# Preserve the original terminal choices, including 6=IGNORE.
+CHOICES = (*SECRET_TYPES, "IGNORE", *PII_REVIEW_TYPES)
 _MAX_CANDIDATES = 100
 _MAX_VALUE = 16_384
 # A whole token, never a substring cut from an oversized one.
@@ -78,7 +81,9 @@ def _value(raw: str) -> str:
     return raw
 
 
-def candidates(text: str, *, visible: str | None = None) -> tuple[Candidate, ...]:
+def candidates(
+    text: str, *, visible: str | None = None, fragments: bool = False
+) -> tuple[Candidate, ...]:
     """Find uncertainty in supported text, without returning values in reprs.
 
     Prose values are conservatively the rest of the line when unquoted. Token
@@ -96,6 +101,12 @@ def candidates(text: str, *, visible: str | None = None) -> tuple[Candidate, ...
                 return True
             start = text.find(value, start + len(value))
         return False
+
+    fragments = fragments or fragment_context(visible if visible is not None else text)
+    for value, contextual_kind, reason in contextual_values(text, fragments=fragments):
+        if value and _literal(value) and exposed(value):
+            found[value] = Candidate(value, contextual_kind, reason)
+            _bounded(found)
 
     for rule, reason in (
         (_PROSE, "credential described in prose"),
@@ -154,6 +165,17 @@ def candidates(text: str, *, visible: str | None = None) -> tuple[Candidate, ...
             and exposed(value)
         ):
             found[value] = Candidate(value, "TOKEN", "long, varied token")
+            _bounded(found)
+    return tuple(found.values())
+
+
+def request_candidates(texts: list[tuple[str, str]]) -> tuple[Candidate, ...]:
+    """Review supported fields together without joining unrelated text into values."""
+    fragments = any(fragment_context(visible) for _, visible in texts)
+    found: dict[str, Candidate] = {}
+    for text, visible in texts:
+        for candidate in candidates(text, visible=visible, fragments=fragments):
+            found[candidate.value] = candidate
             _bounded(found)
     return tuple(found.values())
 

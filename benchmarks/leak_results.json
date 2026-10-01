@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": "0.5.0",
-  "implementation_sha256": "612d9e3cefabeae5aaae8f2a34c3e3e76564801bb67e262ddd6d434cb00954c2",
+  "implementation_sha256": "0da5327e401585e6b978c77e2c8ee4fb4763d2b2f918ab3cd6b36aa1456ae934",
   "corpus_sha256": "f1e5bd7d8b4cc1b82e354f12cf02bdfee054514db404698ae0762d538a0a1e90",
   "platform": "Darwin",
   "python": "3.14.6",
@@ -14,22 +14,22 @@
         "negative_requests": 15,
         "negative_held_requests": 0,
         "restored_requests": 52,
-        "exact_tp": 25,
-        "exact_fp": 13,
-        "exact_fn": 27,
-        "overmasked_characters": 116,
+        "exact_tp": 34,
+        "exact_fp": 11,
+        "exact_fn": 18,
+        "overmasked_characters": 89,
         "review_findings": 0,
         "review_harmless_characters": 0,
         "annotations": 52,
-        "fully_masked": 27,
+        "fully_masked": 34,
         "partially_masked": 2,
-        "unmasked": 23,
+        "unmasked": 16,
         "fully_flagged_for_review": 0,
-        "exposed_in_ready_requests": 25,
+        "exposed_in_ready_requests": 18,
         "held_requests": 0,
         "refused_requests": 0,
-        "exact_precision": 0.6579,
-        "exact_recall": 0.4808
+        "exact_precision": 0.7556,
+        "exact_recall": 0.6538
       },
       "by_type": {
         "ADDRESS": {
@@ -106,11 +106,11 @@
         },
         "PASSWORD": {
           "annotations": 20,
-          "fully_masked": 8,
+          "fully_masked": 11,
           "partially_masked": 2,
-          "unmasked": 10,
+          "unmasked": 7,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 12
+          "exposed_in_ready_requests": 9
         },
         "PERSON": {
           "annotations": 1,
@@ -146,11 +146,11 @@
         },
         "TOKEN": {
           "annotations": 10,
-          "fully_masked": 3,
+          "fully_masked": 7,
           "partially_masked": 0,
-          "unmasked": 7,
+          "unmasked": 3,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 7
+          "exposed_in_ready_requests": 3
         }
       },
       "by_format": {
@@ -160,22 +160,22 @@
           "negative_requests": 3,
           "negative_held_requests": 0,
           "restored_requests": 4,
-          "exact_tp": 1,
+          "exact_tp": 2,
           "exact_fp": 8,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 88,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 2,
-          "fully_masked": 1,
+          "fully_masked": 2,
           "partially_masked": 0,
-          "unmasked": 1,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.1111,
-          "exact_recall": 0.5
+          "exact_precision": 0.2,
+          "exact_recall": 1.0
         },
         "conversation": {
           "requests": 2,
@@ -275,22 +275,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
-          "exact_tp": 1,
+          "exact_tp": 3,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 3,
-          "fully_masked": 1,
+          "fully_masked": 3,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.3333
+          "exact_recall": 1.0
         },
         "ini": {
           "requests": 1,
@@ -321,22 +321,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 5,
-          "exact_tp": 4,
+          "exact_tp": 5,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 1,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 4,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 1,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 1,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.6667
+          "exact_recall": 0.8333
         },
         "log": {
           "requests": 4,
@@ -436,22 +436,22 @@
           "negative_requests": 1,
           "negative_held_requests": 0,
           "restored_requests": 7,
-          "exact_tp": 0,
-          "exact_fp": 2,
-          "exact_fn": 6,
-          "overmasked_characters": 27,
+          "exact_tp": 5,
+          "exact_fp": 0,
+          "exact_fn": 1,
+          "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 2,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 4,
+          "unmasked": 1,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 4,
+          "exposed_in_ready_requests": 1,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.0,
-          "exact_recall": 0.0
+          "exact_precision": 1.0,
+          "exact_recall": 0.8333
         },
         "yaml": {
           "requests": 2,
@@ -484,22 +484,22 @@
           "negative_requests": 15,
           "negative_held_requests": 0,
           "restored_requests": 50,
-          "exact_tp": 25,
-          "exact_fp": 13,
-          "exact_fn": 25,
-          "overmasked_characters": 116,
+          "exact_tp": 34,
+          "exact_fp": 11,
+          "exact_fn": 16,
+          "overmasked_characters": 89,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 50,
-          "fully_masked": 27,
+          "fully_masked": 34,
           "partially_masked": 2,
-          "unmasked": 21,
+          "unmasked": 14,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 23,
+          "exposed_in_ready_requests": 16,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.6579,
-          "exact_recall": 0.5
+          "exact_precision": 0.7556,
+          "exact_recall": 0.68
         },
         "es": {
           "requests": 1,
@@ -550,8 +550,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1177,
-        "p95": 0.2285
+        "median": 0.1424,
+        "p95": 0.265
       },
       "cases": [
         {
@@ -960,18 +960,18 @@
           "id": "session-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -981,18 +981,18 @@
           "id": "set-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1002,18 +1002,18 @@
           "id": "signed-s3-url",
           "status": "ready",
           "masked_characters": [
-            0
+            64
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            64
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1023,18 +1023,18 @@
           "id": "azure-sas-url",
           "status": "ready",
           "masked_characters": [
-            0
+            29
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            29
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1053,10 +1053,10 @@
             24
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 10,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -1065,18 +1065,18 @@
           "id": "encoded-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1173,10 +1173,10 @@
             16
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 17,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -1375,7 +1375,7 @@
           "status": "ready",
           "masked_characters": [
             10,
-            0
+            10
           ],
           "review_characters": [
             0,
@@ -1383,12 +1383,12 @@
           ],
           "masked_or_flagged_characters": [
             10,
-            0
+            10
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 1,
+          "exposed_annotations": 0,
+          "exact_tp": 2,
           "exact_fp": 3,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 24,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1398,18 +1398,18 @@
           "id": "code-unicode-escaped-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -1606,26 +1606,26 @@
     "anthropic/review": {
       "total": {
         "requests": 52,
-        "ready_requests": 41,
+        "ready_requests": 33,
         "negative_requests": 15,
         "negative_held_requests": 3,
         "restored_requests": 52,
-        "exact_tp": 25,
-        "exact_fp": 13,
-        "exact_fn": 27,
-        "overmasked_characters": 116,
-        "review_findings": 11,
-        "review_harmless_characters": 187,
+        "exact_tp": 34,
+        "exact_fp": 11,
+        "exact_fn": 18,
+        "overmasked_characters": 89,
+        "review_findings": 22,
+        "review_harmless_characters": 228,
         "annotations": 52,
-        "fully_masked": 27,
+        "fully_masked": 34,
         "partially_masked": 2,
-        "unmasked": 23,
-        "fully_flagged_for_review": 7,
-        "exposed_in_ready_requests": 17,
-        "held_requests": 11,
+        "unmasked": 16,
+        "fully_flagged_for_review": 18,
+        "exposed_in_ready_requests": 0,
+        "held_requests": 19,
         "refused_requests": 0,
-        "exact_precision": 0.6579,
-        "exact_recall": 0.4808
+        "exact_precision": 0.7556,
+        "exact_recall": 0.6538
       },
       "by_type": {
         "ADDRESS": {
@@ -1633,8 +1633,8 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "API_KEY": {
           "annotations": 5,
@@ -1649,8 +1649,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "CREDIT_CARD": {
           "annotations": 1,
@@ -1665,16 +1665,16 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "DRIVERS_LICENSE": {
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "EMAIL": {
           "annotations": 3,
@@ -1697,24 +1697,24 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
           "annotations": 20,
-          "fully_masked": 8,
+          "fully_masked": 11,
           "partially_masked": 2,
-          "unmasked": 10,
-          "fully_flagged_for_review": 5,
-          "exposed_in_ready_requests": 6
+          "unmasked": 7,
+          "fully_flagged_for_review": 9,
+          "exposed_in_ready_requests": 0
         },
         "PERSON": {
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "PHONE": {
           "annotations": 1,
@@ -1742,11 +1742,11 @@
         },
         "TOKEN": {
           "annotations": 10,
-          "fully_masked": 3,
+          "fully_masked": 7,
           "partially_masked": 0,
-          "unmasked": 7,
-          "fully_flagged_for_review": 2,
-          "exposed_in_ready_requests": 5
+          "unmasked": 3,
+          "fully_flagged_for_review": 3,
+          "exposed_in_ready_requests": 0
         }
       },
       "by_format": {
@@ -1756,26 +1756,26 @@
           "negative_requests": 3,
           "negative_held_requests": 0,
           "restored_requests": 4,
-          "exact_tp": 1,
+          "exact_tp": 2,
           "exact_fp": 8,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 88,
           "review_findings": 1,
           "review_harmless_characters": 9,
           "annotations": 2,
-          "fully_masked": 1,
+          "fully_masked": 2,
           "partially_masked": 0,
-          "unmasked": 1,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0,
           "ready_requests": 3,
           "refused_requests": 0,
-          "exact_precision": 0.1111,
-          "exact_recall": 0.5
+          "exact_precision": 0.2,
+          "exact_recall": 1.0
         },
         "conversation": {
           "requests": 2,
-          "ready_requests": 2,
+          "ready_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 2,
@@ -1783,15 +1783,15 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 4,
           "fully_masked": 3,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
           "exact_recall": 0.75
@@ -1844,7 +1844,7 @@
         },
         "email": {
           "requests": 3,
-          "held_requests": 1,
+          "held_requests": 2,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
@@ -1852,15 +1852,15 @@
           "exact_fp": 0,
           "exact_fn": 4,
           "overmasked_characters": 0,
-          "review_findings": 1,
+          "review_findings": 4,
           "review_harmless_characters": 0,
           "annotations": 10,
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 4,
-          "fully_flagged_for_review": 1,
-          "exposed_in_ready_requests": 3,
-          "ready_requests": 2,
+          "fully_flagged_for_review": 4,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
           "exact_recall": 0.6
@@ -1871,22 +1871,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
-          "exact_tp": 1,
+          "exact_tp": 3,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 3,
-          "fully_masked": 1,
+          "fully_masked": 3,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.3333
+          "exact_recall": 1.0
         },
         "ini": {
           "requests": 1,
@@ -1913,26 +1913,26 @@
         },
         "json": {
           "requests": 5,
-          "ready_requests": 5,
+          "ready_requests": 4,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 5,
-          "exact_tp": 4,
+          "exact_tp": 5,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 4,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 2,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
-          "held_requests": 0,
+          "unmasked": 1,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.6667
+          "exact_recall": 0.8333
         },
         "log": {
           "requests": 4,
@@ -1982,7 +1982,7 @@
         },
         "prose": {
           "requests": 10,
-          "ready_requests": 7,
+          "held_requests": 8,
           "negative_requests": 3,
           "negative_held_requests": 1,
           "restored_requests": 10,
@@ -1990,15 +1990,15 @@
           "exact_fp": 1,
           "exact_fn": 8,
           "overmasked_characters": 0,
-          "review_findings": 3,
+          "review_findings": 9,
           "review_harmless_characters": 78,
           "annotations": 8,
           "fully_masked": 0,
           "partially_masked": 1,
           "unmasked": 7,
-          "fully_flagged_for_review": 2,
-          "exposed_in_ready_requests": 6,
-          "held_requests": 3,
+          "fully_flagged_for_review": 8,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 2,
           "refused_requests": 0,
           "exact_precision": 0.0,
           "exact_recall": 0.0
@@ -2028,26 +2028,26 @@
         },
         "url": {
           "requests": 7,
-          "held_requests": 1,
+          "ready_requests": 6,
           "negative_requests": 1,
           "negative_held_requests": 0,
           "restored_requests": 7,
-          "exact_tp": 0,
-          "exact_fp": 2,
-          "exact_fn": 6,
-          "overmasked_characters": 27,
+          "exact_tp": 5,
+          "exact_fp": 0,
+          "exact_fn": 1,
+          "overmasked_characters": 0,
           "review_findings": 1,
-          "review_harmless_characters": 0,
+          "review_harmless_characters": 41,
           "annotations": 6,
-          "fully_masked": 2,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 4,
+          "unmasked": 1,
           "fully_flagged_for_review": 1,
-          "exposed_in_ready_requests": 3,
-          "ready_requests": 6,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
-          "exact_precision": 0.0,
-          "exact_recall": 0.0
+          "exact_precision": 1.0,
+          "exact_recall": 0.8333
         },
         "yaml": {
           "requests": 2,
@@ -2076,30 +2076,30 @@
       "by_language": {
         "en": {
           "requests": 50,
-          "ready_requests": 39,
+          "ready_requests": 33,
           "negative_requests": 15,
           "negative_held_requests": 3,
           "restored_requests": 50,
-          "exact_tp": 25,
-          "exact_fp": 13,
-          "exact_fn": 25,
-          "overmasked_characters": 116,
-          "review_findings": 11,
-          "review_harmless_characters": 187,
+          "exact_tp": 34,
+          "exact_fp": 11,
+          "exact_fn": 16,
+          "overmasked_characters": 89,
+          "review_findings": 20,
+          "review_harmless_characters": 228,
           "annotations": 50,
-          "fully_masked": 27,
+          "fully_masked": 34,
           "partially_masked": 2,
-          "unmasked": 21,
-          "fully_flagged_for_review": 7,
-          "exposed_in_ready_requests": 15,
-          "held_requests": 11,
+          "unmasked": 14,
+          "fully_flagged_for_review": 16,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 17,
           "refused_requests": 0,
-          "exact_precision": 0.6579,
-          "exact_recall": 0.5
+          "exact_precision": 0.7556,
+          "exact_recall": 0.68
         },
         "es": {
           "requests": 1,
-          "ready_requests": 1,
+          "held_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 1,
@@ -2107,22 +2107,22 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 0,
           "refused_requests": 0,
           "exact_precision": null,
           "exact_recall": 0.0
         },
         "pl": {
           "requests": 1,
-          "ready_requests": 1,
+          "held_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 1,
@@ -2130,15 +2130,15 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 0,
           "refused_requests": 0,
           "exact_precision": null,
           "exact_recall": 0.0
@@ -2146,8 +2146,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1085,
-        "p95": 0.1892
+        "median": 0.1462,
+        "p95": 0.3606
       },
       "cases": [
         {
@@ -2440,15 +2440,15 @@
         },
         {
           "id": "unlabelled-short-credential",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            11
           ],
           "masked_or_flagged_characters": [
-            0
+            11
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -2456,20 +2456,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "polish-credential-prose",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            15
           ],
           "masked_or_flagged_characters": [
-            0
+            15
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -2477,20 +2477,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "spanish-credential-prose",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            18
           ],
           "masked_or_flagged_characters": [
-            0
+            18
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -2498,7 +2498,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -2556,18 +2556,18 @@
           "id": "session-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -2577,18 +2577,18 @@
           "id": "set-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -2596,41 +2596,41 @@
         },
         {
           "id": "signed-s3-url",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
-            0
+            64
           ],
           "review_characters": [
-            64
+            0
           ],
           "masked_or_flagged_characters": [
             64
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 1,
+          "review_findings": 0,
           "restored": true
         },
         {
           "id": "azure-sas-url",
           "status": "ready",
           "masked_characters": [
-            0
+            29
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            29
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -2649,10 +2649,10 @@
             24
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 10,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -2661,18 +2661,18 @@
           "id": "encoded-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -2716,36 +2716,36 @@
         },
         {
           "id": "webhook-url-path",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            22
           ],
           "masked_or_flagged_characters": [
-            0
+            22
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_harmless_characters": 41,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "recovery-code",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            22
           ],
           "masked_or_flagged_characters": [
-            0
+            22
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -2753,7 +2753,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -2769,10 +2769,10 @@
             16
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 17,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -2923,18 +2923,18 @@
         },
         {
           "id": "split-key-across-sections",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             14,
             0
           ],
           "review_characters": [
             0,
-            0
+            13
           ],
           "masked_or_flagged_characters": [
             14,
-            0
+            13
           ],
           "exposed_annotations": 1,
           "exact_tp": 1,
@@ -2942,20 +2942,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "base64-wrapped-credential",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            16
           ],
           "masked_or_flagged_characters": [
-            0
+            16
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -2963,7 +2963,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -2971,7 +2971,7 @@
           "status": "held",
           "masked_characters": [
             10,
-            0
+            10
           ],
           "review_characters": [
             0,
@@ -2979,12 +2979,12 @@
           ],
           "masked_or_flagged_characters": [
             10,
-            0
+            10
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 1,
+          "exposed_annotations": 0,
+          "exact_tp": 2,
           "exact_fp": 3,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 24,
           "review_harmless_characters": 9,
           "review_findings": 1,
@@ -2994,18 +2994,18 @@
           "id": "code-unicode-escaped-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -3103,7 +3103,7 @@
         },
         {
           "id": "support-pii",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0,
@@ -3111,15 +3111,15 @@
             22
           ],
           "review_characters": [
-            0,
-            0,
-            0,
+            10,
+            10,
+            25,
             0
           ],
           "masked_or_flagged_characters": [
-            0,
-            0,
-            0,
+            10,
+            10,
+            25,
             22
           ],
           "exposed_annotations": 3,
@@ -3128,23 +3128,23 @@
           "exact_fn": 3,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 3,
           "restored": true
         },
         {
           "id": "travel-document",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            9,
+            15
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            9,
+            15
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -3152,7 +3152,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "restored": true
         },
         {
@@ -3206,22 +3206,22 @@
         "negative_requests": 15,
         "negative_held_requests": 0,
         "restored_requests": 52,
-        "exact_tp": 25,
-        "exact_fp": 13,
-        "exact_fn": 27,
-        "overmasked_characters": 116,
+        "exact_tp": 34,
+        "exact_fp": 11,
+        "exact_fn": 18,
+        "overmasked_characters": 89,
         "review_findings": 0,
         "review_harmless_characters": 0,
         "annotations": 52,
-        "fully_masked": 27,
+        "fully_masked": 34,
         "partially_masked": 2,
-        "unmasked": 23,
+        "unmasked": 16,
         "fully_flagged_for_review": 0,
-        "exposed_in_ready_requests": 25,
+        "exposed_in_ready_requests": 18,
         "held_requests": 0,
         "refused_requests": 0,
-        "exact_precision": 0.6579,
-        "exact_recall": 0.4808
+        "exact_precision": 0.7556,
+        "exact_recall": 0.6538
       },
       "by_type": {
         "ADDRESS": {
@@ -3298,11 +3298,11 @@
         },
         "PASSWORD": {
           "annotations": 20,
-          "fully_masked": 8,
+          "fully_masked": 11,
           "partially_masked": 2,
-          "unmasked": 10,
+          "unmasked": 7,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 12
+          "exposed_in_ready_requests": 9
         },
         "PERSON": {
           "annotations": 1,
@@ -3338,11 +3338,11 @@
         },
         "TOKEN": {
           "annotations": 10,
-          "fully_masked": 3,
+          "fully_masked": 7,
           "partially_masked": 0,
-          "unmasked": 7,
+          "unmasked": 3,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 7
+          "exposed_in_ready_requests": 3
         }
       },
       "by_format": {
@@ -3352,22 +3352,22 @@
           "negative_requests": 3,
           "negative_held_requests": 0,
           "restored_requests": 4,
-          "exact_tp": 1,
+          "exact_tp": 2,
           "exact_fp": 8,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 88,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 2,
-          "fully_masked": 1,
+          "fully_masked": 2,
           "partially_masked": 0,
-          "unmasked": 1,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.1111,
-          "exact_recall": 0.5
+          "exact_precision": 0.2,
+          "exact_recall": 1.0
         },
         "conversation": {
           "requests": 2,
@@ -3467,22 +3467,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
-          "exact_tp": 1,
+          "exact_tp": 3,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 3,
-          "fully_masked": 1,
+          "fully_masked": 3,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.3333
+          "exact_recall": 1.0
         },
         "ini": {
           "requests": 1,
@@ -3513,22 +3513,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 5,
-          "exact_tp": 4,
+          "exact_tp": 5,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 1,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 4,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 1,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 1,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.6667
+          "exact_recall": 0.8333
         },
         "log": {
           "requests": 4,
@@ -3628,22 +3628,22 @@
           "negative_requests": 1,
           "negative_held_requests": 0,
           "restored_requests": 7,
-          "exact_tp": 0,
-          "exact_fp": 2,
-          "exact_fn": 6,
-          "overmasked_characters": 27,
+          "exact_tp": 5,
+          "exact_fp": 0,
+          "exact_fn": 1,
+          "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 2,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 4,
+          "unmasked": 1,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 4,
+          "exposed_in_ready_requests": 1,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.0,
-          "exact_recall": 0.0
+          "exact_precision": 1.0,
+          "exact_recall": 0.8333
         },
         "yaml": {
           "requests": 2,
@@ -3676,22 +3676,22 @@
           "negative_requests": 15,
           "negative_held_requests": 0,
           "restored_requests": 50,
-          "exact_tp": 25,
-          "exact_fp": 13,
-          "exact_fn": 25,
-          "overmasked_characters": 116,
+          "exact_tp": 34,
+          "exact_fp": 11,
+          "exact_fn": 16,
+          "overmasked_characters": 89,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 50,
-          "fully_masked": 27,
+          "fully_masked": 34,
           "partially_masked": 2,
-          "unmasked": 21,
+          "unmasked": 14,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 23,
+          "exposed_in_ready_requests": 16,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.6579,
-          "exact_recall": 0.5
+          "exact_precision": 0.7556,
+          "exact_recall": 0.68
         },
         "es": {
           "requests": 1,
@@ -3742,8 +3742,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.0607,
-        "p95": 0.1123
+        "median": 0.0719,
+        "p95": 0.1102
       },
       "cases": [
         {
@@ -4152,18 +4152,18 @@
           "id": "session-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4173,18 +4173,18 @@
           "id": "set-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4194,18 +4194,18 @@
           "id": "signed-s3-url",
           "status": "ready",
           "masked_characters": [
-            0
+            64
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            64
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4215,18 +4215,18 @@
           "id": "azure-sas-url",
           "status": "ready",
           "masked_characters": [
-            0
+            29
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            29
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4245,10 +4245,10 @@
             24
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 10,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -4257,18 +4257,18 @@
           "id": "encoded-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4365,10 +4365,10 @@
             16
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 17,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -4567,7 +4567,7 @@
           "status": "ready",
           "masked_characters": [
             10,
-            0
+            10
           ],
           "review_characters": [
             0,
@@ -4575,12 +4575,12 @@
           ],
           "masked_or_flagged_characters": [
             10,
-            0
+            10
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 1,
+          "exposed_annotations": 0,
+          "exact_tp": 2,
           "exact_fp": 3,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 24,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4590,18 +4590,18 @@
           "id": "code-unicode-escaped-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -4798,26 +4798,26 @@
     "openai/review": {
       "total": {
         "requests": 52,
-        "ready_requests": 41,
+        "ready_requests": 33,
         "negative_requests": 15,
         "negative_held_requests": 3,
         "restored_requests": 52,
-        "exact_tp": 25,
-        "exact_fp": 13,
-        "exact_fn": 27,
-        "overmasked_characters": 116,
-        "review_findings": 11,
-        "review_harmless_characters": 187,
+        "exact_tp": 34,
+        "exact_fp": 11,
+        "exact_fn": 18,
+        "overmasked_characters": 89,
+        "review_findings": 22,
+        "review_harmless_characters": 228,
         "annotations": 52,
-        "fully_masked": 27,
+        "fully_masked": 34,
         "partially_masked": 2,
-        "unmasked": 23,
-        "fully_flagged_for_review": 7,
-        "exposed_in_ready_requests": 17,
-        "held_requests": 11,
+        "unmasked": 16,
+        "fully_flagged_for_review": 18,
+        "exposed_in_ready_requests": 0,
+        "held_requests": 19,
         "refused_requests": 0,
-        "exact_precision": 0.6579,
-        "exact_recall": 0.4808
+        "exact_precision": 0.7556,
+        "exact_recall": 0.6538
       },
       "by_type": {
         "ADDRESS": {
@@ -4825,8 +4825,8 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "API_KEY": {
           "annotations": 5,
@@ -4841,8 +4841,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "CREDIT_CARD": {
           "annotations": 1,
@@ -4857,16 +4857,16 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "DRIVERS_LICENSE": {
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "EMAIL": {
           "annotations": 3,
@@ -4889,24 +4889,24 @@
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
           "annotations": 20,
-          "fully_masked": 8,
+          "fully_masked": 11,
           "partially_masked": 2,
-          "unmasked": 10,
-          "fully_flagged_for_review": 5,
-          "exposed_in_ready_requests": 6
+          "unmasked": 7,
+          "fully_flagged_for_review": 9,
+          "exposed_in_ready_requests": 0
         },
         "PERSON": {
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0
         },
         "PHONE": {
           "annotations": 1,
@@ -4934,11 +4934,11 @@
         },
         "TOKEN": {
           "annotations": 10,
-          "fully_masked": 3,
+          "fully_masked": 7,
           "partially_masked": 0,
-          "unmasked": 7,
-          "fully_flagged_for_review": 2,
-          "exposed_in_ready_requests": 5
+          "unmasked": 3,
+          "fully_flagged_for_review": 3,
+          "exposed_in_ready_requests": 0
         }
       },
       "by_format": {
@@ -4948,26 +4948,26 @@
           "negative_requests": 3,
           "negative_held_requests": 0,
           "restored_requests": 4,
-          "exact_tp": 1,
+          "exact_tp": 2,
           "exact_fp": 8,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 88,
           "review_findings": 1,
           "review_harmless_characters": 9,
           "annotations": 2,
-          "fully_masked": 1,
+          "fully_masked": 2,
           "partially_masked": 0,
-          "unmasked": 1,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0,
           "ready_requests": 3,
           "refused_requests": 0,
-          "exact_precision": 0.1111,
-          "exact_recall": 0.5
+          "exact_precision": 0.2,
+          "exact_recall": 1.0
         },
         "conversation": {
           "requests": 2,
-          "ready_requests": 2,
+          "ready_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 2,
@@ -4975,15 +4975,15 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 4,
           "fully_masked": 3,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
           "exact_recall": 0.75
@@ -5036,7 +5036,7 @@
         },
         "email": {
           "requests": 3,
-          "held_requests": 1,
+          "held_requests": 2,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
@@ -5044,15 +5044,15 @@
           "exact_fp": 0,
           "exact_fn": 4,
           "overmasked_characters": 0,
-          "review_findings": 1,
+          "review_findings": 4,
           "review_harmless_characters": 0,
           "annotations": 10,
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 4,
-          "fully_flagged_for_review": 1,
-          "exposed_in_ready_requests": 3,
-          "ready_requests": 2,
+          "fully_flagged_for_review": 4,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
           "exact_recall": 0.6
@@ -5063,22 +5063,22 @@
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 3,
-          "exact_tp": 1,
+          "exact_tp": 3,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 3,
-          "fully_masked": 1,
+          "fully_masked": 3,
           "partially_masked": 0,
-          "unmasked": 2,
+          "unmasked": 0,
           "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
+          "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.3333
+          "exact_recall": 1.0
         },
         "ini": {
           "requests": 1,
@@ -5105,26 +5105,26 @@
         },
         "json": {
           "requests": 5,
-          "ready_requests": 5,
+          "ready_requests": 4,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 5,
-          "exact_tp": 4,
+          "exact_tp": 5,
           "exact_fp": 0,
-          "exact_fn": 2,
+          "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 6,
-          "fully_masked": 4,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 2,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 2,
-          "held_requests": 0,
+          "unmasked": 1,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
           "exact_precision": 1.0,
-          "exact_recall": 0.6667
+          "exact_recall": 0.8333
         },
         "log": {
           "requests": 4,
@@ -5174,7 +5174,7 @@
         },
         "prose": {
           "requests": 10,
-          "ready_requests": 7,
+          "held_requests": 8,
           "negative_requests": 3,
           "negative_held_requests": 1,
           "restored_requests": 10,
@@ -5182,15 +5182,15 @@
           "exact_fp": 1,
           "exact_fn": 8,
           "overmasked_characters": 0,
-          "review_findings": 3,
+          "review_findings": 9,
           "review_harmless_characters": 78,
           "annotations": 8,
           "fully_masked": 0,
           "partially_masked": 1,
           "unmasked": 7,
-          "fully_flagged_for_review": 2,
-          "exposed_in_ready_requests": 6,
-          "held_requests": 3,
+          "fully_flagged_for_review": 8,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 2,
           "refused_requests": 0,
           "exact_precision": 0.0,
           "exact_recall": 0.0
@@ -5220,26 +5220,26 @@
         },
         "url": {
           "requests": 7,
-          "held_requests": 1,
+          "ready_requests": 6,
           "negative_requests": 1,
           "negative_held_requests": 0,
           "restored_requests": 7,
-          "exact_tp": 0,
-          "exact_fp": 2,
-          "exact_fn": 6,
-          "overmasked_characters": 27,
+          "exact_tp": 5,
+          "exact_fp": 0,
+          "exact_fn": 1,
+          "overmasked_characters": 0,
           "review_findings": 1,
-          "review_harmless_characters": 0,
+          "review_harmless_characters": 41,
           "annotations": 6,
-          "fully_masked": 2,
+          "fully_masked": 5,
           "partially_masked": 0,
-          "unmasked": 4,
+          "unmasked": 1,
           "fully_flagged_for_review": 1,
-          "exposed_in_ready_requests": 3,
-          "ready_requests": 6,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 1,
           "refused_requests": 0,
-          "exact_precision": 0.0,
-          "exact_recall": 0.0
+          "exact_precision": 1.0,
+          "exact_recall": 0.8333
         },
         "yaml": {
           "requests": 2,
@@ -5268,30 +5268,30 @@
       "by_language": {
         "en": {
           "requests": 50,
-          "ready_requests": 39,
+          "ready_requests": 33,
           "negative_requests": 15,
           "negative_held_requests": 3,
           "restored_requests": 50,
-          "exact_tp": 25,
-          "exact_fp": 13,
-          "exact_fn": 25,
-          "overmasked_characters": 116,
-          "review_findings": 11,
-          "review_harmless_characters": 187,
+          "exact_tp": 34,
+          "exact_fp": 11,
+          "exact_fn": 16,
+          "overmasked_characters": 89,
+          "review_findings": 20,
+          "review_harmless_characters": 228,
           "annotations": 50,
-          "fully_masked": 27,
+          "fully_masked": 34,
           "partially_masked": 2,
-          "unmasked": 21,
-          "fully_flagged_for_review": 7,
-          "exposed_in_ready_requests": 15,
-          "held_requests": 11,
+          "unmasked": 14,
+          "fully_flagged_for_review": 16,
+          "exposed_in_ready_requests": 0,
+          "held_requests": 17,
           "refused_requests": 0,
-          "exact_precision": 0.6579,
-          "exact_recall": 0.5
+          "exact_precision": 0.7556,
+          "exact_recall": 0.68
         },
         "es": {
           "requests": 1,
-          "ready_requests": 1,
+          "held_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 1,
@@ -5299,22 +5299,22 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 0,
           "refused_requests": 0,
           "exact_precision": null,
           "exact_recall": 0.0
         },
         "pl": {
           "requests": 1,
-          "ready_requests": 1,
+          "held_requests": 1,
           "negative_requests": 0,
           "negative_held_requests": 0,
           "restored_requests": 1,
@@ -5322,15 +5322,15 @@
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "review_harmless_characters": 0,
           "annotations": 1,
           "fully_masked": 0,
           "partially_masked": 0,
           "unmasked": 1,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 1,
-          "held_requests": 0,
+          "fully_flagged_for_review": 1,
+          "exposed_in_ready_requests": 0,
+          "ready_requests": 0,
           "refused_requests": 0,
           "exact_precision": null,
           "exact_recall": 0.0
@@ -5338,8 +5338,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.0764,
-        "p95": 0.1425
+        "median": 0.1069,
+        "p95": 0.1641
       },
       "cases": [
         {
@@ -5632,15 +5632,15 @@
         },
         {
           "id": "unlabelled-short-credential",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            11
           ],
           "masked_or_flagged_characters": [
-            0
+            11
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -5648,20 +5648,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "polish-credential-prose",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            15
           ],
           "masked_or_flagged_characters": [
-            0
+            15
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -5669,20 +5669,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "spanish-credential-prose",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            18
           ],
           "masked_or_flagged_characters": [
-            0
+            18
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -5690,7 +5690,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -5748,18 +5748,18 @@
           "id": "session-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -5769,18 +5769,18 @@
           "id": "set-cookie",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -5788,41 +5788,41 @@
         },
         {
           "id": "signed-s3-url",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
-            0
+            64
           ],
           "review_characters": [
-            64
+            0
           ],
           "masked_or_flagged_characters": [
             64
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 1,
+          "review_findings": 0,
           "restored": true
         },
         {
           "id": "azure-sas-url",
           "status": "ready",
           "masked_characters": [
-            0
+            29
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            29
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -5841,10 +5841,10 @@
             24
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 10,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -5853,18 +5853,18 @@
           "id": "encoded-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -5908,36 +5908,36 @@
         },
         {
           "id": "webhook-url-path",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            22
           ],
           "masked_or_flagged_characters": [
-            0
+            22
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
           "exact_fp": 0,
           "exact_fn": 1,
           "overmasked_characters": 0,
-          "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_harmless_characters": 41,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "recovery-code",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            22
           ],
           "masked_or_flagged_characters": [
-            0
+            22
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -5945,7 +5945,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -5961,10 +5961,10 @@
             16
           ],
           "exposed_annotations": 0,
-          "exact_tp": 0,
-          "exact_fp": 1,
-          "exact_fn": 1,
-          "overmasked_characters": 17,
+          "exact_tp": 1,
+          "exact_fp": 0,
+          "exact_fn": 0,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -6115,18 +6115,18 @@
         },
         {
           "id": "split-key-across-sections",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             14,
             0
           ],
           "review_characters": [
             0,
-            0
+            13
           ],
           "masked_or_flagged_characters": [
             14,
-            0
+            13
           ],
           "exposed_annotations": 1,
           "exact_tp": 1,
@@ -6134,20 +6134,20 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
           "id": "base64-wrapped-credential",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0
           ],
           "review_characters": [
-            0
+            16
           ],
           "masked_or_flagged_characters": [
-            0
+            16
           ],
           "exposed_annotations": 1,
           "exact_tp": 0,
@@ -6155,7 +6155,7 @@
           "exact_fn": 1,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 1,
           "restored": true
         },
         {
@@ -6163,7 +6163,7 @@
           "status": "held",
           "masked_characters": [
             10,
-            0
+            10
           ],
           "review_characters": [
             0,
@@ -6171,12 +6171,12 @@
           ],
           "masked_or_flagged_characters": [
             10,
-            0
+            10
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 1,
+          "exposed_annotations": 0,
+          "exact_tp": 2,
           "exact_fp": 3,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 24,
           "review_harmless_characters": 9,
           "review_findings": 1,
@@ -6186,18 +6186,18 @@
           "id": "code-unicode-escaped-label",
           "status": "ready",
           "masked_characters": [
-            0
+            20
           ],
           "review_characters": [
             0
           ],
           "masked_or_flagged_characters": [
-            0
+            20
           ],
-          "exposed_annotations": 1,
-          "exact_tp": 0,
+          "exposed_annotations": 0,
+          "exact_tp": 1,
           "exact_fp": 0,
-          "exact_fn": 1,
+          "exact_fn": 0,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
@@ -6295,7 +6295,7 @@
         },
         {
           "id": "support-pii",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0,
@@ -6303,15 +6303,15 @@
             22
           ],
           "review_characters": [
-            0,
-            0,
-            0,
+            10,
+            10,
+            25,
             0
           ],
           "masked_or_flagged_characters": [
-            0,
-            0,
-            0,
+            10,
+            10,
+            25,
             22
           ],
           "exposed_annotations": 3,
@@ -6320,23 +6320,23 @@
           "exact_fn": 3,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 3,
           "restored": true
         },
         {
           "id": "travel-document",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            9,
+            15
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            9,
+            15
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -6344,7 +6344,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "restored": true
         },
         {

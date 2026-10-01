@@ -51,13 +51,15 @@ The command proves gateway identity before sending its local secret. It does
 not print that secret or put it into the review page.
 
 1. Reveal a value locally if needed. Values start collapsed.
-2. Choose **API key**, **Password or passphrase**, **Access token**, **Private key**,
-   **Other credential**, or **Not a secret — allow this request**.
+2. Choose a credential or personal-data classification: **API key**, **Password or
+   passphrase**, **Access token**, **Private key**, **Other credential**, **Person's
+   name**, **Street address**, **Date of birth**, **Passport number**, or **Driver's
+   license number**. Choose **Not private — allow this request** only to allow it.
 3. Save every choice, then retry the original request in your client.
 
 The page does not submit a model request. Leave your original text in the client;
 Veil applies confirmed masks when you retry, even if the client changes metadata
-in that session. If the client changes the request body, an earlier “Not a secret” choice does not authorize the changed request.
+in that session. If the client changes the request body, an earlier “Not private” choice does not authorize the changed request.
 You may need to review it again. A terminal-only interface is also available:
 
 ```bash
@@ -94,6 +96,19 @@ registrations and automatic rules, or handle the gateway's review refusal.
   line; quote values to make their boundary clear.
 - Long tokens with varied characters, including unknown provider formats. A
   random-looking hash can also trigger review; randomness does not prove secrecy.
+- Sign-in instructions such as `Use "…" to sign in`, recovery/backup-code labels,
+  and the explicit Polish `hasło to/jest …` and Spanish `contraseña es …` phrases.
+- Labelled webhook endpoints and JSON payloads explicitly marked as base64 or
+  base64url. The whole original endpoint or encoded value is offered for review;
+  no decoded content is sent anywhere. Benign encoded data can also be flagged.
+- Short token-like lines/fields when a supported field in the same request
+  describes splitting a credential into fragments. This context is not reused
+  for unrelated requests and is not a general code or language parser.
+- Specific personal-data labels: title-cased multiword names after customer,
+  patient, employee, or full-name labels; numeric street addresses after home,
+  street, postal, or “lives at” labels; dates after birth-date labels; and
+  alphanumeric numbers after passport or driver's-license labels. The suggested
+  type is a question, not a verified identity or document-number check.
 
 Both gateways now learn detected values across supported fields before their
 final masking pass. A value mentioned early without a label can therefore be
@@ -108,7 +123,7 @@ are masked and the request continues on retry. Confirmed mappings use the existi
 session vault and can restore in supported replies. They are not registrations
 for unrelated sessions; use [private registration](entities.md) for that.
 
-Reviews and “Not a secret” decisions are held only in gateway memory and expire
+Reviews and “Not private” decisions are held only in gateway memory and expire
 after ten minutes; expired entries are discarded on the next queue operation.
 Ignore decisions are scoped to the exact request bytes and session. The queue keeps at most 64 reviews,
 100 distinct findings per request, and bounded value sizes. Expiry, eviction,
@@ -124,8 +139,10 @@ only when you reveal them, but those values are present in browser memory. Keep
 the page and its local URL private. Closing it does not revoke choices already
 saved in the gateway.
 
-**This cannot guarantee detection of every secret.** Short unlabelled passwords,
-obfuscated/split values, unsupported encodings and languages can still be missed.
+**This cannot guarantee detection of every secret.** Short values without one of
+the supported cues, unlabelled PII, computed/split values in other forms, unsupported
+encodings and languages can still be missed. Quote ambiguous prose values to make
+their boundary explicit, or register exact values. Review is off by default.
 False positives are expected; this is a local heuristic review system, not a
 semantic model that understands every sentence. Existing attachment, tool,
 authentication-header and network-traffic boundaries are unchanged. See the
@@ -136,3 +153,5 @@ full-value masking on retry, restoration, partial-mask cases, expiry, request
 and session isolation, cancellation, and local web access checks using fictional
 values and a loopback provider. These checks do not establish a universal recall
 or precision score.
+The [workflow evaluation](leak-evaluation.md) reports automatic coverage and
+review holds separately, including false positives and simulated confirmation.

@@ -115,8 +115,13 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
   review off/on, per-occurrence regression checks, and local HTTP verification.
   [52-document results and remaining gaps](docs/leak-evaluation.md). This does
   not complete independent sampling or security review.
-- [ ] Address measured cookie/signed-link/recovery-code misses and encoded or
-  split credentials; reduce URL over-masking and code/prose false positives.
+- [x] Address the initial 17 exposed occurrences using scoped cookie/query/JSON
+  masking and optional local review of contextual credentials and labelled PII.
+  [Before/after results](docs/leak-evaluation.md) distinguish automatic masks from
+  review holds; original corpus labels remain unchanged.
+- [ ] Broaden independent testing of cookie/link formats, encodings, fragment
+  layouts, languages and PII cues; reduce code/prose false positives and review
+  burden without silently allowing ambiguous secrets.
 - [x] Maintain labeled, fictional test corpora; measure missed values and false
   positives by entity type, format, and language, plus masking latency.
   [Initial 30-document baseline](docs/detection-results.md); broader sampling remains.

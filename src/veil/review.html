@@ -21,9 +21,9 @@
 <body>
   <div class="tag">Veil · On this computer</div>
   <h1>Review before sending</h1>
-  <p>These values might be secrets. Choose what each one is, or explicitly allow it
+  <p>These values might be credentials or personal details. Choose what each one is, or explicitly allow it
     for this request. Nothing is sent to your model provider by this page.</p>
-  <p>Keep this page private. Confirmed values are masked on retry; “Not a secret”
+  <p>Keep this page private. Confirmed values are masked on retry; “Not private”
     allows that value for this exact request only. After saving every choice,
     retry in your AI client.</p>
   <button id="refresh">Refresh findings</button>
@@ -40,7 +40,12 @@ const labels = {
   TOKEN: 'Access token',
   PRIVATE_KEY: 'Private key',
   CREDENTIAL: 'Other credential',
-  IGNORE: 'Not a secret — allow this request'
+  PERSON: 'Person’s name',
+  ADDRESS: 'Street address',
+  DOB: 'Date of birth',
+  PASSPORT: 'Passport number',
+  DRIVERS_LICENSE: 'Driver’s license number',
+  IGNORE: 'Not private — allow this request'
 };
 
 async function request(choice) {

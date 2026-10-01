@@ -104,12 +104,12 @@ def run_text(
         result: MaskResult | RestoreResult
         if operation == "mask":
             if review or settings.secret_review:
-                from .detectors._secrets import SECRET_TYPES
                 from .placeholders import placeholder_type
+                from .secret_review import REVIEW_TYPES
 
                 for placeholder, value in shield.vault.items():
                     kind = placeholder_type(placeholder)
-                    if kind in SECRET_TYPES:
+                    if kind in REVIEW_TYPES:
                         assert kind is not None
                         shield.add_entity(value, kind)
             result = shield.mask(source)

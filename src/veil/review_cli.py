@@ -214,7 +214,7 @@ def ask_terminal(value: str, reason: str) -> str:
         ):
             if not source.isatty() or not output.isatty():
                 raise OSError
-            output.write(f"\nPossible secret ({reason}): {value!a}\n")
+            output.write(f"\nPossible private value ({reason}): {value!a}\n")
             output.write(
                 " / ".join(f"{i + 1}={kind}" for i, kind in enumerate(CHOICES)) + "\n"
             )
