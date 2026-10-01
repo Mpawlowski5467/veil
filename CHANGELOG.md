@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Typed declarations and Go `:=` no longer send the real credential. Previously `apiKey := "…"` masked the `=`; `API_KEY: Final = "…"`, Kotlin `val apiKey: String = "…"`, Rust `let api_key: &str = "…"` and Pascal `Password : String := '…'` masked the type name; and Python `DB_PASSWORD: str = "…"`, `Optional[str]` annotations and TypeScript `const password: string = "…"` masked nothing. The value now becomes the placeholder and the type stays readable. Go `apiKey string = "…"` is also covered. Declarations without a value, such as `password: str`, and parameter lists such as `def f(token: str, retries: int = 3)` stay unchanged.
+- An unquoted multiword value after `:` or a spaced `=`, such as `Password: fictional orchard 72`, is now masked through the end of its clause instead of only its first word. A label that opens a quoted string, as in `curl -H "X-Api-Key: …" https://…`, ends at that string's closing quote, so the rest of the command stays readable. Compact `NAME=value` still reads one shell word, so quote multiword `.env` values. Local review no longer asks about typed declarations that are already masked.
+- Local review no longer slows down sharply on long lines with many credential labels or chained `password=…=password=…` text.
+
 ## 0.6.0b1 — Beta
 
 ### Added
