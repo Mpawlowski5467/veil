@@ -166,7 +166,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      - name: Native storage, CLI, setup, recovery, and protocol regressions
+      - name: Native storage, CLI, launcher, setup, recovery, and protocol regressions
         run: >-
           uv run pytest -q tests/test_platform_workflows.py
           tests/test_verification.py tests/test_gateway_response.py
@@ -178,6 +178,7 @@ jobs:
           tests/test_fuzz.py tests/test_readme.py
           tests/test_workflow_reliability.py tests/test_support_report.py
           tests/test_preview.py tests/test_secret_precision.py
+          tests/test_launchers.py
       - name: Measure fictional workflow leaks and check the baseline
         run: uv run python benchmarks/leaks.py --check --output leak-report.json
       - uses: actions/upload-artifact@v4

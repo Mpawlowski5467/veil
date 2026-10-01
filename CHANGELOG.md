@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `veil claude` and `veil codex` (including `--forget-after-run`) no longer crash on native Windows right after starting the client. The launcher passed on SIGHUP, which Windows doesn't have; the client was left running against a stopped gateway. Signals are now handled per platform: Ctrl-C and Ctrl-Break reach the client directly, SIGTERM (and SIGHUP on macOS/Linux) is passed on, and the client is stopped whenever the launcher exits early.
+- A client ended by a signal now gives the launcher the shell's usual exit code (128 + the signal number, e.g. 143 for SIGTERM) instead of a wrapped value such as 241.
+
+### Tests
+
+- Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
+
 ## 0.6.0b1 — Beta
 
 ### Added
