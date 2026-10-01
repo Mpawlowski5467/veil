@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Review page startup, recovery, and classification
-        run: node --test tests/review_ui.test.cjs
+        run: node --test tests/review_ui.test.cjs tests/preview_ui.test.cjs
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv build
       - name: Install the wheel alone and run the README example
@@ -176,6 +176,8 @@ jobs:
           tests/test_ssn.py tests/test_secrets.py tests/test_secret_automatic.py tests/test_secret_review.py tests/test_privacy_context.py tests/test_leak_evaluation.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
           tests/test_masker.py tests/test_restorer.py tests/test_stream.py
           tests/test_fuzz.py tests/test_readme.py
+          tests/test_workflow_reliability.py tests/test_support_report.py
+          tests/test_preview.py tests/test_secret_precision.py
       - name: Measure fictional workflow leaks and check the baseline
         run: uv run python benchmarks/leaks.py --check --output leak-report.json
       - uses: actions/upload-artifact@v4
@@ -201,15 +203,19 @@ jobs:
       - run: uv run python benchmarks/wheel_smoke.py
 
   upgrade:
-    name: Upgrade and rollback from 0.4.1
+    name: Upgrade and rollback from ${{ matrix.previous }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        previous: ["0.4.1", "0.5.0"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv build
       - uses: actions/checkout@v7
         with:
-          ref: v0.4.1
+          ref: v${{ matrix.previous }}
           path: .previous-release
       - run: uv build .previous-release --out-dir /tmp/veil-previous-dist
       - run: |
@@ -220,6 +226,6 @@ jobs:
           uv run python benchmarks/upgrade.py --previous-python /tmp/veil-previous-env/bin/python --current-python /tmp/veil-current-env/bin/python
       - uses: actions/upload-artifact@v4
         with:
-          name: veil-distributions
+          name: veil-distributions-from-${{ matrix.previous }}
           path: dist/*
           if-no-files-found: error

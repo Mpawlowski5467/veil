@@ -12,6 +12,12 @@ from veil import __version__
 BASE = """
 import importlib.util
 from veil import Shield
+from veil.preview import _HTML, preview
+assert "See what gets masked." in _HTML
+result = preview({"text": "fictional@example.org", "choices": {}})
+assert result["masked"] == "[EMAIL_1]"
+from veil.support_report import safe_checks
+assert safe_checks({"checks": []}) == []
 assert importlib.util.find_spec("tomlkit") is None
 shield = Shield()
 text = "fictional@example.com"
@@ -57,7 +63,9 @@ def main():
             subprocess.run(
                 [str(python), "-I", "-c", program], cwd=root, check=True, timeout=60
             )
-    print("base wheel, desktop setup/undo, and installed skill: passed")
+    print(
+        "base wheel, preview, report, desktop setup/undo, and installed skill: passed"
+    )
 
 
 if __name__ == "__main__":

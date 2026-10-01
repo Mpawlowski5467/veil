@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veil · Local masking preview</title>
+<style>
+:root { color-scheme: dark; font: 16px/1.6 system-ui, sans-serif; background: #101512; color: #e7ede8; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1150px; margin: auto; padding: 48px 28px; }
+header { border-bottom: 1px solid #35443a; padding-bottom: 26px; margin-bottom: 28px; }
+.eyebrow { color: #acdbb7; letter-spacing: .14em; font-size: .78rem; text-transform: uppercase; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.15; margin: 10px 0 18px; font-weight: 600; }
+h2 { font-size: 1.1rem; margin: 0 0 12px; }
+p { max-width: 78ch; margin: 10px 0; }
+.muted { color: #a8b6ad; }
+.notice { background: #1e2b22; padding: 16px 20px; border-radius: 10px; }
+.columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+textarea, pre { width: 100%; min-height: 240px; border: 1px solid #46594c; border-radius: 10px; background: #171f1a; color: #eef5ef; padding: 18px; font: .94rem/1.7 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+textarea { resize: vertical; }
+pre { margin: 0; }
+label { display: block; margin-bottom: 12px; font-weight: 600; }
+button, select { background: #213326; border: 1px solid #789681; border-radius: 7px; color: #e7ede8; padding: 10px 16px; font: inherit; cursor: pointer; }
+button.primary { background: #b9e9c5; color: #15251b; border-color: #b9e9c5; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid #d2eb6a; outline-offset: 3px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+#status { min-height: 28px; color: #d2e49c; }
+section { margin: 28px 0; }
+.finding { padding: 18px; border: 1px solid #536544; background: #1d251b; border-radius: 10px; margin: 12px 0; }
+.finding code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; color: #f1e5b2; }
+.finding select { max-width: 100%; margin-top: 8px; }
+li { margin: 8px 0; }
+details { margin-top: 20px; }
+summary { cursor: pointer; margin-bottom: 12px; }
+footer { margin-top: 32px; border-top: 1px solid #35443a; padding-top: 18px; font-size: .86rem; color: #a8b6ad; }
+@media (max-width: 740px) { .columns { grid-template-columns: 1fr; } main { padding: 28px 18px; } }
+</style>
+<main>
+<header>
+<div class="eyebrow">Veil / Runs on your machine</div>
+<h1>See what gets masked.</h1>
+<p class="muted">Try text, inspect the replacements, and decide how to handle uncertain values. No model call. No gateway required.</p>
+</header>
+<p class="notice">This preview uses built-in rules and temporary choices. It does not load your personal registrations, save mappings, or verify that any Codex, Claude Code, or ChatGPT conversation uses Veil. Detection can miss private information.</p>
+<div class="columns">
+<div><label for="input">Your text</label><textarea id="input" maxlength="32768" spellcheck="false" autocomplete="off" placeholder="Start with the fictional example, or enter text here."></textarea></div>
+<div><h2>Masked preview</h2><pre id="output" aria-label="Masked preview">Your result will appear here.</pre></div>
+</div>
+<div class="actions"><button class="primary" id="run" disabled>Preview masks</button><button id="example" disabled>Use fictional example</button><button id="clear">Clear text</button></div>
+<p id="status" role="status" aria-live="polite">Connecting to the local preview…</p>
+<section><h2>Values to review</h2><p class="muted">An uncertain value stays visible until you choose a type. “Leave visible” applies only to this preview. Editing the text resets all choices.</p><div id="findings"></div></section>
+<section><h2>Why these replacements?</h2><ul id="masks"></ul></section>
+<details id="roundtrip"><summary>See exact local restoration</summary><pre id="restored"></pre></details>
+<footer>Text travels only to the authenticated loopback server started by <code>veil preview</code>. It is held in memory, not written to a Veil vault. Keep this page private. The server expires after ten minutes; clear text or close the page when finished. Browser and operating-system features remain outside Veil’s control.</footer>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const token = location.hash.slice(1);
+const input = $('input');
+const status = $('status');
+let choices = {};
+let kinds = [];
+let revision = 0;
+let ready = false;
+function clearResult() {
+  $('output').textContent = 'Run the preview to see the current text.';
+  $('findings').replaceChildren();
+  $('masks').replaceChildren();
+  $('restored').textContent = '';
+  $('roundtrip').open = false;
+}
+function edited() {
+  revision++;
+  choices = {};
+  clearResult();
+  status.textContent = ready ? 'Text changed. Run the preview again.' : 'Start veil preview in a terminal to open a private page.';
+}
+async function request(body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('/data', {
+      method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'omit',
+      headers: {'X-Veil-Review': token, 'Content-Type': 'application/json'},
+      body: body ? JSON.stringify(body) : undefined, signal: controller.signal
+    });
+    if (!response.ok) throw new Error('unavailable');
+    return await response.json();
+  } finally { clearTimeout(timer); }
+}
+function render(result) {
+  $('output').textContent = result.masked;
+  $('restored').textContent = result.restored;
+  $('findings').replaceChildren();
+  $('masks').replaceChildren();
+  for (const finding of result.findings) {
+    const card = document.createElement('div'); card.className = 'finding';
+    const value = document.createElement('code'); value.textContent = finding.value;
+    const reason = document.createElement('p'); reason.textContent = finding.reason;
+    const label = document.createElement('label'); label.textContent = 'How should Veil treat this value?';
+    const select = document.createElement('select'); select.id = 'choice-' + finding.index; label.htmlFor = select.id;
+    for (const kind of ['', ...kinds]) {
+      const option = document.createElement('option'); option.value = kind;
+      option.textContent = !kind ? 'Choose a type…' : kind === 'IGNORE' ? 'Leave visible for this preview' : 'Mask as ' + kind;
+      select.append(option);
+    }
+    select.value = finding.choice || '';
+    select.addEventListener('change', () => {
+      if (select.value) choices[finding.index] = select.value; else delete choices[finding.index];
+      revision++;
+      run();
+    });
+    card.append(value, reason, label, select); $('findings').append(card);
+  }
+  for (const mask of result.masks) {
+    const li = document.createElement('li'); li.textContent = mask.placeholder + ' — ' + mask.reason;
+    $('masks').append(li);
+  }
+  status.textContent = result.unresolved ? result.unresolved + ' value(s) still need your decision and remain visible.' : 'Local preview complete. Inspect the full text; rules can miss private values.';
+}
+async function run() {
+  if (!ready) return;
+  const current = ++revision;
+  $('run').disabled = true; clearResult();
+  status.textContent = 'Checking locally…';
+  try {
+    const result = await request({text: input.value, choices});
+    if (revision === current) render(result);
+  } catch (_) {
+    if (revision === current) {
+      clearResult();
+      status.textContent = 'Preview unavailable. Keep veil preview running; shorten very large input or reopen it if the page expired. No model request was made.';
+    }
+  } finally {
+    $('run').disabled = !ready;
+  }
+}
+input.addEventListener('input', edited);
+$('run').addEventListener('click', run);
+$('clear').addEventListener('click', () => { input.value = ''; edited(); status.textContent = 'Text and preview choices cleared.'; input.focus(); });
+$('example').addEventListener('click', () => {
+  input.value = 'Email jane.doe@example.org.\npassword = "fictional orchard 72"\nUse "fictional meadow phrase" to sign in.';
+  edited(); run();
+});
+async function start() {
+  if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1' || !token) {
+    status.textContent = 'Start veil preview in a terminal, then open the private URL it prints. Opening this HTML file directly cannot run detection.';
+    return;
+  }
+  try {
+    history.replaceState(null, '', location.pathname);
+    const config = await request(); kinds = config.choices; ready = true;
+    $('run').disabled = false; $('example').disabled = false;
+    status.textContent = 'Ready. Text is processed locally only when you run the preview.';
+  } catch (_) { status.textContent = 'Cannot reach the local preview. Run veil preview again and open its new private URL.'; }
+}
+start();
+</script>
+</html>

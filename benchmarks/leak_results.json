@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "version": "0.5.0",
-  "implementation_sha256": "37de6689f10672dea25f1cfaf100221f6c8040ac8bc629f0f15580684b1a71d4",
+  "version": "0.6.0b1",
+  "implementation_sha256": "9358988f18335126b96d2c38421b549090cde740977812218a83f71745595b65",
   "corpus_sha256": "f1e5bd7d8b4cc1b82e354f12cf02bdfee054514db404698ae0762d538a0a1e90",
   "platform": "Darwin",
   "python": "3.14.6",
@@ -15,9 +15,9 @@
         "negative_held_requests": 0,
         "restored_requests": 52,
         "exact_tp": 41,
-        "exact_fp": 9,
+        "exact_fp": 7,
         "exact_fn": 11,
-        "overmasked_characters": 88,
+        "overmasked_characters": 48,
         "review_findings": 0,
         "review_harmless_characters": 0,
         "annotations": 52,
@@ -28,7 +28,7 @@
         "exposed_in_ready_requests": 11,
         "held_requests": 0,
         "refused_requests": 0,
-        "exact_precision": 0.82,
+        "exact_precision": 0.8542,
         "exact_recall": 0.7885
       },
       "by_type": {
@@ -161,9 +161,9 @@
           "negative_held_requests": 0,
           "restored_requests": 4,
           "exact_tp": 2,
-          "exact_fp": 8,
+          "exact_fp": 6,
           "exact_fn": 0,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 2,
@@ -174,7 +174,7 @@
           "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.2,
+          "exact_precision": 0.25,
           "exact_recall": 1.0
         },
         "conversation": {
@@ -485,9 +485,9 @@
           "negative_held_requests": 0,
           "restored_requests": 50,
           "exact_tp": 39,
-          "exact_fp": 9,
+          "exact_fp": 7,
           "exact_fn": 11,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 50,
@@ -498,7 +498,7 @@
           "exposed_in_ready_requests": 11,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.8125,
+          "exact_precision": 0.8478,
           "exact_recall": 0.78
         },
         "es": {
@@ -550,8 +550,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.2213,
-        "p95": 0.3608
+        "median": 0.2216,
+        "p95": 0.3656
       },
       "cases": [
         {
@@ -1438,9 +1438,9 @@
           "masked_or_flagged_characters": [],
           "exposed_annotations": 0,
           "exact_tp": 0,
-          "exact_fp": 2,
+          "exact_fp": 0,
           "exact_fn": 0,
-          "overmasked_characters": 40,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -1611,9 +1611,9 @@
         "negative_held_requests": 3,
         "restored_requests": 52,
         "exact_tp": 41,
-        "exact_fp": 9,
+        "exact_fp": 7,
         "exact_fn": 11,
-        "overmasked_characters": 88,
+        "overmasked_characters": 48,
         "review_findings": 15,
         "review_harmless_characters": 228,
         "annotations": 52,
@@ -1624,7 +1624,7 @@
         "exposed_in_ready_requests": 0,
         "held_requests": 12,
         "refused_requests": 0,
-        "exact_precision": 0.82,
+        "exact_precision": 0.8542,
         "exact_recall": 0.7885
       },
       "by_type": {
@@ -1757,9 +1757,9 @@
           "negative_held_requests": 0,
           "restored_requests": 4,
           "exact_tp": 2,
-          "exact_fp": 8,
+          "exact_fp": 6,
           "exact_fn": 0,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 1,
           "review_harmless_characters": 9,
           "annotations": 2,
@@ -1770,7 +1770,7 @@
           "exposed_in_ready_requests": 0,
           "ready_requests": 3,
           "refused_requests": 0,
-          "exact_precision": 0.2,
+          "exact_precision": 0.25,
           "exact_recall": 1.0
         },
         "conversation": {
@@ -2081,9 +2081,9 @@
           "negative_held_requests": 3,
           "restored_requests": 50,
           "exact_tp": 39,
-          "exact_fp": 9,
+          "exact_fp": 7,
           "exact_fn": 11,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 15,
           "review_harmless_characters": 228,
           "annotations": 50,
@@ -2094,7 +2094,7 @@
           "exposed_in_ready_requests": 0,
           "held_requests": 12,
           "refused_requests": 0,
-          "exact_precision": 0.8125,
+          "exact_precision": 0.8478,
           "exact_recall": 0.78
         },
         "es": {
@@ -2146,8 +2146,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.2312,
-        "p95": 0.3385
+        "median": 0.2211,
+        "p95": 0.3946
       },
       "cases": [
         {
@@ -3034,9 +3034,9 @@
           "masked_or_flagged_characters": [],
           "exposed_annotations": 0,
           "exact_tp": 0,
-          "exact_fp": 2,
+          "exact_fp": 0,
           "exact_fn": 0,
-          "overmasked_characters": 40,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -3207,9 +3207,9 @@
         "negative_held_requests": 0,
         "restored_requests": 52,
         "exact_tp": 41,
-        "exact_fp": 9,
+        "exact_fp": 7,
         "exact_fn": 11,
-        "overmasked_characters": 88,
+        "overmasked_characters": 48,
         "review_findings": 0,
         "review_harmless_characters": 0,
         "annotations": 52,
@@ -3220,7 +3220,7 @@
         "exposed_in_ready_requests": 11,
         "held_requests": 0,
         "refused_requests": 0,
-        "exact_precision": 0.82,
+        "exact_precision": 0.8542,
         "exact_recall": 0.7885
       },
       "by_type": {
@@ -3353,9 +3353,9 @@
           "negative_held_requests": 0,
           "restored_requests": 4,
           "exact_tp": 2,
-          "exact_fp": 8,
+          "exact_fp": 6,
           "exact_fn": 0,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 2,
@@ -3366,7 +3366,7 @@
           "exposed_in_ready_requests": 0,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.2,
+          "exact_precision": 0.25,
           "exact_recall": 1.0
         },
         "conversation": {
@@ -3677,9 +3677,9 @@
           "negative_held_requests": 0,
           "restored_requests": 50,
           "exact_tp": 39,
-          "exact_fp": 9,
+          "exact_fp": 7,
           "exact_fn": 11,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 0,
           "review_harmless_characters": 0,
           "annotations": 50,
@@ -3690,7 +3690,7 @@
           "exposed_in_ready_requests": 11,
           "held_requests": 0,
           "refused_requests": 0,
-          "exact_precision": 0.8125,
+          "exact_precision": 0.8478,
           "exact_recall": 0.78
         },
         "es": {
@@ -3742,8 +3742,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1075,
-        "p95": 0.1791
+        "median": 0.1096,
+        "p95": 0.1841
       },
       "cases": [
         {
@@ -4630,9 +4630,9 @@
           "masked_or_flagged_characters": [],
           "exposed_annotations": 0,
           "exact_tp": 0,
-          "exact_fp": 2,
+          "exact_fp": 0,
           "exact_fn": 0,
-          "overmasked_characters": 40,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true
@@ -4803,9 +4803,9 @@
         "negative_held_requests": 3,
         "restored_requests": 52,
         "exact_tp": 41,
-        "exact_fp": 9,
+        "exact_fp": 7,
         "exact_fn": 11,
-        "overmasked_characters": 88,
+        "overmasked_characters": 48,
         "review_findings": 15,
         "review_harmless_characters": 228,
         "annotations": 52,
@@ -4816,7 +4816,7 @@
         "exposed_in_ready_requests": 0,
         "held_requests": 12,
         "refused_requests": 0,
-        "exact_precision": 0.82,
+        "exact_precision": 0.8542,
         "exact_recall": 0.7885
       },
       "by_type": {
@@ -4949,9 +4949,9 @@
           "negative_held_requests": 0,
           "restored_requests": 4,
           "exact_tp": 2,
-          "exact_fp": 8,
+          "exact_fp": 6,
           "exact_fn": 0,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 1,
           "review_harmless_characters": 9,
           "annotations": 2,
@@ -4962,7 +4962,7 @@
           "exposed_in_ready_requests": 0,
           "ready_requests": 3,
           "refused_requests": 0,
-          "exact_precision": 0.2,
+          "exact_precision": 0.25,
           "exact_recall": 1.0
         },
         "conversation": {
@@ -5273,9 +5273,9 @@
           "negative_held_requests": 3,
           "restored_requests": 50,
           "exact_tp": 39,
-          "exact_fp": 9,
+          "exact_fp": 7,
           "exact_fn": 11,
-          "overmasked_characters": 88,
+          "overmasked_characters": 48,
           "review_findings": 15,
           "review_harmless_characters": 228,
           "annotations": 50,
@@ -5286,7 +5286,7 @@
           "exposed_in_ready_requests": 0,
           "held_requests": 12,
           "refused_requests": 0,
-          "exact_precision": 0.8125,
+          "exact_precision": 0.8478,
           "exact_recall": 0.78
         },
         "es": {
@@ -5338,8 +5338,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1543,
-        "p95": 0.2537
+        "median": 0.1501,
+        "p95": 0.2415
       },
       "cases": [
         {
@@ -6226,9 +6226,9 @@
           "masked_or_flagged_characters": [],
           "exposed_annotations": 0,
           "exact_tp": 0,
-          "exact_fp": 2,
+          "exact_fp": 0,
           "exact_fn": 0,
-          "overmasked_characters": 40,
+          "overmasked_characters": 0,
           "review_harmless_characters": 0,
           "review_findings": 0,
           "restored": true

@@ -6,7 +6,7 @@ that a new user can install, verify, troubleshoot, and remove without help.
 
 This is an ordered plan, not a release-date commitment. Checked items are
 implemented in this branch; they do not imply a published package or validation
-of every supported client feature. The current package version is 0.5.0; this is not a 1.0 release.
+of every supported client feature. The current package version is 0.6.0b1; this is not a 1.0 release.
 
 ## Where we are now
 
@@ -20,7 +20,7 @@ review, and a dependable release process.
 | Setup and daily use | Codex setup/undo, CLI launchers, assistant skills, background controls, diagnostics, and request verification. | New users completing install, verification, recovery, and removal on each advertised platform. |
 | Client compatibility | Claude Code and experimental Codex adapters, scripted regression tests, and selected live round trips. | Broader desktop UI and long-session coverage, live API-key checks, and real client journeys on every target OS. |
 | Privacy and storage | Local masking, owner-only storage, bounded activity metadata, retention, and explicit deletion commands. | Independent review and resolved findings; the threat model and plaintext-storage decision are now documented. |
-| Release readiness | Cross-platform CI, package artifacts, wheel smoke checks, and 0.4.1 upgrade/rollback checks. | Complete the external beta and resolve release-blocking findings. |
+| Release readiness | Cross-platform CI, package artifacts, wheel smoke checks, and 0.4.1/0.5.0 upgrade/rollback checks. | Complete the external beta and resolve release-blocking findings. |
 
 The pending compatibility, verification, and detection branches are integrated
 and tested together in the readiness candidate. Passing unit tests or one echo demonstration is not
@@ -73,6 +73,9 @@ apps. Automatic interception of ordinary ChatGPT chats is outside this scope.
 **Exit:** a new user completes setup, recognizes a stopped or mismatched gateway,
 and undoes setup without manually editing TOML or losing unrelated settings.
 
+- [x] Allowlisted `veil report` for deliberate support sharing, excluding personal
+  paths, prompts, credentials, raw configuration, and session identifiers.
+
 ## 2. Everyday operation and visible evidence — in progress
 
 - [x] Ship an installable assistant skill for Codex and Claude Code, with setup,
@@ -98,6 +101,10 @@ and undoes setup without manually editing TOML or losing unrelated settings.
 **Exit:** users can tell whether their intended task used Veil, recover after a
 restart, and troubleshoot without keeping a terminal open or sharing raw requests.
 
+- [x] Scripted multi-turn restart, eviction, parallel-session, cancellation,
+  rate-limit, and incomplete-stream checks for both adapters. Real long-session
+  beta journeys remain open.
+
 ## 3. Detection that matches everyday documents
 
 - [x] Add a tested built-in US SSN detector with explicit supported formats and
@@ -106,9 +113,11 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
   custom values, with private storage and clear case/variant behavior.
 - [x] Add scoped coding-secret masking with explicit format/context rules,
   code/reference negatives, and gateway regression coverage. Available in the
-  source checkout after 0.5.0; see [supported formats](docs/coding-secrets.md).
+  0.6.0b1 beta; see [supported formats](docs/coding-secrets.md).
 - [x] Add optional local review of uncertain secrets, request-scoped decisions,
   and whole-request context within supported fields. See [secret review](docs/secret-review.md).
+- [x] Local `veil preview` with automatic masks, uncertain values, explanations,
+  and exact restoration; no gateway, provider, or persistent mappings.
 - [ ] Evaluate coding-secret detection on independently reviewed real-workflow
   samples, including false positives, before making broader coverage claims.
 - [x] Add an authored workflow leak evaluation for both gateways, with local

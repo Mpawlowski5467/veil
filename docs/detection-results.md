@@ -1,6 +1,6 @@
 # Detection baseline
 
-This page records the published 0.5.0 baseline. The newer source-checkout
+This page records the published 0.5.0 baseline. The 0.6.0b1
 [coding-secret rules](coding-secrets.md) and local review have a separate
 [52-document workflow evaluation](leak-evaluation.md). They are not measured
 by the numbers below; do not combine the two different corpora into one score.

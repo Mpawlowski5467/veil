@@ -106,11 +106,11 @@ def test_review_is_not_credited_as_a_mask_or_an_automatic_confirmation():
 
 
 def test_false_positive_and_literal_placeholder_accounting():
-    row = leaks.measure(
-        document("password = settings.database_password"), "openai", False
-    )
+    # An unquoted weak literal is deliberately masked even in a harmless
+    # example; property references now remain readable (tested separately).
+    row = leaks.measure(document("password = example"), "openai", False)
     assert row["exact_fp"] == 1
-    assert row["overmasked_characters"] == len("settings.database_password")
+    assert row["overmasked_characters"] == len("example")
     literal = leaks.measure(
         document("See [PASSWORD_1] in the example."), "openai", True
     )

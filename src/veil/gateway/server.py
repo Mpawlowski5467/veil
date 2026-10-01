@@ -170,7 +170,9 @@ class Sessions:
     def get(self, session_id: str) -> Session:
         """Return the session for ``session_id``, making it if needed."""
         with self._lock:
-            return self._open(session_id)
+            session = self._open(session_id)
+            self._close_extra(exclude=session)
+            return session
 
     @contextmanager
     def use(self, session_id: str) -> Iterator[Session]:
@@ -178,6 +180,9 @@ class Sessions:
         with self._lock:
             session = self._open(session_id)
             session.users += 1
+            # Pin before eviction: when all older sessions are busy, the newly
+            # opened session must not be closed before this request uses it.
+            self._close_extra()
         try:
             yield session
         finally:
@@ -191,11 +196,14 @@ class Sessions:
             session = self._make_session(session_id)
             self._sessions[session_id] = session
         self._sessions.move_to_end(session_id)
-        self._close_extra()
         return session
 
-    def _close_extra(self) -> None:
-        idle = [key for key, s in self._sessions.items() if s.users == 0]
+    def _close_extra(self, *, exclude: Session | None = None) -> None:
+        idle = [
+            key
+            for key, s in self._sessions.items()
+            if s.users == 0 and s is not exclude
+        ]
         while len(self._sessions) > self._max_open and idle:
             session = self._sessions.pop(idle.pop(0))
             with session.lock:
@@ -971,6 +979,16 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     rest = restorer.feed(rest) + restorer.finish()
             if rest:
                 self._chunk(rest)
+            if (
+                restorer is not None
+                and not restorer.completed
+                and restorer.failed is None
+                and not restorer.terminal_error
+            ):
+                self._end_stream_with_error(
+                    "the API stream ended before completion; retry this request"
+                )
+                return False
             self._end_chunks()
             return bool(
                 restorer is not None

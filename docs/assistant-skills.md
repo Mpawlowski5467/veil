@@ -10,7 +10,7 @@ This guide covers installation options and everyday file workflows in more detai
 
 ## Install
 
-After installing the [0.5.0 release](first-five-minutes.md#1-install-the-released-version),
+After installing the [0.6.0b1 beta](first-five-minutes.md#1-install-the-released-version),
 run `veil skill install`. To install from a source checkout instead:
 
 ```sh
@@ -20,7 +20,7 @@ veil skill install
 
 Or use `uv run veil skill install` in the checkout. The `desktop` extra is needed
 for Codex configuration editing; skill installation and mask/restore work with
-the base package. These commands are included in the 0.5.0 prerelease.
+the base package. These commands are included in the 0.6.0b1 prerelease.
 
 The installer creates a personal `veil` skill in `~/.agents/skills` for Codex and
 `~/.claude/skills` for Claude Code. Install just one with `veil skill install
@@ -108,7 +108,7 @@ need registration. Compact or space-separated SSNs need an explicit label, and
 impossible SSN ranges are rejected. Undetected values can remain in output. Neither
 the skill nor the gateway is a sandbox for every local tool or network action.
 
-The source checkout after 0.5.0 also includes [coding-secret detection](coding-secrets.md)
+The 0.6.0b1 beta also includes [coding-secret detection](coding-secrets.md)
 for supported keys, tokens, passwords, private-key blocks, and URL credentials.
 The skill uses whatever rules its installed Veil runtime supplies; upgrade that
 runtime and restart/relaunch gateways before testing new detection rules.
@@ -145,3 +145,14 @@ An ordinary failed swap restores the old skill. If a process is killed during
 an update, preserve any `.veil-skill-previous-*` folder; it may contain the prior
 installation. Confirm no installer is still running before removing a stale
 `.veil-skill.lock` or recovering the previous directory.
+
+## Preview and troubleshooting
+
+Run `veil preview` yourself to enter private text into an ephemeral local page.
+It does not need a gateway and does not share input with your assistant. Ask the
+assistant to explain the command; do not paste real secrets into chat to test it.
+
+Use `veil report` to generate an allowlisted support report for deliberate
+sharing. `status --json` and `doctor --json` remain local detailed diagnostics
+and may include personal paths; they are not substitutes for `report`.
+See [preview](local-preview.md) and [support reports](support-report.md).

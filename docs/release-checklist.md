@@ -1,6 +1,6 @@
 # Beta and 1.0 release checklist
 
-The 0.5.0 checkout is a beta candidate under evaluation. It is not Veil 1.0.
+The 0.6.0b1 checkout is a beta candidate under evaluation. It is not Veil 1.0.
 All three target platforms — macOS, Linux, and native Windows — require evidence.
 Windows background service management is explicitly outside the current scope.
 
@@ -12,11 +12,12 @@ Windows background service management is explicitly outside the current scope.
   Codex setup/undo, protocol regressions, clipboard, and clean wheel installs.
 - Install the base wheel without desktop dependencies, then add `[desktop]` and
   exercise setup/undo and the skill's pinned runtime from outside the checkout.
-- Upgrade/rollback test using separate installed 0.4.1 and candidate wheels.
+- Upgrade/rollback test using separate installed 0.4.1, 0.5.0, and candidate wheels.
 - Live Codex ChatGPT and Claude runs; API-key runs separately with local keys.
-- Reproduce [detection measurements](detection-results.md); explain differences.
+- Reproduce [workflow measurements](leak-evaluation.md) against the unchanged corpus; explain per-case differences.
+- Run the local preview browser checks, report allowlist tests, and both adapters’ restart/concurrency/recovery scenarios.
 
-CI uploads wheel/source distributions as `veil-distributions`. These are review
+CI uploads wheel/source distributions as `veil-distributions-from-*`. These are review
 artifacts, not a PyPI release. Download artifacts only from the intended commit's
 successful run. Never include personal logs, credentials, vaults, or transcripts.
 

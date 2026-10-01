@@ -1,6 +1,6 @@
 # Review uncertain secrets locally
 
-**Source checkout feature after 0.5.0. The published 0.5.0 wheel does not include it.**
+**Included in the 0.6.0b1 beta. Upgrade from 0.5.0 to use it.**
 
 Veil can ask you about unfamiliar values before a model request leaves your
 computer. Clear matches still use the normal [coding-secret masking](coding-secrets.md).
@@ -168,3 +168,5 @@ values and a loopback provider. These checks do not establish a universal recall
 or precision score.
 The [workflow evaluation](leak-evaluation.md) reports automatic coverage and
 review holds separately, including false positives and simulated confirmation.
+
+To explore fictional text without a running gateway, use [`veil preview`](local-preview.md). Preview choices are temporary and do not approve held gateway requests.

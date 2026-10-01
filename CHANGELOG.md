@@ -1,11 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.6.0b1 — Beta
 
 ### Added
 
+- `veil report`: allowlisted, locally generated support JSON with strict versions, safe status codes, aggregate request counts, and optional existing-probe state. No automatic sharing, private paths, prompts, vault contents, or credentials.
+- `veil preview`: an authenticated, ephemeral loopback page for built-in masks, uncertain-value decisions, explanations, and exact restoration. No gateway or model call; choices do not persist or authorize gateway requests.
+- Both-adapter regression scenarios for 36-turn histories across three gateway instances, session-cache eviction, 32 concurrent conversations, cancelled clients, rate limits, interrupted streams, and review decisions after restart. Native CI includes these workflows on all three platforms; installed-wheel upgrades cover both 0.4.1 and 0.5.0.
+- Complete automatic masks for supported shell credential options, YAML blocks, quoted credential assertions, specific Polish/Spanish labels, and recovery codes.
+
 - Scoped auth/session-cookie, credential/signature-query, Unicode-escaped JSON-field and simple quoted-concatenation masking. Optional local review now covers sign-in and recovery-code cues, specified Polish/Spanish phrases, labelled webhook endpoints, explicitly encoded payloads, credential fragments within a request, and labelled names/addresses/birth dates/passport/license numbers. Original source spelling is retained for restoration.
-- Dedicated personal-data review choices in the local page and terminal, with persistent confirmed CLI mappings. Tests cover varied formats, false positives, review bounds, and confirmation/retry for every original workflow case. The unchanged 52-document corpus improves from 17 exposed occurrences with review on to zero; automatic coverage is 34/52, so the remaining cases still require review. See [measured results and limits](docs/leak-evaluation.md).
+- Dedicated personal-data review choices in the local page and terminal, with persistent confirmed CLI mappings. Tests cover varied formats, false positives, review bounds, and confirmation/retry for every original workflow case. The unchanged 52-document corpus improves from 17 exposed occurrences with review on to zero; automatic coverage is 41/52, so the remaining cases still require review. See [measured results and limits](docs/leak-evaluation.md).
 - A 52-document fictional workflow leak evaluation for both gateways with local review off/on, exact source-span and partial-mask accounting, false-positive/review burden metrics, checked-in results, per-case CI regression checks on all three OSes, and local HTTP request/response verification. Known misses stay in the denominator; see [results and limits](docs/leak-evaluation.md).
 - Optional local secret review (`secret_review: true`, `veil review`, and `veil mask --review`). Uncertain prose, multiword credentials and token-like values require an explicit local decision before forwarding; review decisions expire and are scoped to the exact request and session. Browser and terminal review use no remote classifier.
 - A second gateway traversal applies values learned later in the supported request to earlier occurrences, with regression coverage for partial masks inside candidate secrets.
@@ -15,6 +20,11 @@
 - Fictional detection and code/reference regression fixtures, persistent-session and local HTTP round trips for both adapters, and large-input checks. No live credentials or provider calls are needed.
 
 ### Fixed
+
+- Concurrent requests no longer evict and close a just-opened session before it is pinned when all older sessions are busy.
+- An Anthropic stream that ends before completion now returns an explicit retryable stream error instead of silently ending.
+- Known unquoted configuration/object credential properties remain readable while quoted lookalikes and weak bare passwords stay masked. On the unchanged 52-document corpus, extra/inexact masks fall from nine to seven and harmless characters masked from 88 to 48; all 41 automatic masks and exact restoration remain. Review on still holds 12 requests (three harmless), with zero annotated exposures in ready requests. Review off still exposes 11 occurrences; this is not a general accuracy guarantee.
+- The review page explains direct-file startup and failed fetch recovery.
 
 - Query credential masks preserve neighboring parameters. Request-wide review now enforces the shared candidate bound across all supported fields.
 - Labelled credentials on removed diff lines (for example `-DB_PASSWORD=...`) are masked, preserving the diff marker and exact restoration. The workflow corpus exposed a boundary rule that previously skipped those lines.

@@ -1,6 +1,8 @@
 # Compatibility and validation
 
-Evidence recorded 2026-09-29 for the 0.5.0 readiness candidate. **All three target
+The tables retain live-client evidence recorded 2026-09-29 for 0.5.0.
+The 0.6.0b1 candidate adds the scripted checks described below; it does not
+claim new live-provider or external beta evidence. **All three target
 platforms must pass before 1.0**, including native Windows. “CI passed” means
 scripted checks on a hosted runner; it does not mean a new user completed a
 real client journey. See [beta gates](release-checklist.md).
@@ -38,6 +40,21 @@ Claude compaction and replay have recorded/golden coverage; long natural session
 and updates still need the beta scenarios. Do not translate fixture coverage
 into “every client feature works.” The app-server lifecycle follows
 [official OpenAI documentation](https://learn.chatgpt.com/docs/app-server).
+
+## 0.6.0b1 scripted recovery and local interface checks
+
+Both adapters now run 36-turn histories across three gateway instances, forced
+session-cache eviction, 32 concurrent sessions, cancelled clients, rate-limit
+retry, incomplete-stream recovery, and review decisions after restart. The
+stress tests exposed and fixed premature session eviction and silent Anthropic
+stream termination. These use loopback fictional providers, not a live account.
+Native CI runs them on macOS/Linux/Windows with Python 3.10 and 3.14.
+
+Preview and support-report tests cover authenticated local access, unsafe-origin
+refusal, bounded input, strict output allowlists, exact restoration, and recovery.
+The shipped browser scripts have dependency-free Node checks. A manual macOS
+in-app-browser check exercised the fictional preview, classification, and exact
+restoration. This is a local preview UI check, not a Codex desktop routing test.
 
 ## Reproduce
 
