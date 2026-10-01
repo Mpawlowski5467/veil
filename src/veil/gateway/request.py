@@ -19,7 +19,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
-from ..detectors._secrets import credential_type
+from ..detectors._secrets import SECRET_TYPES, code_value, credential_type
 from ..detectors.manual import ManualDetector
 from ..placeholders import placeholder_type
 from ..secret_review import Candidate, request_candidates
@@ -157,6 +157,8 @@ class _Memo:
 
 # An exact placeholder, which the known-value pass leaves as it is.
 _EXACT = r"\[[A-Z][A-Z0-9_]{0,63}_[0-9]{1,9}\]"
+# A value of letters only, such as a dictionary-word password.
+_LETTERS = re.compile(r"[^\W\d_]+")
 
 
 class _KnownValues:
@@ -168,6 +170,13 @@ class _KnownValues:
     registered value, still present becomes its placeholder. A value is also
     found as it is spelled inside a JSON string (``Ada \"Q\" Quill``), the
     way a JSON reply gives it back restored.
+
+    Two kinds of detected secret are not matched this way. A stored secret
+    that reads as code (a type such as ``String``, or a credential word on
+    its own such as ``password``) is not matched at all. A secret that is a
+    single word of letters is matched only as a whole word, so words and
+    identifiers that contain it stay readable: a stored ``postgres`` leaves
+    ``postgresql://`` alone.
     """
 
     #: Shorter values would be masked inside too many ordinary words.
@@ -203,15 +212,28 @@ class _KnownValues:
             for placeholder, value in self._vault.items():
                 kind = placeholder_type(placeholder)
                 if kind not in (None, "LITERAL") and len(value) >= self.MIN_LENGTH:
+                    if kind in SECRET_TYPES and code_value(value):
+                        continue
                     types.setdefault(value, kind)
             self._types = types
             self._spelled = {
                 spelling: value for value in types for spelling in _spellings(value)
             }
+
+            def alternative(spelling: str) -> str:
+                value = self._spelled[spelling]
+                if (
+                    value not in self._registered
+                    and types[value] in SECRET_TYPES
+                    and _LETTERS.fullmatch(value)
+                ):
+                    return rf"(?<!\w){re.escape(spelling)}(?!\w)"
+                return re.escape(spelling)
+
             values = sorted(self._spelled, key=len, reverse=True)
             self._pattern = (
                 re.compile(
-                    f"(?P<ph>{_EXACT})|(?P<v>{'|'.join(map(re.escape, values))})"
+                    f"(?P<ph>{_EXACT})|(?P<v>{'|'.join(map(alternative, values))})"
                 )
                 if values
                 else None

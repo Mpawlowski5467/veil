@@ -460,6 +460,78 @@ class TestGluedValues:
         )
 
 
+class TestCodeValuesInKnownValues:
+    """Code is never stored as a secret, and one-word secrets match whole words."""
+
+    def masked(self, *contents, vault=None, registered=None):
+        shield = Shield(vault=vault if vault is not None else MemoryVault())
+        masker = RequestMasker(shield, MemoryLedger(), note=None, registered=registered)
+        roles = ("user", "assistant")
+        body = {
+            "messages": [
+                {"role": roles[index % 2], "content": content}
+                for index, content in enumerate(contents)
+            ]
+        }
+        return [m["content"] for m in masker.mask(body)["messages"]], shield
+
+    def test_code_goes_out_as_it_is_and_is_not_stored(self):
+        first = (
+            "pub struct Config { pub api_key: String }\n"
+            "client = Client(api_key=api_key, password=password)\n"
+            "    POSTGRES_PASSWORD: postgres"
+        )
+        second = (
+            "fn name() -> String { ToString::to_string(&x) }\n"
+            "hash_password(password)\n"
+            "image: postgres:16 at postgresql://db.example.com/app\n"
+            "I use the postgres image"
+        )
+        out, shield = self.masked(first, "ok", second)
+        assert out == [first, "ok", second]
+        assert len(shield.vault) == 0
+
+    def test_a_one_word_secret_is_masked_only_as_a_whole_word(self):
+        out, _ = self.masked(
+            'POSTGRES_PASSWORD: "postgres"\nPASSWORD=letmein',
+            "ok",
+            "url postgresql://db.example.com, image postgres:16, letmein_old, "
+            "use letmein.",
+        )
+        assert out[2] == (
+            "url postgresql://db.example.com, image [PASSWORD_1]:16, letmein_old, "
+            "use [PASSWORD_2]."
+        )
+
+    def test_code_stored_by_an_older_version_is_left_readable(self):
+        vault = MemoryVault()
+        for value, kind in (
+            ("String", "API_KEY"),
+            ("api_key", "API_KEY"),
+            ("password", "PASSWORD"),
+            ("Option", "TOKEN"),
+            ("fictional-orchard-42", "API_KEY"),
+        ):
+            vault.get_or_create(value, kind)
+        text = (
+            "fn a() -> String { ToString } config.api_key hash_password(password) "
+            "Option<u8> key fictional-orchard-42x"
+        )
+        out, shield = self.masked(text, vault=vault)
+        # A value that is not a single word is still masked glued to text.
+        assert out == [text.replace("fictional-orchard-42", "[API_KEY_3]")]
+        # The stored values still restore exactly.
+        assert shield.restore("[API_KEY_1] [PASSWORD_1]").text == "String password"
+
+    def test_a_registered_word_is_still_masked_glued_to_text(self):
+        out, _ = self.masked("xQuillbrook", registered={"Quillbrook": "PASSWORD"})
+        assert out == ["x[PASSWORD_1]"]
+
+    def test_a_quoted_compound_secret_stays_masked_where_it_reappears(self):
+        out, _ = self.masked('PASSWORD="Admin_Password"', "ok", "echo Admin_Password")
+        assert out == ['PASSWORD="[PASSWORD_1]"', "ok", "echo [PASSWORD_1]"]
+
+
 class TestKeysAndTypes:
     """Tool inputs and safeguards are JSON: keys and ``type`` values are data too."""
 
