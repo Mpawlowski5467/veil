@@ -458,14 +458,15 @@ def _hash_rocket_values(text: str) -> Iterator[Span]:
         if key is None or (kind := credential_type(key["name"])) is None:
             continue
         offsets = _assignment_value(text, cursor)
-        # An unfinished quote has uncertain boundaries; rescanning its tail
-        # for every later key would also be quadratic.
-        if offsets is None or offsets[1] == len(text):
-            return
+        if offsets is None:
+            continue
         start, end = offsets
         cursor = end + 1
+        # Truncated quoted input is protected through the end, as quoted '='
+        # and ':' assignments are; nothing remains to scan after it.
+        truncated = end == len(text)
         bare = not key["symbol"] and not key["quote"]
-        if bare and _ROCKET_END.match(text, cursor) is None:
+        if bare and not truncated and _ROCKET_END.match(text, cursor) is None:
             continue
         if _literal(text[start:end]):
             yield _span(text, start, end, kind)

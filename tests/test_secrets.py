@@ -305,6 +305,8 @@ def test_run_together_endings_shared_with_ordinary_words_need_a_separator(name):
         ),
         ('%{"token" => "fictional-orchard-42"}', "fictional-orchard-42", "TOKEN"),
         ("'password'=>'Fict-Meadow-46'", "Fict-Meadow-46", "PASSWORD"),
+        ("'password' => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
+        ("password => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
         (
             "  'password' => 'Fict-Meadow-46', # local only",
             "Fict-Meadow-46",
@@ -333,7 +335,6 @@ def test_hash_rocket_credentials_round_trip(source, value, kind):
         "password => $password,",
         "'password' => '${DB_PASSWORD}',",
         "'password' => '',",
-        "'password' => 'unfinished",
     ],
 )
 def test_arrow_functions_and_hash_references_stay_readable(source):
@@ -445,6 +446,10 @@ def test_large_coding_text_and_unterminated_quotes_complete_promptly():
     text = "'password' => 'x" * 20000
     start = time.monotonic()
     detector.detect(text)
+    assert time.monotonic() - start < 5
+    text = "'password' => 'x',\n" * 20000 + "'password' => 'unfinished"
+    start = time.monotonic()
+    assert any(s.end == len(text) for s in detector.detect(text))
     assert time.monotonic() - start < 5
     text = r"{\"password\":\"x" * 20000
     start = time.monotonic()
