@@ -40,9 +40,18 @@ _ASSIGNMENT = re.compile(
     # A removed diff line still contains a credential. Consume just its leading
     # '-' without relaxing boundaries inside ordinary identifiers.
     r"(?:(?<![\w.-])|(?m:^-))"
-    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})"
-    r"(?P=quote)[ \t]*(?::|=(?!=|>))[ \t]*"
+    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)"
+    # Go typed declarations such as: apiKey string = "..."
+    r"(?:[ \t]+(?:string|\[\]byte))?"
+    r"(?P<before>[ \t]*)(?P<separator>:?=(?![=>])|:)(?P<after>[ \t]*)"
 )
+# A type between ':' and the value: str =, Optional[str] =, &'static str =,
+# String :=, str="...". Bounded and lazy, so the first such '=' ends it.
+_ANNOTATION = re.compile(
+    r"(?P<type>[A-Za-z_&*(\[][\w.:&*?!<>\[\](), |']{0,127}?)"
+    r"(?:[ \t]+:?=(?![=>])[ \t]*|:?=(?![=>])(?=[ \t\"'`])[ \t]*)"
+)
+_QUOTES = frozenset("\"'`")
 _BARE = re.compile(r"[^\s\"'`<>{}\[\]()]+")
 _REFERENCE = re.compile(
     r"(?:\$\{[^}\r\n]+\}|\$[A-Za-z_]\w*|%[A-Za-z_]\w*%"
@@ -194,6 +203,49 @@ def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
     while end > start and text[end - 1] in ",;":
         end -= 1
     return start, end
+
+
+def _annotated(text: str, start: int) -> int | None:
+    """Where a value starts after a balanced type annotation, if there is one.
+
+    Parameter lists are not annotations: ``f(token: str, retries: int = 3)``
+    has a ',' and a single ':' outside any brackets, so it is rejected.
+    """
+    match = _ANNOTATION.match(text, start)
+    if match is None:
+        return None
+    annotation = match["type"]
+    depth = 0
+    for index, char in enumerate(annotation):
+        if char in "([<":
+            depth += 1
+        elif char in ")]>":
+            depth -= 1
+        # A path such as std::string is a type; a ',' or one ':' starts another
+        # parameter. The first character is never ':', so index - 1 is valid.
+        next_parameter = char == "," or (
+            char == ":" and "::" not in annotation[index - 1 : index + 2]
+        )
+        if depth < 0 or (depth == 0 and next_parameter):
+            return None
+    return match.end() if depth == 0 else None
+
+
+def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | None:
+    """Value offsets after an assignment, past any type annotation; flag quotes."""
+    start = match.end()
+    if match["separator"] == ":" and (value := _annotated(text, start)) is not None:
+        offsets = _assignment_value(text, value)
+        if offsets is None:
+            return None
+        if text[value : value + 1] in _QUOTES:
+            return (*offsets, True)
+        if offsets[1] <= offsets[0]:  # Nothing assigned: password: str = ;
+            return None
+        # A misread annotation must not leave part of a bare value visible.
+        return start, offsets[1], False
+    offsets = _assignment_value(text, start)
+    return None if offsets is None else (*offsets, text[start : start + 1] in _QUOTES)
 
 
 def _private_keys(text: str) -> Iterator[Span]:
@@ -448,13 +500,13 @@ def detect(text: str) -> list[Span]:
         assigned_type = credential_type(assignment["name"])
         if assigned_type is None or cursor in query_starts:
             continue
-        offsets = _assignment_value(text, cursor)
-        if offsets is not None:
-            start, end = offsets
+        value = _assigned_value(text, assignment)
+        if value is not None:
+            start, end, quoted = value
             cursor = max(cursor, end)
             if _literal(text[start:end]):
                 found.append(_span(text, start, end, assigned_type))
-                if text[assignment.end() : assignment.end() + 1] in {'"', "'", "`"}:
+                if quoted:
                     for fragment in _concatenated_literals(text, end, assigned_type):
                         found.append(fragment)
                         cursor = max(cursor, fragment.end + 1)

@@ -22,7 +22,7 @@ from ._review_context import PII_REVIEW_TYPES, contextual_values, fragment_conte
 from .detectors._secrets import (
     _ASSIGNMENT,
     SECRET_TYPES,
-    _assignment_value,
+    _assigned_value,
     _literal,
     credential_type,
 )
@@ -130,12 +130,12 @@ def candidates(
             _bounded(found)
     for match in _ASSIGNMENT.finditer(text):
         kind = credential_type(match["name"])
-        if kind is None or text[match.end() : match.end() + 1] in {'"', "'", "`"}:
+        if kind is None:
             continue
-        offsets = _assignment_value(text, match.end())
-        if offsets is None:
+        offsets = _assigned_value(text, match)
+        if offsets is None or offsets[2]:
             continue
-        start, end = offsets
+        start, end, _ = offsets
         line_end = text.find("\n", end)
         line_end = len(text) if line_end < 0 else line_end
         tail = text[end:line_end].strip()
