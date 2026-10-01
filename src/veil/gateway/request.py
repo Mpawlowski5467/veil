@@ -351,6 +351,10 @@ class RequestMasker:
 
     def confirm_secret(self, value: str, kind: str) -> None:
         """Remember an explicitly reviewed secret and invalidate earlier text."""
+        if self._registered.get(value) == kind and self._shield.vault.get_placeholder(
+            value
+        ):
+            return
         self._shield.add_entity(value, kind)
         self._shield.vault.get_or_create(value, kind)
         self._registered[value] = kind

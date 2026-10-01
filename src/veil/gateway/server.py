@@ -695,9 +695,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         )
                     with session.lock:
                         decisions = gateway.reviews.decisions(session_id, body) or {}
-                        for value, kind in decisions.items():
-                            if kind != "IGNORE":
-                                session.masker.confirm_secret(value, kind)
+                        for value, kind in gateway.reviews.confirmed(
+                            session_id
+                        ).items():
+                            session.masker.confirm_secret(value, kind)
                         masked = (
                             session.masker.mask(request, client_version=self._client)
                             if claude

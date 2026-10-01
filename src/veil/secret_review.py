@@ -175,6 +175,7 @@ class ReviewError(ValueError):
 class _Review:
     id: str
     expires: float
+    session: bytes = field(repr=False)
     findings: tuple[Candidate, ...] = field(repr=False)
     choices: dict[int, str] = field(default_factory=dict)
 
@@ -219,6 +220,23 @@ class ReviewQueue:
                 return None
             return {f.value: review.choices[i] for i, f in enumerate(review.findings)}
 
+    def confirmed(self, session: str) -> dict[str, str]:
+        """Learn explicit masking choices within a session, even on changed retries.
+
+        This never authorizes a release: ignore choices stay request-scoped.
+        A client may add request metadata between the refusal and retry.
+        """
+        with self._lock:
+            self._purge()
+            session_key = self._key(session, b"")
+            return {
+                review.findings[i].value: choice
+                for review in self._entries.values()
+                if review.session == session_key
+                for i, choice in review.choices.items()
+                if choice != "IGNORE"
+            }
+
     def hold(self, session: str, body: bytes, findings: tuple[Candidate, ...]) -> str:
         """Deduplicate an unresolved request and return its random review ID."""
         unique = {f.value: f for f in findings}
@@ -233,6 +251,7 @@ class ReviewQueue:
             review = _Review(
                 secrets.token_hex(16),
                 time.monotonic() + self._ttl,
+                self._key(session, b""),
                 tuple(unique.values()),
             )
             self._entries[key] = review

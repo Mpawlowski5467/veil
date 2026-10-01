@@ -470,3 +470,33 @@ def test_confirmed_cli_value_is_masked_again_in_same_session(
     monkeypatch.setattr("sys.stdin", io.StringIO(OPAQUE))
     assert cli.main(args) == 0
     assert capsys.readouterr().out == "[TOKEN_1]"
+
+
+@pytest.mark.parametrize("api", ["anthropic", "openai"])
+def test_confirmed_secret_masks_changed_retry_but_does_not_cross_sessions(
+    tmp_path, api
+):
+    fake = FakeAPI()
+    try:
+        with (
+            open_sessions(
+                tmp_path,
+                Settings(identity=False, note=False, secret_review=True),
+                {},
+                api=api,
+            ) as sessions,
+            Gateway(sessions, api=api, upstream=fake.host, secure=False) as gateway,
+        ):
+            request = body(api, f'My password is "{PHRASE}"')
+            assert send(gateway, request)[0].status == 403
+            review = gateway.reviews.report()["reviews"][0]
+            gateway.reviews.decide(review["id"], 0, "PASSWORD")
+            changed = body(api, f'On retry, my password is "{PHRASE}"')
+            send(gateway, changed)
+            assert len(fake.received) == 1
+            assert PHRASE.encode() not in fake.received[0][3]
+            assert b"[PASSWORD_1]" in fake.received[0][3]
+            assert send(gateway, changed, session="other")[0].status == 403
+            assert len(fake.received) == 1
+    finally:
+        fake.close()

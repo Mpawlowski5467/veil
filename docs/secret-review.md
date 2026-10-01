@@ -56,8 +56,8 @@ not print that secret or put it into the review page.
 3. Save every choice, then retry the original request in your client.
 
 The page does not submit a model request. Leave your original text in the client;
-Veil applies confirmed masks when you retry. If the client changes the request
-body, an earlier “Not a secret” choice does not authorize the changed request.
+Veil applies confirmed masks when you retry, even if the client changes metadata
+in that session. If the client changes the request body, an earlier “Not a secret” choice does not authorize the changed request.
 You may need to review it again. A terminal-only interface is also available:
 
 ```bash
@@ -108,8 +108,9 @@ are masked and the request continues on retry. Confirmed mappings use the existi
 session vault and can restore in supported replies. They are not registrations
 for unrelated sessions; use [private registration](entities.md) for that.
 
-Reviews and “Not a secret” decisions stay in gateway memory for ten minutes,
-scoped to the exact request bytes and session. The queue keeps at most 64 reviews,
+Reviews and “Not a secret” decisions are held only in gateway memory and expire
+after ten minutes; expired entries are discarded on the next queue operation.
+Ignore decisions are scoped to the exact request bytes and session. The queue keeps at most 64 reviews,
 100 distinct findings per request, and bounded value sizes. Expiry, eviction,
 restart, or queue limits never authorize a request: resend and review again.
 The review page closes access after ten minutes or when you stop its command.
