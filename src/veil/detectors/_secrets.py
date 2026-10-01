@@ -53,6 +53,11 @@ _ANNOTATION = re.compile(
 )
 _QUOTES = frozenset("\"'`")
 _BARE = re.compile(r"[^\s\"'`<>{}\[\]()]+")
+# YAML/INI/prose values run to the end of their clause, never stopping mid-phrase.
+_LINE_REST = re.compile(r"[^\r\n]*")
+_CLAUSE_END = re.compile(r"[ \t]+(?:#|//)|[.!?;,](?=[ \t]|$|\r|\n)")
+# The quote that closes a string around a label, as in -H "X-Api-Key: ...".
+_CLOSING = {q: re.compile(re.escape(q) + r"(?![^\s,;)\]}])") for q in _QUOTES}
 _REFERENCE = re.compile(
     r"(?:\$\{[^}\r\n]+\}|\$[A-Za-z_]\w*|%[A-Za-z_]\w*%"
     r"|\{\{[^\r\n]+\}\}|<[^>\r\n]+>|\[[A-Z][A-Z0-9_]*_[0-9]+\])\Z"
@@ -164,7 +169,14 @@ def detect_field(text: str, name: str) -> list[Span]:
     return []
 
 
-def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
+def _assignment_value(
+    text: str, start: int, *, clause: bool = False, closer: str = ""
+) -> tuple[int, int] | None:
+    """Offsets of an assigned value, or None for references and code.
+
+    Quoted values end at their quote; plain values after ':' or a spaced '='
+    end at their clause; compact NAME=value reads one shell word.
+    """
     if start == len(text):
         return None
     if text.startswith(("${", "{{", "#"), start):
@@ -202,6 +214,21 @@ def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
     end = match.end()
     while end > start and text[end - 1] in ",;":
         end -= 1
+    if (
+        clause
+        and end == match.end()
+        and text[end - 1] not in ".!?"
+        and (line := _LINE_REST.match(text, end))
+        and (tail := line[0].lstrip(" \t"))
+        and not tail.startswith(("#", "//", ")", "]", "}", ",", ";"))
+    ):
+        limit = line.end()
+        if closer and (close := _CLOSING[closer].search(text, end, limit)):
+            limit = close.start()
+        stop = _CLAUSE_END.search(text, end, limit)
+        end = stop.start() if stop else limit
+        while text[end - 1] in " \t":
+            end -= 1
     return start, end
 
 
@@ -234,8 +261,13 @@ def _annotated(text: str, start: int) -> int | None:
 def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | None:
     """Value offsets after an assignment, past any type annotation; flag quotes."""
     start = match.end()
+    clause = match["separator"] != "=" or bool(match["before"] or match["after"])
+    # A label that opens a string, as in curl -H "X-Api-Key: ...", ends with it.
+    name = match.start("name")
+    opener = "" if match["quote"] else text[name - 1 : name]
+    closer = opener if opener in _QUOTES else ""
     if match["separator"] == ":" and (value := _annotated(text, start)) is not None:
-        offsets = _assignment_value(text, value)
+        offsets = _assignment_value(text, value, clause=True, closer=closer)
         if offsets is None:
             return None
         if text[value : value + 1] in _QUOTES:
@@ -244,7 +276,7 @@ def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | 
             return None
         # A misread annotation must not leave part of a bare value visible.
         return start, offsets[1], False
-    offsets = _assignment_value(text, start)
+    offsets = _assignment_value(text, start, clause=clause, closer=closer)
     return None if offsets is None else (*offsets, text[start : start + 1] in _QUOTES)
 
 

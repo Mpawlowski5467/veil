@@ -1,6 +1,7 @@
 """Fictional credentials in typed declarations, Go assignments and clause values."""
 
 import json
+import time
 
 import pytest
 
@@ -217,3 +218,127 @@ def test_review_does_not_ask_about_masked_typed_declarations(tmp_path, api, sour
         masker = sessions.get("s").masker
         assert K not in json.dumps(masker.mask(body(api, source)))
         assert not masker.review_findings()
+
+
+@pytest.mark.parametrize(
+    ("source", "masked"),
+    [
+        ("Password: fictional orchard 72", "Password: [PASSWORD_1]"),
+        ("Password: fictional orchard 72.", "Password: [PASSWORD_1]."),
+        ("password: fictional orchard 72", "password: [PASSWORD_1]"),
+        ("  - password: fictional orchard 72", "  - password: [PASSWORD_1]"),
+        ("password: fictional orchard 72 # old", "password: [PASSWORD_1] # old"),
+        ("password = fictional orchard 72", "password = [PASSWORD_1]"),
+        (
+            "password: fict orchard, then sign in",
+            "password: [PASSWORD_1], then sign in",
+        ),
+        (
+            "Remember the password: it is in the vault",
+            "Remember the password: [PASSWORD_1]",
+        ),
+        ("password = fict orchard or default", "password = [PASSWORD_1]"),
+        ("token: Bearer fictional orchard", "token: [TOKEN_1]"),
+        ("password: abc= def", "password: [PASSWORD_1]"),
+        (
+            "db:\n  password: fictional orchard 72\n  user: jan\n",
+            "db:\n  password: [PASSWORD_1]\n  user: jan\n",
+        ),
+    ],
+)
+def test_unquoted_clause_is_masked_whole(source, masked):
+    shield = Shield()
+    assert shield.mask(source).text == masked
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize(
+    ("source", "masked"),
+    [
+        (
+            'curl -H "X-Api-Key: fict-key-123" https://api.example.com/v1',
+            'curl -H "X-Api-Key: [API_KEY_1]" https://api.example.com/v1',
+        ),
+        (
+            "curl -H 'X-Auth-Token: fict-key-123' https://api.example.com/v1",
+            "curl -H 'X-Auth-Token: [TOKEN_1]' https://api.example.com/v1",
+        ),
+        (
+            'echo "password: fict orchard 72" >> notes.txt',
+            'echo "password: [PASSWORD_1]" >> notes.txt',
+        ),
+        (
+            "echo 'Password: don't panic 42' >> notes.txt",
+            "echo 'Password: [PASSWORD_1]' >> notes.txt",
+        ),
+        ('log("token: fict orchard 72", level)', 'log("token: [TOKEN_1]", level)'),
+    ],
+)
+def test_label_that_opens_a_string_ends_with_it(source, masked):
+    shield = Shield()
+    assert shield.mask(source).text == masked
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize(
+    ("source", "masked"),
+    [
+        ("password: hunter2", "password: [PASSWORD_1]"),
+        ("password: abc=def", "password: [PASSWORD_1]"),
+        ("password = hunter2 # note", "password = [PASSWORD_1] # note"),
+        ("password = hunter2  // note", "password = [PASSWORD_1]  // note"),
+        ("f(password = pw)", "f(password = [PASSWORD_1])"),
+        ('"token": 123, "user": "x"', '"token": [TOKEN_1], "user": "x"'),
+        ("DB_PASSWORD=fict-42 uv run app.py", "DB_PASSWORD=[PASSWORD_1] uv run app.py"),
+        ("password=fict user=jan", "password=[PASSWORD_1] user=jan"),
+        # A compact NAME=value reads one shell word; quote multiword values.
+        ("PASSWORD=fictional orchard 72", "PASSWORD=[PASSWORD_1] orchard 72"),
+        # A first word that ends a sentence ends the value.
+        ("password: fict. orchard 72", "password: [PASSWORD_1] orchard 72"),
+    ],
+)
+def test_single_word_forms_are_unchanged(source, masked):
+    shield = Shield()
+    assert shield.mask(source).text == masked
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize("api", ["anthropic", "openai"])
+@pytest.mark.parametrize(
+    "source",
+    ["Password: fictional orchard 72.", "password: fictional orchard 72 # old"],
+)
+def test_clause_values_do_not_ask_again(tmp_path, api, source):
+    with open_sessions(
+        tmp_path, Settings(identity=False, note=False, secret_review=True), {}, api=api
+    ) as sessions:
+        masker = sessions.get("s").masker
+        assert "orchard" not in json.dumps(masker.mask(body(api, source)))
+        assert not masker.review_findings()
+
+
+@pytest.mark.parametrize(
+    ("source", "value"),
+    [
+        ("PASSWORD=fictional orchard 72", "fictional orchard 72"),
+        ("password: fict. orchard 72", "fict. orchard 72"),
+    ],
+)
+def test_compact_multiword_and_sentence_cut_still_ask(source, value):
+    assert [(c.value, c.kind) for c in candidates(source)] == [(value, "PASSWORD")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "password: " + "a " * 50000,
+        ("password: " + "A" * 120 + " ") * 2000,
+        ('"password: ' + "A" * 120 + " x ") * 2000,
+        "password=" + "a=password=" * 20000,
+    ],
+)
+def test_long_clause_stays_bounded(text):
+    start = time.monotonic()
+    Shield().mask(text)
+    candidates(text)
+    assert time.monotonic() - start < 5
