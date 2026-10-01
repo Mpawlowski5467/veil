@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Security
+
+- `veil review` and `veil preview` now open their page with a one-time link. The page exchanges it for a private session when it starts, so the link no longer grants access once the page is open; opening the page again needs a new command. On Linux, these pages also accept only connections from the OS account that started them. Previously, on a Linux computer shared with other accounts, another local account could gain access to an open review or preview page, including pending review values and review choices. Windows and default macOS setups were not affected. Update if you use `veil review` on a shared Linux machine.
+
 ### Fixed
 
 - `veil claude` and `veil codex` (including `--forget-after-run`) no longer crash on native Windows right after starting the client. The launcher passed on SIGHUP, which Windows doesn't have; the client was left running against a stopped gateway. Signals are now handled per platform: Ctrl-C and Ctrl-Break reach the client directly, SIGTERM (and SIGHUP on macOS/Linux) is passed on, and the client is stopped whenever the launcher exits early.
