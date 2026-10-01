@@ -63,6 +63,18 @@ def send(gateway, text, *, session="resumed", history=()):
     )
 
 
+def finished_activity(gateway, requests):
+    # A client may read the final HTTP chunk before the server's finally block
+    # records completion. Await that observable condition, not a fixed delay.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        activity = gateway.activity.summary()["sessions"]
+        if sum(item["completed"] + item["failed"] for item in activity) == requests:
+            return activity
+        time.sleep(0.01)
+    raise AssertionError("gateway did not finish request accounting")
+
+
 @contextmanager
 def running(directory, protocol, fake, *, review=False):
     sessions = open_sessions(
@@ -144,7 +156,7 @@ def test_concurrent_sessions_cannot_restore_each_others_values(
             list(pool.map(one, range(32)))
         assert len(fake.received) == 32
         assert all(b"@example.org" not in item[3] for item in fake.received)
-        activity = gateway.activity.summary()["sessions"]
+        activity = finished_activity(gateway, 32)
         assert sum(item["completed"] for item in activity) == 32
         assert sum(item["failed"] for item in activity) == 0
 
@@ -191,13 +203,13 @@ def test_rate_limit_and_incomplete_stream_can_retry_without_losing_mappings(
         status, raw = send(gateway, "retry@example.org")
         assert status.status == 200
         assert b"error" in raw
-        activity = gateway.activity.summary()["sessions"][0]
+        activity = finished_activity(gateway, 2)[0]
         assert activity["completed"] == 0
         assert activity["failed"] == 2
         reply(fake, protocol, "[EMAIL_1]")
         assert b"retry@example.org" in send(gateway, "retry@example.org")[1]
         assert all(b"retry@example.org" not in item[3] for item in fake.received)
-        activity = gateway.activity.summary()["sessions"][0]
+        activity = finished_activity(gateway, 3)[0]
         assert (activity["requests"], activity["completed"], activity["failed"]) == (
             3,
             1,
@@ -230,12 +242,7 @@ def test_cancelled_client_does_not_block_new_request(tmp_path, protocol, fake):
         assert (
             b"next@example.org" in send(gateway, "next@example.org", session="next")[1]
         )
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            activity = gateway.activity.summary()["sessions"]
-            if sum(item["failed"] for item in activity) == 1:
-                break
-            time.sleep(0.01)
+        activity = finished_activity(gateway, 2)
         assert sum(item["failed"] for item in activity) == 1
         assert sum(item["completed"] for item in activity) == 1
         assert all(b"@example.org" not in item[3] for item in fake.received)

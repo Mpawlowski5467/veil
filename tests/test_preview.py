@@ -94,7 +94,15 @@ def test_preview_transport_requires_local_capability_and_does_not_echo_errors(ca
             )
             assert response.status == 400
             assert private.encode() not in body
-            assert browser_call(server, "POST", data="x" * 262_145)[0].status == 400
+            # Reject an oversized declared body before reading any bytes. If
+            # we race to upload the whole body, early refusal may reset TCP
+            # before the client can read the 400 on some operating systems.
+            assert (
+                browser_call(server, "POST", headers={"Content-Length": "262145"})[
+                    0
+                ].status
+                == 400
+            )
         finally:
             server.shutdown()
             worker.join()
