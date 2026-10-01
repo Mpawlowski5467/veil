@@ -10,7 +10,7 @@ import pytest
 from test_gateway_server import FakeAPI, call
 from veil import cli
 from veil.gateway import Gateway, Settings, open_sessions
-from veil.gateway.config import SettingsError, parse_settings
+from veil.gateway.config import SettingsError, parse_settings, prepare_data_dir
 from veil.review_cli import ReviewServer, _gateway_request, run_review
 from veil.secret_review import (
     REVIEW_PATH,
@@ -74,6 +74,7 @@ def test_local_reasons_and_values(text, value, kind):
         "api key is ${OPENAI_API_KEY}",
         "x" * 100_000,
     ],
+    ids=["prose", "identifiers", "placeholder", "environment", "braces", "large-input"],
 )
 def test_ordinary_code_references_and_masked_values_do_not_prompt(text):
     assert not candidates(text)
@@ -294,8 +295,7 @@ def test_settings_boolean_only(tmp_path):
 
 
 def test_cli_review_confirm_and_restore(tmp_path, monkeypatch, capsys):
-    directory = tmp_path / "private"
-    directory.mkdir(mode=0o700)
+    directory = prepare_data_dir(tmp_path / "private")
     (directory / "config.json").write_text('{"identity":false}')
     source = f'My password is "{PHRASE}"'
     monkeypatch.setattr("sys.stdin", io.StringIO(source))
@@ -317,6 +317,8 @@ def test_cli_review_confirm_and_restore(tmp_path, monkeypatch, capsys):
 def test_cancelled_review_never_writes_stdout_or_clipboard(
     tmp_path, monkeypatch, capsys
 ):
+    directory = prepare_data_dir(tmp_path / "private")
+
     def cancel(*args):
         raise SettingsError("review cancelled; no output written")
 
@@ -328,7 +330,7 @@ def test_cancelled_review_never_writes_stdout_or_clipboard(
         cli.main(
             [
                 "--data-dir",
-                str(tmp_path),
+                str(directory),
                 "mask",
                 "--session",
                 "s",
@@ -342,6 +344,7 @@ def test_cancelled_review_never_writes_stdout_or_clipboard(
     assert not captured.out
     assert not writes
     assert PHRASE not in captured.err
+    assert "review cancelled" in captured.err
 
 
 def test_review_command_refuses_pipes_before_reading_private_findings(monkeypatch):
@@ -452,9 +455,10 @@ def test_recognized_pem_does_not_ask_about_tokens_inside_it(tmp_path):
 def test_confirmed_cli_value_is_masked_again_in_same_session(
     tmp_path, monkeypatch, capsys
 ):
-    (tmp_path / "config.json").write_text('{"identity": false}')
+    directory = prepare_data_dir(tmp_path / "private")
+    (directory / "config.json").write_text('{"identity": false}')
     monkeypatch.setattr("veil.review_cli.ask_terminal", lambda *_: "TOKEN")
-    args = ["--data-dir", str(tmp_path), "mask", "--session", "s", "--review"]
+    args = ["--data-dir", str(directory), "mask", "--session", "s", "--review"]
     monkeypatch.setattr("sys.stdin", io.StringIO(OPAQUE))
     assert cli.main(args) == 0
     assert capsys.readouterr().out == "[TOKEN_1]"
