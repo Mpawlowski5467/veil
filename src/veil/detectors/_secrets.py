@@ -66,7 +66,6 @@ _CODE_REFERENCE = re.compile(
     r"(?:os\.(?:environ|getenv)|(?:process\.env|import\.meta\.env)"
     r"(?:\.[A-Za-z_]\w*)?)\Z"
 )
-_PROPERTY_REFERENCE = re.compile(r"(?:settings|config|self|this)(?:\.[A-Za-z_]\w*)+\Z")
 _AUTH = re.compile(
     r"(?i:\b(?P<scheme>Bearer|Basic))[ \t]+(?P<value>[A-Za-z0-9._~+/-]{8,}=*)"
     r"(?![\w.~+/=-])"
@@ -129,6 +128,29 @@ _BLOCK_HEADER = re.compile(
     r":[ \t]*(?P<marker>[|>](?:[1-9][+-]?|[+-][1-9]?)?)"
     r"[ \t]*(?:#[^\r\n]*)?\r?\n"
 )
+# Bare values after a credential name that are types or literals, not
+# credentials. Never add ordinary words that are also weak passwords (admin,
+# secret, postgres): those stay protected.
+_CODE_WORD_LIST = (
+    "None null nil NULL nullptr undefined true false ~ "
+    "str string String Str int bytes bool boolean Boolean number Number "
+    "any Any unknown object Object char byte float double long Integer Long "
+    "rune u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64 "
+    "int32 int64 uint float64 Option Optional Vec Box Arc Rc Cow "
+    "SecretStr SecretBytes SecretString SecureString CharSequence"
+)
+_CODE_WORDS = frozenset(_CODE_WORD_LIST.split())
+# Credential names on their own, compared without case, '_', '.' or '-'.
+_CREDENTIAL_WORD_LIST = (
+    "password passwd passphrase pwd pass secret secretkey apikey token privatekey"
+)
+_CREDENTIAL_WORDS = frozenset(_CREDENTIAL_WORD_LIST.split())
+# Reference, pointer, slice and nullable marks around a type name.
+_TYPE_DECORATION = re.compile(r"\A(?:&(?:mut)?|\*|\[\])+|(?:\[\]|\?)+\Z")
+_IDENTIFIER = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", re.ASCII)
+_COMPOUND = re.compile(r"[_.]|[a-z0-9][A-Z]")
+# A capitalized type glued to '<': Option<String>, Secret<String>.
+_GENERIC = re.compile(r"(?:\w+::)*[A-Z]\w*", re.ASCII)
 
 
 def credential_type(name: str) -> str | None:
@@ -152,6 +174,40 @@ def credential_type(name: str) -> str | None:
     return None
 
 
+def _fold(value: str) -> str:
+    return re.sub(r"[_.-]", "", value.lower())
+
+
+def _name_words(name: str) -> set[str]:
+    """Each word of a field name, and all of them run together."""
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    parts = [part for part in re.split(r"[_.-]+", separated.lower()) if part]
+    return {*parts, "".join(parts)}
+
+
+def code_value(value: str, name: str | None = None) -> bool:
+    """Whether an unquoted value after a credential field reads as code.
+
+    Code is a type (``String``, ``&str``, ``Option``), a repeat of the field
+    name or one of its words (``api_key=API_KEY``, ``POSTGRES_PASSWORD:
+    postgres``), or an identifier named after a credential
+    (``password=db_password``). Without ``name``, only types and credential
+    words on their own count, so a compound value such as ``Admin_Password``
+    stays protected.
+    """
+    if value in {"&", "&mut"}:  # a reference before a lifetime or 'mut'
+        return True
+    if re.split(r"::|\.", _TYPE_DECORATION.sub("", value))[-1] in _CODE_WORDS:
+        return True
+    if not _IDENTIFIER.fullmatch(value):
+        return False
+    if name is None:
+        return _fold(value) in _CREDENTIAL_WORDS
+    if credential_type(value) and _COMPOUND.search(value):
+        return True
+    return _fold(value) in _name_words(name)
+
+
 def _span(text: str, start: int, end: int, kind: str) -> Span:
     return Span(start, end, text[start:end], kind, "secret", 1)
 
@@ -170,7 +226,12 @@ def detect_field(text: str, name: str) -> list[Span]:
 
 
 def _assignment_value(
-    text: str, start: int, *, clause: bool = False, closer: str = ""
+    text: str,
+    start: int,
+    *,
+    clause: bool = False,
+    closer: str = "",
+    name: str | None = None,
 ) -> tuple[int, int] | None:
     """Offsets of an assigned value, or None for references and code.
 
@@ -202,12 +263,12 @@ def _assignment_value(
         next_char += 1
     if (
         (next_char < len(text) and text[next_char] in "([")
+        or (text[match.end() : match.end() + 1] == "<" and _GENERIC.fullmatch(value))
         or _CODE_REFERENCE.fullmatch(value)
-        # Only known configuration/object roots and a credential attribute.
-        # Quoted lookalikes are literals and were handled above. Arbitrary bare
-        # identifiers remain protected: they may be weak passwords.
-        or (_PROPERTY_REFERENCE.fullmatch(value) and credential_type(value))
-        or value in {"None", "null", "true", "false", "str", "string", "int", "bytes"}
+        # Code is a type, an echo of the field name, or a credential-named
+        # identifier. Quoted lookalikes are literals and were handled above.
+        # Other bare identifiers stay protected: they may be weak passwords.
+        or code_value(value, name)
     ):
         return None
     # A trailing source-code terminator is not part of a bare assignment.
@@ -286,7 +347,9 @@ def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | 
     opener = "" if match["quote"] else text[name - 1 : name]
     closer = opener if opener in _QUOTES else ""
     if match["separator"] == ":" and (value := _annotated(text, start)) is not None:
-        offsets = _assignment_value(text, value, clause=True, closer=closer)
+        offsets = _assignment_value(
+            text, value, clause=True, closer=closer, name=match["name"]
+        )
         if offsets is None:
             return None
         if text[value : value + 1] in _QUOTES:
@@ -297,7 +360,9 @@ def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | 
         return start, offsets[1], False
     if text[start : start + 1] in _QUOTES and _ends_string(text, match):
         return None
-    offsets = _assignment_value(text, start, clause=clause, closer=closer)
+    offsets = _assignment_value(
+        text, start, clause=clause, closer=closer, name=match["name"]
+    )
     return None if offsets is None else (*offsets, text[start : start + 1] in _QUOTES)
 
 
@@ -471,7 +536,7 @@ def _escaped_fields(text: str) -> Iterator[Span]:
         except ValueError:
             continue
         kind = credential_type(name)
-        offsets = _assignment_value(text, field.end()) if kind else None
+        offsets = _assignment_value(text, field.end(), name=name) if kind else None
         if kind and offsets:
             start, end = offsets
             if _literal(text[start:end]):
