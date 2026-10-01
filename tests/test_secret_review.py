@@ -3,7 +3,11 @@
 import http.client
 import io
 import json
+import os
+import socket
+import sys
 import threading
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
@@ -13,7 +17,13 @@ from veil import cli
 from veil.gateway import Gateway, Settings, open_sessions
 from veil.gateway.config import SettingsError, parse_settings, prepare_data_dir
 from veil.launches import review_command
-from veil.review_cli import ReviewServer, _gateway_request, run_review
+from veil.review_cli import (
+    ReviewServer,
+    _gateway_request,
+    _same_account,
+    _socket_owner,
+    run_review,
+)
 from veil.secret_review import (
     REVIEW_PATH,
     Candidate,
@@ -508,6 +518,141 @@ def test_launch_link_is_single_use_and_never_the_session_token():
             assert not calls
             assert browser_call(server)[0].status == 200
             assert calls == [None]
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+TCP_HEADER = (
+    "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when"
+    " retrnsmt   uid  timeout inode\n"
+)
+
+
+def tcp_row(local, remote, state, uid):
+    return (
+        f"   0: {local} {remote} {state} 00000000:00000000 00:00000000"
+        f" 00000000  {uid}        0 4242 1 0000000000000000 20 4 30 10 -1\n"
+    )
+
+
+V6 = "0000000000000000FFFF0000"
+
+
+@pytest.mark.skipif(sys.byteorder != "little", reason="little-endian tables")
+@pytest.mark.parametrize(
+    ("client_port", "expected"),
+    [
+        (50000, 1000),  # this account's established client socket
+        (50001, 1001),  # another account's established client socket
+        (50002, None),  # closing rows report no owner
+        (50003, None),  # the server's side of a pair is not the client
+        (50004, None),  # same port from a different loopback source
+        (50005, 1002),  # dual-stack client in the tcp6 table
+        (50006, None),  # no row at all
+    ],
+)
+def test_socket_owner_matches_only_the_exact_established_client(client_port, expected):
+    # C350..C355 are client ports 50000..50005; 1F90 is server port 8080.
+    tcp = TCP_HEADER + "".join(
+        (
+            tcp_row("0100007F:C350", "0100007F:1F90", "01", 1000),
+            tcp_row("0100007F:C351", "0100007F:1F90", "01", 1001),
+            tcp_row("0100007F:C352", "0100007F:1F90", "06", 0),
+            tcp_row("0100007F:1F90", "0100007F:C353", "01", 1000),
+            tcp_row("0200007F:C354", "0100007F:1F90", "01", 1000),
+        )
+    )
+    tcp6 = TCP_HEADER + tcp_row(V6 + "0100007F:C355", V6 + "0100007F:1F90", "01", 1002)
+    assert _socket_owner([tcp, tcp6], ("127.0.0.1", client_port), 8080) == expected
+
+
+@pytest.mark.skipif(sys.byteorder != "little", reason="little-endian tables")
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX accounts")
+def test_same_account_reads_both_tables_and_fails_closed(monkeypatch):
+    files = {}
+
+    class Table:
+        def __init__(self, name):
+            self.name = name
+
+        def read_text(self, encoding):
+            if self.name not in files:
+                raise PermissionError(self.name)
+            return files[self.name]
+
+    monkeypatch.setattr("veil.review_cli.sys.platform", "linux")
+    monkeypatch.setattr("veil.review_cli.Path", Table)
+    client, own, other = ("127.0.0.1", 50000), os.getuid(), os.getuid() + 1
+    assert not _same_account(client, 8080)
+    files["/proc/net/tcp"] = TCP_HEADER
+    assert not _same_account(client, 8080)
+    for uid, expected in ((own, True), (other, False)):
+        row = tcp_row(V6 + "0100007F:C350", V6 + "0100007F:1F90", "01", uid)
+        files["/proc/net/tcp6"] = TCP_HEADER + row
+        assert _same_account(client, 8080) is expected
+
+
+def test_other_account_cannot_bootstrap_or_read():
+    calls, seen = [], []
+
+    def callback(choice):
+        calls.append(choice)
+        return {"reviews": []}
+
+    def other_account(client, port):
+        seen.append((client, port))
+        return False
+
+    with ReviewServer(callback) as server:
+        worker = threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.01}
+        )
+        worker.start()
+        try:
+            code = server.launch
+            server.same_account = other_account
+            assert browser_call(server, path="/", auth=False)[0].status == 403
+            response, raw = browser_call(server, "POST", "/session", token=code)
+            assert response.status == 403
+            assert server.token.encode() not in raw
+            assert browser_call(server)[0].status == 403
+            assert server.launch == code
+            assert not calls
+            assert len(seen) == 3
+            for (host, port), server_port in seen:
+                assert host == "127.0.0.1"
+                assert type(port) is int
+                assert server_port == server.server_port
+            # The refused attempts did not use up the user's own launch code.
+            server.same_account = lambda client, port: True
+            response, raw = browser_call(server, "POST", "/session", token=code)
+            assert response.status == 200
+            assert json.loads(raw) == {"token": server.token}
+            assert browser_call(server)[0].status == 200
+            assert calls == [None]
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux tcp tables")
+def test_same_account_on_this_kernel():
+    with ReviewServer(lambda choice: {"reviews": []}) as server:
+        with socket.create_connection(("127.0.0.1", server.server_port)) as raw:
+            client = raw.getsockname()[:2]
+            tables = [
+                Path("/proc/net/tcp").read_text(),
+                Path("/proc/net/tcp6").read_text(),
+            ]
+            assert _socket_owner(tables, client, server.server_port) == os.getuid()
+            assert _same_account(client, server.server_port) is True
+        worker = threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.01}
+        )
+        worker.start()
+        try:
+            assert browser_call(server)[0].status == 200
         finally:
             server.shutdown()
             worker.join()
