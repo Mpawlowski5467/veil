@@ -314,6 +314,10 @@ updated source checkout. Veil asks you to classify uncertain findings on a priva
 local page before that request can be sent. Confirmed secrets are masked; unresolved
 findings keep the request local. For files, use `veil mask --session draft --review`.
 
+The [workflow leak evaluation](docs/leak-evaluation.md) measures both gateways on
+fictional prompts, configuration files, diffs, and tool outputs. It records known
+misses and false positives, including cases that local review does not catch.
+
 Coding-secret matches are masked into placeholders such as `[API_KEY_1]` and
 `[PASSWORD_1]`; supported requests continue, and replies restore locally.
 Credential names inside parsed tool data are preserved as detection context.

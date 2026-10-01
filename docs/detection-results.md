@@ -1,8 +1,9 @@
 # Detection baseline
 
 This page records the published 0.5.0 baseline. The newer source-checkout
-[coding-secret rules](coding-secrets.md) have separate fictional regression
-fixtures and are not measured by the numbers below.
+[coding-secret rules](coding-secrets.md) and local review have a separate
+[52-document workflow evaluation](leak-evaluation.md). They are not measured
+by the numbers below; do not combine the two different corpora into one score.
 
 Measured 2026-09-29 with Veil 0.5.0. This is a small, authored regression corpus:
 **30 fictional documents, 53 annotated occurrences, 8 language tags**, and

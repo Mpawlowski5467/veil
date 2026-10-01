@@ -171,9 +171,17 @@ jobs:
           tests/test_gateway_request.py tests/test_gateway_blocks.py
           tests/test_gateway_golden.py tests/test_gateway_leaks.py
           tests/test_gateway_request_fuzz.py tests/test_openai_gateway.py
-          tests/test_ssn.py tests/test_secrets.py tests/test_secret_review.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
+          tests/test_ssn.py tests/test_secrets.py tests/test_secret_review.py tests/test_leak_evaluation.py tests/test_shield.py tests/test_regex_detector.py tests/test_manual_detector.py
           tests/test_masker.py tests/test_restorer.py tests/test_stream.py
           tests/test_fuzz.py tests/test_readme.py
+      - name: Measure fictional workflow leaks and check the baseline
+        run: uv run python benchmarks/leaks.py --check --output leak-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: leak-evaluation-${{ runner.os }}-py${{ matrix.python }}
+          path: leak-report.json
+          if-no-files-found: warn
       - name: Install native Linux clipboard tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xclip xvfb

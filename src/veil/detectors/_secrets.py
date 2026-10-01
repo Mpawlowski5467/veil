@@ -35,7 +35,10 @@ _BEGIN_KEY = re.compile(
     r"-----BEGIN (?P<kind>(?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED) )?PRIVATE KEY)-----"
 )
 _ASSIGNMENT = re.compile(
-    r"(?<![\w.-])(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})"
+    # A removed diff line still contains a credential. Consume just its leading
+    # '-' without relaxing boundaries inside ordinary identifiers.
+    r"(?:(?<![\w.-])|(?m:^-))"
+    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})"
     r"(?P=quote)[ \t]*(?::|=(?!=|>))[ \t]*"
 )
 _BARE = re.compile(r"[^\s\"'`<>{}\[\]()]+")

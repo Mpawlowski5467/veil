@@ -102,6 +102,26 @@ def test_named_literals_preserve_surrounding_code(name, kind, layout):
     assert shield.restore(masked.text).text == text
 
 
+@pytest.mark.parametrize("prefix", ["-", "+", " "])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_diff_credentials_on_removed_added_and_context_lines(prefix, newline):
+    text = f"--- a/settings.env{newline}+++ b/settings.env{newline}"
+    text += f'{prefix}DB_PASSWORD="fictional-diff-password"{newline}'
+    text += f"{prefix}TOKEN_FILE=/run/secrets/token{newline}"
+    shield = Shield()
+    masked = shield.mask(text)
+    assert masked.text == text.replace("fictional-diff-password", "[PASSWORD_1]")
+    assert shield.restore(masked.text).text == text
+
+
+def test_removed_diff_password_at_start_of_input():
+    shield = Shield()
+    assert (
+        shield.mask("-PASSWORD=fictional-removed-value").text
+        == "-PASSWORD=[PASSWORD_1]"
+    )
+
+
 @pytest.mark.parametrize("value", ["x", "1234", "weak", "two words", "a\nb", PASSWORD])
 def test_json_escaped_password_and_parsed_field_are_lossless(value):
     source = json.dumps({"password": value}, ensure_ascii=False)

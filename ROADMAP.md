@@ -111,6 +111,12 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
   and whole-request context within supported fields. See [secret review](docs/secret-review.md).
 - [ ] Evaluate coding-secret detection on independently reviewed real-workflow
   samples, including false positives, before making broader coverage claims.
+- [x] Add an authored workflow leak evaluation for both gateways, with local
+  review off/on, per-occurrence regression checks, and local HTTP verification.
+  [52-document results and remaining gaps](docs/leak-evaluation.md). This does
+  not complete independent sampling or security review.
+- [ ] Address measured cookie/signed-link/recovery-code misses and encoded or
+  split credentials; reduce URL over-masking and code/prose false positives.
 - [x] Maintain labeled, fictional test corpora; measure missed values and false
   positives by entity type, format, and language, plus masking latency.
   [Initial 30-document baseline](docs/detection-results.md); broader sampling remains.

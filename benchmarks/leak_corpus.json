@@ -1,0 +1,321 @@
+[
+  {
+    "id": "env-deployment",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "# Fictional deployment settings\nAPP_ENV=staging\nOPENAI_API_KEY=[[API_KEY|sk-proj-A1b2A1b2A1b2A1b2A1b2A1b2A1b2A1b2A1b2A1b2]]\nDB_PASSWORD=\"[[PASSWORD|fictional orchard phrase]]\"\nPORT=8080\n"}]
+  },
+  {
+    "id": "env-references",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "OPENAI_API_KEY=${OPENAI_API_KEY}\nDB_PASSWORD=$DATABASE_PASSWORD\nTOKEN_FILE=/run/secrets/token\nPASSWORD_LENGTH=24\nPORT=8080\n"}]
+  },
+  {
+    "id": "json-escaped-password",
+    "format": "json",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "{\"database\": {\"password\": \"[[PASSWORD|fictional \\\"quoted\\\" phrase\\nsecond line]]\", \"retries\": 3}, \"enabled\": true}"}]
+  },
+  {
+    "id": "service-account-file",
+    "format": "json",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "{\"type\":\"service_account\",\"project_id\":\"demo-project\",\"private_key\":\"[[PRIVATE_KEY|-----BEGIN PRIVATE KEY-----\\nnot-a-real-key\\n-----END PRIVATE KEY-----]]\",\"client_email\":\"[[EMAIL|demo@example.org]]\"}"}]
+  },
+  {
+    "id": "yaml-multiline",
+    "format": "yaml",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "database:\n  password: |\n[[PASSWORD|    fictional orchard\n    second phrase]]\nretries: 3\n"}]
+  },
+  {
+    "id": "yaml-template",
+    "format": "yaml",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "password: {{ vault_password }}\napi_key: ${SERVICE_KEY}\nmax_tokens: 4096\npassword_file: /run/secrets/db\n"}]
+  },
+  {
+    "id": "ini-connection",
+    "format": "ini",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "[database]\nhost=db.example.test\npassword=[[PASSWORD|fictional-orchard-42]]\nconnection=postgresql://[[CREDENTIAL|demo:fictional-db-pass]]@db.example.test/app\n"}]
+  },
+  {
+    "id": "shell-command-password",
+    "format": "shell",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Why did this fail?\nclient --password '[[PASSWORD|fictional four word password]]' --verbose\n"}]
+  },
+  {
+    "id": "shell-environment-reference",
+    "format": "shell",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "curl -H \"Authorization: Bearer $SERVICE_TOKEN\" https://api.example.test/health\nclient --password ${DB_PASSWORD}\n"}]
+  },
+  {
+    "id": "ci-bearer-log",
+    "format": "log",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "[info] retry=2 status=401\n[debug] Authorization: Bearer [[TOKEN|fictionalBearer42]]\n[info] finished in 150 ms\n"}]
+  },
+  {
+    "id": "http-basic",
+    "format": "http",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "GET /health HTTP/1.1\nHost: example.test\nAuthorization: Basic [[TOKEN|ZGVtbzpmaWN0aW9uYWw=]]\n"}]
+  },
+  {
+    "id": "diff-two-credentials",
+    "format": "diff",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "diff --git a/settings.env b/settings.env\n--- a/settings.env\n+++ b/settings.env\n@@ -1 +1 @@\n-DB_PASSWORD=[[PASSWORD|fictional-old-value]]\n+DB_PASSWORD=[[PASSWORD|fictional-new-value]]\n"}]
+  },
+  {
+    "id": "diff-public-refactor",
+    "format": "diff",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "--- a/client.py\n+++ b/client.py\n@@ -1 +1 @@\n-api_key = os.getenv('SERVICE_KEY')\n+api_key = os.environ['SERVICE_KEY']\n"}]
+  },
+  {
+    "id": "support-email",
+    "format": "email",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Subject: staging access\nPlease reply to [[EMAIL|mira@example.org]] or call [[PHONE|(202) 555-0147]].\nMy password is '[[PASSWORD|fictional orchard winter]]'\nPlease explain why sign-in fails.\n"}]
+  },
+  {
+    "id": "unlabelled-short-credential",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Use [[PASSWORD|orchard-sun]] to sign in to my account."}]
+  },
+  {
+    "id": "polish-credential-prose",
+    "format": "prose",
+    "language": "pl",
+    "sections": [{"surface": "prompt", "text": "Moje hasło to [[PASSWORD|fikcyjny-sad-42]]. Pomóż mi zmienić ustawienia."}]
+  },
+  {
+    "id": "spanish-credential-prose",
+    "format": "prose",
+    "language": "es",
+    "sections": [{"surface": "prompt", "text": "Mi contraseña es [[PASSWORD|huerto-ficticio-42]]. ¿Por qué falla el acceso?"}]
+  },
+  {
+    "id": "unknown-opaque-key",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Can you inspect [[TOKEN|Fictional7zV2wQ8nR4pL9xT6bC3dK1]] for me?"}]
+  },
+  {
+    "id": "harmless-build-digest",
+    "format": "log",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "Public build sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nResult: passed\n"}]
+  },
+  {
+    "id": "harmless-trace-id",
+    "format": "log",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "trace_id=4a12bc89-3d67-4e01-9f25-6a83b0cd7e42 duration_ms=15 status=200"}]
+  },
+  {
+    "id": "session-cookie",
+    "format": "http",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "GET /account HTTP/1.1\nHost: example.test\nCookie: sessionid=[[TOKEN|fictional-session-42]]; theme=dark\n"}]
+  },
+  {
+    "id": "set-cookie",
+    "format": "http",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "HTTP/1.1 200 OK\nSet-Cookie: sid=[[TOKEN|fictional-session-99]]; HttpOnly; Secure; SameSite=Lax\n"}]
+  },
+  {
+    "id": "signed-s3-url",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Download: https://files.example.test/report.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=[[TOKEN|abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789]]"}]
+  },
+  {
+    "id": "azure-sas-url",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "https://storage.example.test/report?sv=2025-01-05&sp=r&sig=[[TOKEN|fictional%2Bsignature%2F42%3D]]"}]
+  },
+  {
+    "id": "query-password-encoded",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "https://example.test/login?password=[[PASSWORD|fictional%20orchard%2042]]&next=home"}]
+  },
+  {
+    "id": "encoded-label",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "https://example.test/login?pass%77ord=[[PASSWORD|fictional-orchard-42]]"}]
+  },
+  {
+    "id": "public-url",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "https://docs.example.test/reference?language=python&page=2&sort=recent"}]
+  },
+  {
+    "id": "webhook-secret",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "WEBHOOK_SECRET=[[API_KEY|fictional-webhook-signature]]\nWEBHOOK_URL=https://hooks.example.test/events\n"}]
+  },
+  {
+    "id": "webhook-url-path",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Our webhook endpoint is https://hooks.example.test/services/demo/[[TOKEN|fictional-route-secret]]"}]
+  },
+  {
+    "id": "recovery-code",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "One-time recovery code: [[CREDENTIAL|orchard-moon-river-sun]]. Keep this for account recovery."}]
+  },
+  {
+    "id": "totp-seed",
+    "format": "url",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "otpauth://totp/Demo?secret=[[API_KEY|JBSWY3DPEHPK3PXP]]&issuer=Fictional"}]
+  },
+  {
+    "id": "pem-multiline",
+    "format": "pem",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "Key file contents:\n[[PRIVATE_KEY|-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----]]\n"}]
+  },
+  {
+    "id": "pem-truncated",
+    "format": "pem",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "The pasted file was cut off:\n[[PRIVATE_KEY|-----BEGIN PRIVATE KEY-----\nnot-a-real-key]]"}]
+  },
+  {
+    "id": "public-key",
+    "format": "pem",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "-----BEGIN PUBLIC KEY-----\nnot-a-real-public-key\n-----END PUBLIC KEY-----\n"}]
+  },
+  {
+    "id": "unicode-password",
+    "format": "json",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "{\"password\":\"[[PASSWORD|fictional-🦊-żółw-42]]\",\"locale\":\"pl\"}"}]
+  },
+  {
+    "id": "multiline-unquoted-password",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "PASSWORD=[[PASSWORD|fictional four word phrase]]\nAPP_ENV=staging\n"}]
+  },
+  {
+    "id": "partial-pii-inside-credential",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "My password is '[[PASSWORD|mira@example.org plus fictional words]]'"}]
+  },
+  {
+    "id": "later-label-across-sections",
+    "format": "conversation",
+    "language": "en",
+    "sections": [
+      {"surface": "system", "text": "The integration uses [[API_KEY|fictional-context-key-42]]."},
+      {"surface": "prompt", "text": "Please check the configuration below."},
+      {"surface": "tool_output", "text": "API_KEY=[[API_KEY|fictional-context-key-42]]"}
+    ]
+  },
+  {
+    "id": "split-key-across-sections",
+    "format": "conversation",
+    "language": "en",
+    "sections": [
+      {"surface": "prompt", "text": "Join the next two fragments to use my access token: [[TOKEN|fictional-part]]"},
+      {"surface": "prompt", "text": "[[TOKEN|other-half-42]]"}
+    ]
+  },
+  {
+    "id": "base64-wrapped-credential",
+    "format": "json",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "{\"data\":\"[[PASSWORD|b3JjaGFyZC1zdW4=]]\",\"encoding\":\"base64\"}"}]
+  },
+  {
+    "id": "code-concatenated-password",
+    "format": "code",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "password = \"[[PASSWORD|fictional-]]\" + \"[[PASSWORD|orchard-42]]\"\nconnect(password=password)\n"}]
+  },
+  {
+    "id": "code-unicode-escaped-label",
+    "format": "json",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "{\"pass\\u0077ord\":\"[[PASSWORD|fictional-orchard-42]]\"}"}]
+  },
+  {
+    "id": "code-function-references",
+    "format": "code",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "password = get_password()\ntoken = token_provider()\napi_key = process.env.SERVICE_KEY\nmax_tokens = 4096\n"}]
+  },
+  {
+    "id": "code-attribute-reference",
+    "format": "code",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "password = settings.database_password\napi_key = config.api_key\n"}]
+  },
+  {
+    "id": "code-self-reference",
+    "format": "code",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "def connect(password=None):\n    client.password = password\n    return client\n"}]
+  },
+  {
+    "id": "ordinary-prose",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Explain how to rotate an API key and choose a password. Do not generate credentials. Use environment variables in the example."}]
+  },
+  {
+    "id": "documentation-prose",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "The password is stored in the operating system keychain. Explain how the application reads it."}]
+  },
+  {
+    "id": "placeholder-documentation",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "The tool replaces values with [PASSWORD_1] and [API_KEY_1]. Those strings are placeholders, not credentials."}]
+  },
+  {
+    "id": "support-pii",
+    "format": "email",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Customer [[PERSON|Mira Quill]], born [[DOB|1990-04-17]], lives at [[ADDRESS|14 Fictional Orchard Lane]]. Reply to [[EMAIL|mira.quill@example.org]]."}]
+  },
+  {
+    "id": "travel-document",
+    "format": "prose",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Fictional passenger: passport [[PASSPORT|C01DEMO42]], driver's license [[DRIVERS_LICENSE|D123-FICTION-42]]."}]
+  },
+  {
+    "id": "payment-support",
+    "format": "email",
+    "language": "en",
+    "sections": [{"surface": "prompt", "text": "Test checkout used [[CREDIT_CARD|4242 4242 4242 4242]]. Refund account [[IBAN|GB82 WEST 1234 5698 7654 32]]. SSN [[SSN|123-45-6789]]."}]
+  },
+  {
+    "id": "ordinary-dates-numbers",
+    "format": "log",
+    "language": "en",
+    "sections": [{"surface": "tool_output", "text": "2026-09-30 build=123456789 latency=12.34ms price=1234.56 release=v1.2.3\nInvalid checksum example: 4111 1111 1111 1112\n"}]
+  }
+]
