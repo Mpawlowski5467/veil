@@ -4,6 +4,9 @@
 
 ### Added
 
+- Optional local secret review (`secret_review: true`, `veil review`, and `veil mask --review`). Uncertain prose, multiword credentials and token-like values require an explicit local decision before forwarding; review decisions expire and are scoped to the exact request and session. Browser and terminal review use no remote classifier.
+- A second gateway traversal applies values learned later in the supported request to earlier occurrences, with regression coverage for partial masks inside candidate secrets.
+
 - Default coding-secret masking for supported provider key/token prefixes, JWT-shaped strings, Bearer/Basic values in text, labelled credentials, private-key blocks, and URL userinfo. Matches use `API_KEY`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, and `CREDENTIAL` placeholders and restore locally. See [formats and limits](docs/coding-secrets.md).
 - `Shield.mask(text, field_name=...)` retains context for parsed credential strings. Both gateways apply it to supported tool/data fields; numeric credential fields are refused instead of silently changing their type. Activity summaries expose only the new standard type counts.
 - Fictional detection and code/reference regression fixtures, persistent-session and local HTTP round trips for both adapters, and large-input checks. No live credentials or provider calls are needed.

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Veil · Private review</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.55 system-ui; background: #101820; color: #e5edea; }
+  body { max-width: 850px; margin: 50px auto; padding: 0 24px; }
+  h1 { font-size: 36px; letter-spacing: -1px; }
+  .tag { color: #80d7b0; text-transform: uppercase; letter-spacing: 2px; font-size: 12px; }
+  p { color: #b4c3bf; }
+  article { background: #1a262e; border: 1px solid #354850; border-radius: 14px; padding: 22px; margin: 18px 0; }
+  button, select { font: inherit; padding: 10px 14px; border-radius: 8px; border: 1px solid #50625f; margin: 8px 10px 0 0; background: #263a40; color: inherit; max-width: 100%; }
+  button { background: #86dfb5; color: #101820; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #111b22; padding: 14px; border-radius: 8px; }
+  summary { cursor: pointer; color: #86dfb5; }
+  small { color: #b4c3bf; }
+  #status { min-height: 30px; color: #86dfb5; }
+</style>
+<body>
+  <div class="tag">Veil · On this computer</div>
+  <h1>Review before sending</h1>
+  <p>These values might be secrets. Choose what each one is, or explicitly allow it
+    for this request. Nothing is sent to your model provider by this page.</p>
+  <p>Keep this page private. Confirmed values are masked on retry; “Not a secret”
+    allows that value for this exact request only. After saving every choice,
+    retry in your AI client.</p>
+  <button id="refresh">Refresh findings</button>
+  <div id="status" role="status"></div>
+  <main id="reviews"></main>
+<script>
+const token = location.hash.slice(1);
+history.replaceState(null, '', location.pathname);
+const status = document.getElementById('status');
+const root = document.getElementById('reviews');
+const labels = {
+  API_KEY: 'API key',
+  PASSWORD: 'Password or passphrase',
+  TOKEN: 'Access token',
+  PRIVATE_KEY: 'Private key',
+  CREDENTIAL: 'Other credential',
+  IGNORE: 'Not a secret — allow this request'
+};
+
+async function request(choice) {
+  const response = await fetch('/data', {
+    method: choice ? 'POST' : 'GET',
+    cache: 'no-store',
+    headers: { 'X-Veil-Review': token, 'Content-Type': 'application/json' },
+    body: choice ? JSON.stringify(choice) : undefined
+  });
+  if (!response.ok) {
+    throw Error('Review unavailable or expired. Refresh, or retry your original request.');
+  }
+  return response.json();
+}
+
+function findingCard(review, finding) {
+  const card = document.createElement('article');
+  const why = document.createElement('div');
+  why.textContent = 'Possible ' + (labels[finding.kind] || 'credential') + ' · ' + finding.reason;
+  card.append(why);
+
+  // Request content is always text, never HTML, including candidate values.
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  const value = document.createElement('pre');
+  summary.textContent = 'Reveal value locally (' + finding.value.length + ' characters)';
+  value.textContent = finding.value;
+  details.append(summary, value);
+  card.append(details);
+
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', 'Classify finding ' + (finding.index + 1));
+  select.add(new Option('Choose a classification…', ''));
+  for (const [key, label] of Object.entries(labels)) select.add(new Option(label, key));
+  select.value = finding.choice || '';
+  const save = document.createElement('button');
+  save.textContent = finding.choice ? 'Update choice' : 'Save choice';
+  save.disabled = !select.value;
+  select.onchange = () => { save.disabled = !select.value; };
+  save.onclick = async () => {
+    save.disabled = true;
+    try {
+      await request({ id: review.id, index: finding.index, choice: select.value });
+      await refresh();
+    } catch (error) {
+      status.textContent = error.message;
+      save.disabled = false;
+    }
+  };
+  card.append(select, save);
+  return card;
+}
+
+async function refresh() {
+  try {
+    const data = await request();
+    root.replaceChildren();
+    let pending = 0;
+    for (const review of data.reviews) {
+      const section = document.createElement('section');
+      const heading = document.createElement('h2');
+      heading.textContent = 'Request ' + review.id.slice(0, 8);
+      section.append(heading);
+      const hint = document.createElement('small');
+      hint.textContent = 'Expires in ' + review.remaining_seconds + ' seconds. ' +
+        (review.complete ? 'Choices saved. Retry in your client.' : 'All findings need a choice.');
+      section.append(hint);
+      for (const finding of review.findings) {
+        if (!finding.choice) pending++;
+        section.append(findingCard(review, finding));
+      }
+      root.append(section);
+    }
+    status.textContent = !data.reviews.length
+      ? 'No requests awaiting review. Send a test through Veil, then refresh.'
+      : pending
+        ? pending + (pending === 1 ? ' finding needs' : ' findings need') + ' your decision.'
+        : 'All choices saved. Retry your request in the client.';
+  } catch (error) {
+    // Clear stale values and choices when the gateway or review expires.
+    root.replaceChildren();
+    status.textContent = error.message;
+  }
+}
+document.getElementById('refresh').onclick = refresh;
+refresh();
+</script>
+</body>
+</html>

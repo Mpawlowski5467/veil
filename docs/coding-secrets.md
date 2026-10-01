@@ -72,6 +72,13 @@ placeholder without changing its type. The gateways refuse such inputs rather
 than forwarding the number or silently changing the tool schema. A number inside
 an ordinary text assignment, such as `password=1234`, can be masked normally.
 
+## Ask about uncertain values
+
+Enable [local secret review](secret-review.md) to review prose credentials,
+ambiguous multiword values, and unfamiliar token-like strings before sending.
+The gateway holds uncertain requests until you classify each finding locally.
+Automatic masks still continue normally; no remote classifier receives the input.
+
 ## Unknown formats and custom rules
 
 Register an exact private value locally with `veil entities add TOKEN` or

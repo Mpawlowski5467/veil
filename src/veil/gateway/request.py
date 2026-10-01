@@ -20,7 +20,9 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
 from ..detectors._secrets import credential_type
+from ..detectors.manual import ManualDetector
 from ..placeholders import placeholder_type
+from ..secret_review import Candidate, candidates
 from ..shield import Shield
 from ..vault.base import Vault
 from .ledger import Ledger
@@ -173,6 +175,10 @@ class _KnownValues:
 
     def __init__(self, vault: Vault, registered: Mapping[str, str]) -> None:
         self._vault = vault
+        self._short_registered = ManualDetector()
+        for value, kind in registered.items():
+            if len(value) < self.MIN_LENGTH:
+                self._short_registered.add(value, kind)
         self._registered = {
             value: kind
             for value, kind in registered.items()
@@ -241,6 +247,22 @@ class _KnownValues:
         pattern = self._registered_pattern
         return pattern is not None and pattern.search(text) is not None
 
+    def unprotected(self, text: str) -> str:
+        """Blank known values without moving offsets, for partial-secret review."""
+        pattern = self._current()
+        visible = (
+            text
+            if pattern is None
+            else pattern.sub(
+                lambda match: " " * len(match[0]) if match["v"] else match[0], text
+            )
+        )
+        for span in reversed(self._short_registered.detect(text)):
+            visible = (
+                visible[: span.start] + " " * len(span.value) + visible[span.end :]
+            )
+        return visible
+
     def folded_in(self, text: str, *, min_length: int) -> bool:
         """Whether ``text`` holds a known value, however it is spelled.
 
@@ -291,6 +313,8 @@ class RequestMasker:
             vault has them.
         memo_limit: Roughly how many characters of masked text to keep for
             reuse (see above).
+        secret_review: Collect uncertain findings for the gateway's local
+            review gate. Direct users must call `review_findings` before sending.
     """
 
     def __init__(
@@ -301,6 +325,7 @@ class RequestMasker:
         note: str | None = DEFAULT_NOTE,
         registered: Mapping[str, str] | None = None,
         memo_limit: int = 64_000_000,
+        secret_review: bool = False,
     ) -> None:
         """Create a masker for one conversation."""
         self._shield = shield
@@ -309,6 +334,7 @@ class RequestMasker:
         self._memo_limit = memo_limit
         self._memo = _Memo(memo_limit)
         self._known = _KnownValues(shield.vault, registered or {})
+        self._registered = dict(registered or {})
         self._vault_state: tuple[int, tuple[str, str] | None] = (0, None)
         self._problems: list[tuple[str, str]] = []
         self._client_version: str | None = None
@@ -320,8 +346,51 @@ class RequestMasker:
         #: Where the last `mask` call found content without a rule of its
         #: own, which it masked generically (paths with indices dropped).
         self.last_generic: tuple[str, ...] = ()
+        self.secret_review = secret_review
+        self._review_texts: set[str] = set()
+
+    def confirm_secret(self, value: str, kind: str) -> None:
+        """Remember an explicitly reviewed secret and invalidate earlier text."""
+        self._shield.add_entity(value, kind)
+        self._shield.vault.get_or_create(value, kind)
+        self._registered[value] = kind
+        self._known = _KnownValues(self._shield.vault, self._registered)
+        self._memo = _Memo(self._memo_limit)
 
     def mask(
+        self, body: dict[str, Any], *, client_version: str | None = None
+    ) -> dict[str, Any]:
+        """Learn values across the request, then mask with that complete context.
+
+        Repeat the adapter's own traversal, never a blind rewrite of protocol
+        fields. Memoized detection keeps the second traversal inexpensive.
+        """
+        self._review_texts.clear()
+        try:
+            before = len(self._shield.vault)
+            out = self._mask_once(body, client_version=client_version)
+            if len(self._shield.vault) != before:
+                self._review_texts.clear()
+                out = self._mask_once(body, client_version=client_version)
+            return out
+        except Exception:
+            self._review_texts.clear()
+            raise
+
+    def review_findings(self) -> tuple[Candidate, ...]:
+        """Scan supported model text locally, after automatic masking finishes."""
+        try:
+            found: dict[str, Candidate] = {}
+            for text in self._review_texts:
+                for candidate in candidates(
+                    text, visible=self._known.unprotected(text)
+                ):
+                    found[candidate.value] = candidate
+            return tuple(found.values())
+        finally:
+            self._review_texts.clear()
+
+    def _mask_once(
         self, body: dict[str, Any], *, client_version: str | None = None
     ) -> dict[str, Any]:
         """Return a copy of a request body with every model-read text masked.
@@ -1210,9 +1279,12 @@ class RequestMasker:
         key = hashlib.sha256(context.encode("utf-8", "surrogatepass")).hexdigest()
         cached = self._memo.get(key)
         if cached is not None:
-            return self._known.mask(cached)
-        masked = _mask_text(self._shield, self._known, text, field_name=field_name)
-        self._memo.put(key, masked)
+            masked = self._known.mask(cached)
+        else:
+            masked = _mask_text(self._shield, self._known, text, field_name=field_name)
+            self._memo.put(key, masked)
+        if self.secret_review:
+            self._review_texts.add(text)
         return masked
 
     def _known_everywhere(self, value: Any, path: str) -> Any:

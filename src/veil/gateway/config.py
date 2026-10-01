@@ -42,6 +42,8 @@ class Settings:
             it was last used.
         note: Tell the model about placeholders in the system prompt.
         allow_mcp_tools: MCP tools that may receive real values.
+        secret_review: Hold requests with uncertain secret candidates for local
+            human review. Off by default; never calls a remote classifier.
     """
 
     entities: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
@@ -50,6 +52,7 @@ class Settings:
     retention_days: int = 30
     note: bool = True
     allow_mcp_tools: tuple[str, ...] = ()
+    secret_review: bool = False
 
 
 _KEYS = {
@@ -60,6 +63,7 @@ _KEYS = {
     "retention_days",
     "note",
     "allow_mcp_tools",
+    "secret_review",
 }
 
 
@@ -131,7 +135,12 @@ def parse_settings(text: str, path: Path) -> Settings:
         patterns[entity_type] = pattern
     identity = raw.get("identity", True)
     note = raw.get("note", True)
-    for key, value in (("identity", identity), ("note", note)):
+    review = raw.get("secret_review", False)
+    for key, value in (
+        ("identity", identity),
+        ("note", note),
+        ("secret_review", review),
+    ):
         if not isinstance(value, bool):
             raise fail(key, "must be true or false")
     retention = raw.get("retention_days", 30)
@@ -153,6 +162,7 @@ def parse_settings(text: str, path: Path) -> Settings:
         retention_days=retention,
         note=note,
         allow_mcp_tools=tuple(tools),
+        secret_review=review,
     )
 
 

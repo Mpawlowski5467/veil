@@ -273,7 +273,13 @@ def open_sessions(
         shield = make_shield(session_id)
         session_ledger = SQLiteLedger(ledger_path, session_id)
         masker_type = ResponsesRequestMasker if api == "openai" else RequestMasker
-        masker = masker_type(shield, session_ledger, note=note, registered=registered)
+        masker = masker_type(
+            shield,
+            session_ledger,
+            note=note,
+            registered=registered,
+            secret_review=settings.secret_review,
+        )
         return Session(shield, session_ledger, masker)
 
     make_shield = shield_factory(settings, vault_path, identity)

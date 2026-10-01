@@ -107,6 +107,8 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
 - [x] Add scoped coding-secret masking with explicit format/context rules,
   code/reference negatives, and gateway regression coverage. Available in the
   source checkout after 0.5.0; see [supported formats](docs/coding-secrets.md).
+- [x] Add optional local review of uncertain secrets, request-scoped decisions,
+  and whole-request context within supported fields. See [secret review](docs/secret-review.md).
 - [ ] Evaluate coding-secret detection on independently reviewed real-workflow
   samples, including false positives, before making broader coverage claims.
 - [x] Maintain labeled, fictional test corpora; measure missed values and false

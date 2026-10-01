@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
+from ..secret_review import REVIEW_PATH, ReviewError, ReviewQueue
 from ..shield import Shield
 from . import compat
 from .activity import ACTIVITY_PATH, VERIFY_PATH, Activity, Observation, ObservedLedger
@@ -315,6 +316,7 @@ class Gateway:
         self.guard_tools = guard_tools
         self.sessions = sessions
         self.activity = Activity()
+        self.reviews = ReviewQueue()
         self.secret = secret or secrets.token_urlsafe(32)
         if api == "openai" and upstream == UPSTREAM:
             upstream = "chatgpt.com" if openai_auth == "chatgpt" else "api.openai.com"
@@ -423,6 +425,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     self._hello()
                     return
                 self._check_access()
+                if path == REVIEW_PATH:
+                    self._review(address.query)
+                    return
                 if path in {ACTIVITY_PATH, VERIFY_PATH}:
                     self._activity(path, address.query)
                     return
@@ -491,6 +496,39 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             data = json.dumps({"proof": proof(gateway.secret, nonce)}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self._started = True
+            self.wfile.write(data)
+
+        def _review(self, query: str) -> None:
+            if query or self.command not in {"GET", "POST"}:
+                raise _RefusedError(
+                    400, "invalid_request_error", "invalid review request"
+                )
+            if self.command == "POST":
+                try:
+                    raw = self._read_body()
+                    if len(raw) > 4096:
+                        raise ValueError
+                    choice = json.loads(raw)
+                    if not isinstance(choice, dict) or set(choice) != {
+                        "id",
+                        "index",
+                        "choice",
+                    }:
+                        raise ValueError
+                    gateway.reviews.decide(
+                        choice["id"], choice["index"], choice["choice"]
+                    )
+                except (ValueError, TypeError):
+                    raise _RefusedError(
+                        400, "invalid_request_error", "invalid or expired review choice"
+                    ) from None
+            data = json.dumps(gateway.reviews.report()).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self._started = True
@@ -656,17 +694,45 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                             500, "api_error", "the session uses the wrong API adapter"
                         )
                     with session.lock:
+                        decisions = gateway.reviews.decisions(session_id, body) or {}
+                        for value, kind in decisions.items():
+                            if kind != "IGNORE":
+                                session.masker.confirm_secret(value, kind)
                         masked = (
                             session.masker.mask(request, client_version=self._client)
                             if claude
                             else session.masker.mask(request)
                         )
+                        if session.masker.secret_review:
+                            findings = tuple(
+                                finding
+                                for finding in session.masker.review_findings()
+                                if decisions.get(finding.value) != "IGNORE"
+                            )
+                            if findings:
+                                review_id = gateway.reviews.hold(
+                                    session_id, body, findings
+                                )
+                                raise _RefusedError(
+                                    403,
+                                    "permission_error",
+                                    f"Veil review {review_id} is required; "
+                                    "nothing was sent. Open veil review in your "
+                                    "own local terminal, decide each finding, "
+                                    "then retry this request. Do not bypass Veil.",
+                                )
                         if path == _MESSAGES or not claude:
                             self._observation = gateway.activity.begin(
                                 session_id, request, masked, session.shield, gateway.api
                             )
                 except _RefusedError:
                     raise
+                except ReviewError as error:
+                    raise _RefusedError(
+                        403,
+                        "permission_error",
+                        f"Veil review: {error}; nothing was sent.",
+                    ) from None
                 except UnsupportedRequestError as error:
                     refusal = _refusal(error, client, claude=claude)
                     if refusal.final and claude:

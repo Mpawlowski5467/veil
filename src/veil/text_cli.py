@@ -87,6 +87,7 @@ def run_text(
     session: str,
     clipboard: bool = False,
     exact: bool = False,
+    review: bool = False,
 ) -> int:
     """Mask or restore stdin/clipboard text using a persistent local session."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", session):
@@ -102,7 +103,34 @@ def run_text(
         shield = sessions.get(session).shield
         result: MaskResult | RestoreResult
         if operation == "mask":
+            if review or settings.secret_review:
+                from .detectors._secrets import SECRET_TYPES
+                from .placeholders import placeholder_type
+
+                for placeholder, value in shield.vault.items():
+                    kind = placeholder_type(placeholder)
+                    if kind in SECRET_TYPES:
+                        assert kind is not None
+                        shield.add_entity(value, kind)
             result = shield.mask(source)
+            if review or settings.secret_review:
+                from .gateway.request import _KnownValues
+                from .gateway.store import registered_values
+                from .review_cli import ask_terminal
+                from .secret_review import ReviewError, candidates
+
+                try:
+                    known = _KnownValues(
+                        shield.vault, registered_values(settings, identity)
+                    )
+                    findings = candidates(source, visible=known.unprotected(source))
+                except ReviewError as error:
+                    raise SettingsError(f"{error}; no output written") from None
+                for finding in findings:
+                    kind = ask_terminal(finding.value, finding.reason)
+                    if kind != "IGNORE":
+                        shield.add_entity(finding.value, kind)
+                result = shield.mask(source)
         elif operation == "restore":
             result = shield.restore(source, tolerant=not exact)
         else:

@@ -309,6 +309,11 @@ Keep the same session label for the conversation and choose a new one for the ne
 
 Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible. See the [measured examples and limitations](docs/detection-results.md); exact registration improves coverage without making names or secrets automatically detectable.
 
+For unfamiliar values, enable [local secret review](docs/secret-review.md) in the
+updated source checkout. Veil asks you to classify uncertain findings on a private
+local page before that request can be sent. Confirmed secrets are masked; unresolved
+findings keep the request local. For files, use `veil mask --session draft --review`.
+
 Coding-secret matches are masked into placeholders such as `[API_KEY_1]` and
 `[PASSWORD_1]`; supported requests continue, and replies restore locally.
 Credential names inside parsed tool data are preserved as detection context.

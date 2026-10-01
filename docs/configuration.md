@@ -40,6 +40,7 @@ Every setting is optional:
 | `identity` | Register your Git name and email. Defaults to `true`. |
 | `retention_days` | Purge sessions unused for this many days when the gateway opens its storage. Defaults to `30`. |
 | `note` | Tell the model to preserve placeholders. Defaults to `true`. |
+| `secret_review` | Hold uncertain secret candidates for [local review](secret-review.md). Defaults to `false`; source checkout after 0.5.0 only. Restart the gateway after changing it. |
 | `allow_mcp_tools` | MCP tools allowed to receive real values. Empty by default. |
 
 Veil reads its configuration from `~/.veil`, not from a cloned project's files. Unknown settings and invalid values are rejected. The global `--data-dir` option selects a different configuration and storage folder.

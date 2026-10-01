@@ -88,7 +88,7 @@ class ResponsesRequestMasker(RequestMasker):
     conversation state is accepted, and storage is always disabled.
     """
 
-    def mask(
+    def _mask_once(
         self, body: dict[str, Any], *, client_version: str | None = None
     ) -> dict[str, Any]:
         """Return a masked copy; refuse anything without an explicit rule.
