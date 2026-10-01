@@ -12,6 +12,7 @@ from veil import RegexDetector, Shield, Span
 from veil.detectors._secrets import credential_type
 from veil.detectors.base import Detector
 from veil.gateway import Gateway, Settings, UnsupportedRequestError, open_sessions
+from veil.secret_review import candidates
 
 # Assemble obvious synthetic payloads; no credentials or live provider calls.
 OPENAI = "sk-proj-" + "A1b2" * 10
@@ -219,6 +220,61 @@ def test_run_together_endings_shared_with_ordinary_words_need_a_separator(name):
     assert credential_type(name) is None
 
 
+@pytest.mark.parametrize(
+    ("source", "value", "kind"),
+    [
+        ("'password' => 'Fict-Meadow-46',", "Fict-Meadow-46", "PASSWORD"),
+        (
+            "$config = ['api_key' => 'fictional-orchard-42'];",
+            "fictional-orchard-42",
+            "API_KEY",
+        ),
+        ('"DB_PASSWORD" => "Fict-Meadow-46"', "Fict-Meadow-46", "PASSWORD"),
+        (":password => 'Fict-Meadow-46'", "Fict-Meadow-46", "PASSWORD"),
+        (':"api_key" => "fictional-orchard-42"', "fictional-orchard-42", "API_KEY"),
+        (
+            "my %db = (user => 'jan', password => 'Fict-Meadow-46');",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+        ('%{"token" => "fictional-orchard-42"}', "fictional-orchard-42", "TOKEN"),
+        ("'password'=>'Fict-Meadow-46'", "Fict-Meadow-46", "PASSWORD"),
+        (
+            "  'password' => 'Fict-Meadow-46', # local only",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+    ],
+)
+def test_hash_rocket_credentials_round_trip(source, value, kind):
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == source.replace(value, f"[{kind}_1]")
+    assert shield.restore(masked.text).text == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "tokens.map(token => token.trim())",
+        "const check = password => password.length > 8;",
+        "const auth = token => `Bearer ${token}`;",
+        'const mask = password => "*".repeat(password.length);',
+        'items.forEach((token) => "x" + token)',
+        "'password' => env('DB_PASSWORD'),",
+        ":password => ENV['DB_PASSWORD']",
+        "'password' => $password,",
+        "password => $password,",
+        "'password' => '${DB_PASSWORD}',",
+        "'password' => '',",
+        "'password' => 'unfinished",
+    ],
+)
+def test_arrow_functions_and_hash_references_stay_readable(source):
+    assert Shield().mask(source).text == source
+    assert not candidates(source)
+
+
 def test_run_together_shell_password_keeps_the_command():
     source = "PGPASSWORD=Fict-Meadow-47 psql -h db.example.com"
     shield = Shield()
@@ -319,6 +375,10 @@ def test_large_coding_text_and_unterminated_quotes_complete_promptly():
     text = 'password="' + "a=password=" * 20000
     start = time.monotonic()
     assert any(s.end == len(text) for s in detector.detect(text))
+    assert time.monotonic() - start < 5
+    text = "'password' => 'x" * 20000
+    start = time.monotonic()
+    detector.detect(text)
     assert time.monotonic() - start < 5
 
 

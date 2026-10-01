@@ -37,6 +37,14 @@ and escapes. **Quote complex passwords.** Unquoted detection reads a single
 token, not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.
 
+PHP, Ruby, and Perl `=>` pairs are recognized when the value is a quoted
+literal, such as `'password' => '…'`, `:api_key => "…"`, and
+`(password => '…')`. A bare Perl key also needs the literal to end the item
+(a comma, closing bracket, comment, or line end). Variables, calls, and
+constants after `=>` (`$password`, `env('DB_PASSWORD')`, `ENV['DB_PASSWORD']`)
+stay readable, and so do JavaScript arrow functions such as
+`token => token.trim()`.
+
 Additional automatic rules recognize:
 
 - Explicit prose labels such as `My password is "fictional meadow phrase"`,

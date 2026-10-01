@@ -94,6 +94,15 @@ _COOKIE_NAMES = frozenset(
     }
 )
 _JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
+# PHP/Perl hash keys and Ruby symbols before '=>'; only quoted values follow.
+# Arrow functions make '=>' common, so keys are read back from each arrow.
+_HASH_ROCKET = re.compile(r"=>[ \t]*(?=[\"'])")
+_ROCKET_KEY = re.compile(
+    r"(?<![\w.$-])(?P<symbol>:?)(?P<quote>[\"']?)"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)\Z"
+)
+# A bare key's literal must end the item, unlike an arrow function's body.
+_ROCKET_END = re.compile(r"[ \t]*(?:[,;)\]}#]|\r?\n|\Z)")
 _PROSE_LABEL = re.compile(
     r"(?i:\b(?P<name>api[ _-]?key|access[ _-]?token|refresh[ _-]?token|"
     r"password|passphrase|client[ _-]?secret|private[ _-]?key))"
@@ -383,6 +392,32 @@ def _escaped_fields(text: str) -> Iterator[Span]:
                 yield _span(text, start, end, kind)
 
 
+def _hash_rocket_values(text: str) -> Iterator[Span]:
+    """Read quoted PHP, Ruby and Perl '=>' values; arrow functions stay readable."""
+    cursor = 0
+    while arrow := _HASH_ROCKET.search(text, cursor):
+        key_end = arrow.start()
+        while key_end > cursor and text[key_end - 1] in " \t":
+            key_end -= 1
+        # The longest key is a symbol colon, two quotes and a 128-character name.
+        key = _ROCKET_KEY.search(text, max(cursor, key_end - 131), key_end)
+        cursor = arrow.end()
+        if key is None or (kind := credential_type(key["name"])) is None:
+            continue
+        offsets = _assignment_value(text, cursor)
+        # An unfinished quote has uncertain boundaries; rescanning its tail
+        # for every later key would also be quadratic.
+        if offsets is None or offsets[1] == len(text):
+            return
+        start, end = offsets
+        cursor = end + 1
+        bare = not key["symbol"] and not key["quote"]
+        if bare and _ROCKET_END.match(text, cursor) is None:
+            continue
+        if _literal(text[start:end]):
+            yield _span(text, start, end, kind)
+
+
 def _concatenated_literals(text: str, end: int, kind: str) -> Iterator[Span]:
     """Protect each literal in a simple quoted credential concatenation."""
     cursor = end + 1  # end is just before the closing quote of the first literal
@@ -437,6 +472,7 @@ def detect(text: str) -> list[Span]:
     found.extend(_labelled_values(text))
     found.extend(_flag_values(text))
     found.extend(_escaped_fields(text))
+    found.extend(_hash_rocket_values(text))
     for match in _PREFIXED.finditer(text):
         kind = "API_KEY" if match["api"] is not None else "TOKEN"
         found.append(_span(text, match.start(), match.end(), kind))
