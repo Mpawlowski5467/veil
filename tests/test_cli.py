@@ -47,6 +47,12 @@ report = {{
     "secret_in_argv": secret in " ".join(sys.argv),
 }}
 report["pid"] = os.getpid()
+launches = os.environ.get("FAKE_CLAUDE_LAUNCHES")
+if launches:
+    report["launches"] = {{
+        name: oct(os.stat(os.path.join(launches, name)).st_mode & 0o777)
+        for name in os.listdir(launches)
+    }}
 post = os.environ.get("FAKE_CLAUDE_POST")
 if post:
     conn = http.client.HTTPConnection(host, timeout=5)
@@ -126,6 +132,20 @@ class TestClaude:
         prompt_hook = hook_events["UserPromptSubmit"][0]["hooks"][0]["command"]
         assert prompt_hook.endswith(f"--expect-url {env['ANTHROPIC_BASE_URL']}")
         assert "masking through a local gateway" in capsys.readouterr().err
+
+    def test_the_launch_is_published_while_claude_runs(
+        self, fake_claude, data_dir, monkeypatch
+    ):
+        _, report_file = fake_claude
+        launches = data_dir / "launches"
+        monkeypatch.setenv("FAKE_CLAUDE_LAUNCHES", str(launches))
+        assert cli.main(["--data-dir", str(data_dir), "claude"]) == 0
+        report = json.loads(report_file.read_text())
+        port = report["settings"]["env"]["ANTHROPIC_BASE_URL"].rsplit(":", 1)[1]
+        # Owner-only while Claude Code runs, so other terminals can find it.
+        assert report["launches"] == {f"{port}.json": "0o600"}
+        assert report["secret_in_argv"] is False
+        assert not launches.exists()
 
     def test_the_gateway_stops_with_claude(self, fake_claude, data_dir, tmp_path):
         _, report_file = fake_claude
@@ -482,6 +502,7 @@ def test_forget_after_run_isolated_storage_and_cleanup(
     def launch(args, *, data_dir, **kwargs):
         used.append(data_dir)
         assert data_dir != source
+        assert kwargs["launch_dir"] == source.absolute()
         assert json.loads((data_dir / "config.json").read_text())["entities"] == {
             "PERSON": ["Mira Quill"]
         }

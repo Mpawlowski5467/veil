@@ -39,6 +39,7 @@ from .gateway import (
     prepare_data_dir,
 )
 from .gateway.hooks import _gateway_answers
+from .launches import review_command
 
 _STATE = "service.json"
 _LEASE = "service-runtime.lock"
@@ -551,6 +552,7 @@ def daemon_main() -> int:
                 openai_auth=state["auth"],
             ) as gateway,
         ):
+            gateway.review_command = review_command(gateway.url, root)
             if state["api"] == "openai":
                 from .codex import write_configuration
 

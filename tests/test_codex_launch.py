@@ -2,6 +2,7 @@
 
 import json
 import stat
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -36,6 +37,11 @@ def test_launcher_pins_the_provider_and_keeps_secret_out_of_argv(
         assert "features.apps=false" in command
         assert 'web_search="disabled"' in command
         assert command[-2:] == ["exec", "hello"]
+        # Other terminals find the gateway through an owner-only record.
+        port = urlsplit(env["VEIL_GATEWAY_URL"]).port
+        record = json.loads((data_dir / "launches" / f"{port}.json").read_text())
+        assert record["client"] == "codex"
+        assert record["secret"] == env["VEIL_GATEWAY_SECRET"]
         return 17
 
     monkeypatch.setattr(cli, "_run_child", child)
@@ -46,6 +52,7 @@ def test_launcher_pins_the_provider_and_keeps_secret_out_of_argv(
         == 17
     )
     assert len(seen) == 1
+    assert not (data_dir / "launches").exists()
 
 
 @pytest.mark.parametrize(
