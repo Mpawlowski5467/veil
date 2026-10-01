@@ -13,7 +13,7 @@
 ### Tests
 
 - Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
-- Launchers run end to end with stub Claude Code and Codex clients: a request held for secret review is approved from a separate terminal, with plain `veil review` and with the command from the refusal, and the retried request goes out masked. Gateway selection is covered case by case, and launch records run in native CI on all three platforms.
+- Launchers run end to end with stub Claude Code and Codex clients: a request held for secret review is approved from a separate terminal, with plain `veil review` and with the command from the refusal, and the retried request goes out masked. Gateway selection is covered case by case. Native CI on all three platforms checks launch records, including that `--forget-after-run` keeps its record in the real data folder while the client runs and leaves nothing there afterwards.
 
 ## 0.6.0b1 — Beta
 
