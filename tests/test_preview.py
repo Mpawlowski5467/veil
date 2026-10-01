@@ -2,11 +2,12 @@
 
 import json
 import threading
+from urllib.parse import urlsplit
 
 import pytest
 
 from test_secret_review import browser_call
-from veil.preview import MAX_TEXT, preview, preview_server
+from veil.preview import MAX_TEXT, preview, preview_server, run_preview
 
 
 def test_preview_masks_reviews_restores_and_forgets_between_requests(
@@ -67,6 +68,7 @@ def test_preview_transport_requires_local_capability_and_does_not_echo_errors(ca
             response, html = browser_call(server, path="/", auth=False)
             assert response.status == 200
             assert server.token.encode() not in html
+            assert server.launch.encode() not in html
             assert response.getheader("Cache-Control") == "no-store"
             assert "connect-src 'self'" in response.getheader("Content-Security-Policy")
             assert response.getheader("Access-Control-Allow-Origin") is None
@@ -108,3 +110,24 @@ def test_preview_transport_requires_local_capability_and_does_not_echo_errors(ca
             worker.join()
     captured = capsys.readouterr()
     assert not captured.out + captured.err
+
+
+def test_run_preview_opens_only_a_one_time_link(monkeypatch, capsys):
+    opened, servers = [], []
+    clock = iter([0, 10_000])
+
+    def capture():
+        servers.append(preview_server())
+        return servers[-1]
+
+    monkeypatch.setattr("veil.preview.webbrowser.open", opened.append)
+    monkeypatch.setattr("veil.preview.preview_server", capture)
+    monkeypatch.setattr("veil.preview.time.monotonic", lambda: next(clock, 10_000))
+    assert run_preview() == 0
+    [server] = servers
+    assert opened == [server.url]
+    assert urlsplit(server.url).fragment == server.launch
+    assert server.launch != server.token
+    out = capsys.readouterr().out
+    assert server.url in out
+    assert server.token not in out

@@ -57,7 +57,8 @@ footer { margin-top: 32px; border-top: 1px solid #35443a; padding-top: 18px; fon
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-const token = location.hash.slice(1);
+const launch = location.hash.slice(1);
+let session = null;
 const input = $('input');
 const status = $('status');
 let choices = {};
@@ -77,18 +78,26 @@ function edited() {
   clearResult();
   status.textContent = ready ? 'Text changed. Run the preview again.' : 'Start veil preview in a terminal to open a private page.';
 }
-async function request(body) {
+async function call(path, method, headers, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch('/data', {
-      method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'omit',
-      headers: {'X-Veil-Review': token, 'Content-Type': 'application/json'},
+    const response = await fetch(path, {
+      method, cache: 'no-store', credentials: 'omit', headers,
       body: body ? JSON.stringify(body) : undefined, signal: controller.signal
     });
     if (!response.ok) throw new Error('unavailable');
     return await response.json();
   } finally { clearTimeout(timer); }
+}
+// The opened link holds a one-time code; exchange it once for this page's session.
+function authorize() {
+  if (!session) session = call('/session', 'POST', {'X-Veil-Review': launch}).then(reply => reply.token);
+  return session;
+}
+async function request(body) {
+  const token = await authorize();
+  return call('/data', body ? 'POST' : 'GET', {'X-Veil-Review': token, 'Content-Type': 'application/json'}, body);
 }
 function render(result) {
   $('output').textContent = result.masked;
@@ -145,7 +154,7 @@ $('example').addEventListener('click', () => {
   edited(); run();
 });
 async function start() {
-  if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1' || !token) {
+  if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1' || !launch) {
     status.textContent = 'Start veil preview in a terminal, then open the private URL it prints. Opening this HTML file directly cannot run detection.';
     return;
   }

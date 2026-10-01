@@ -4,6 +4,7 @@ import http.client
 import io
 import json
 import threading
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -391,9 +392,16 @@ def test_review_command_refuses_pipes_before_reading_private_findings(
 
 
 def browser_call(
-    server, method="GET", path="/data", *, auth=True, headers=None, data=None
+    server,
+    method="GET",
+    path="/data",
+    *,
+    auth=True,
+    token=None,
+    headers=None,
+    data=None,
 ):
-    sent = {"X-Veil-Review": server.token} if auth else {}
+    sent = {"X-Veil-Review": token or server.token} if auth else {}
     sent.update(headers or {})
     connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
     connection.request(method, path, headers=sent, body=data)
@@ -448,6 +456,58 @@ def test_browser_bridge_boundaries_and_private_rendering():
             )
             assert len(calls) == before
             assert browser_call(server, path="/?secret=anything")[0].status == 403
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+def test_launch_link_is_single_use_and_never_the_session_token():
+    calls = []
+
+    def callback(choice):
+        calls.append(choice)
+        return {"reviews": []}
+
+    with ReviewServer(callback) as server:
+        worker = threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.01}
+        )
+        worker.start()
+        try:
+            code = urlsplit(server.url).fragment
+            assert code == server.launch
+            assert code != server.token
+            assert server.token not in server.url
+            for method, path, token, headers in (
+                ("POST", "/session", code, {"Origin": "https://evil.test"}),
+                ("POST", "/session", code, {"Host": "evil.test"}),
+                ("POST", "/session", code, {"Sec-Fetch-Site": "cross-site"}),
+                ("GET", "/session", code, {}),
+                ("POST", "/session", "fictional-wrong-code", {}),
+                ("GET", "/data", code, {}),
+                ("POST", "/data", code, {}),
+            ):
+                response, _ = browser_call(
+                    server, method, path, token=token, headers=headers
+                )
+                assert response.status == 403
+            assert browser_call(server, "POST", "/session", auth=False)[0].status == 403
+            assert server.launch == code
+            assert not calls
+            response, raw = browser_call(server, "POST", "/session", token=code)
+            assert response.status == 200
+            assert response.getheader("Cache-Control") == "no-store"
+            assert json.loads(raw) == {"token": server.token}
+            assert server.launch is None
+            assert server.url.endswith("#" + code)
+            # A second page presenting the same link loads but cannot start.
+            assert browser_call(server, path="/", auth=False)[0].status == 200
+            response, raw = browser_call(server, "POST", "/session", token=code)
+            assert response.status == 403
+            assert server.token.encode() not in raw
+            assert not calls
+            assert browser_call(server)[0].status == 200
+            assert calls == [None]
         finally:
             server.shutdown()
             worker.join()

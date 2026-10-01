@@ -30,19 +30,21 @@
   <div id="status" role="status"></div>
   <main id="reviews"></main>
 <script>
-const token = location.hash.slice(1);
+const launch = location.hash.slice(1);
+let session = null;
 const status = document.getElementById('status');
 const root = document.getElementById('reviews');
 const refreshButton = document.getElementById('refresh');
 const localPage = location.protocol === 'http:' && location.hostname === '127.0.0.1';
 const launchHelp = 'Run veil review in your own terminal and use the private page it opens. Keep that terminal running.';
+const unreachable = 'Cannot reach the local review server. It may have closed or reached its ten-minute limit. ' + launchHelp;
 // A file preview has no review server. Never send the capability to another host.
 const startupError = !localPage
   ? 'This file is a preview; it cannot load review findings. ' + launchHelp
-  : !token
+  : !launch
     ? 'This page is missing its private access link, which can happen after a browser reload. ' + launchHelp
     : '';
-if (localPage && token) history.replaceState(null, '', location.pathname);
+if (localPage && launch) history.replaceState(null, '', location.pathname);
 const labels = {
   API_KEY: 'API key',
   PASSWORD: 'Password or passphrase',
@@ -57,8 +59,34 @@ const labels = {
   IGNORE: 'Not private — allow this request'
 };
 
+// The opened link holds a one-time code. Exchange it once for this page's
+// session; a second copy of the link, or a reload, cannot start another.
+function authorize() {
+  if (!session) {
+    session = (async () => {
+      let response;
+      try {
+        response = await fetch('/session', {
+          method: 'POST',
+          cache: 'no-store',
+          credentials: 'omit',
+          headers: { 'X-Veil-Review': launch }
+        });
+      } catch {
+        throw Error(unreachable);
+      }
+      if (!response.ok) {
+        throw Error('This private review link was already used or has expired. ' + launchHelp);
+      }
+      return (await response.json()).token;
+    })();
+  }
+  return session;
+}
+
 async function request(choice) {
   if (startupError) throw Error(startupError);
+  const token = await authorize();
   let response;
   try {
     response = await fetch('/data', {
@@ -68,7 +96,7 @@ async function request(choice) {
       body: choice ? JSON.stringify(choice) : undefined
     });
   } catch {
-    throw Error('Cannot reach the local review server. It may have closed or reached its ten-minute limit. ' + launchHelp);
+    throw Error(unreachable);
   }
   if (response.status === 403) {
     throw Error('This private review link is no longer accepted. ' + launchHelp);
