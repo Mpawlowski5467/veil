@@ -119,13 +119,15 @@ def test_the_secret_is_never_in_a_repr(data):
 
 
 def test_running_launches_are_proved_and_stopped_ones_cleaned_up(data):
-    closed = gateway()
-    closed_port, closed_secret = closed.port, closed.secret
-    closed.close()
-    stale = write(
-        data, f"{closed_port}.json", record(closed_port, secret=closed_secret)
-    )
     with gateway() as live, gateway() as other:
+        # Stopped while live and other hold their ports, so neither can reuse
+        # the freed one; an answer there would keep the stale record as busy.
+        closed = gateway()
+        closed_port, closed_secret = closed.port, closed.secret
+        closed.close()
+        stale = write(
+            data, f"{closed_port}.json", record(closed_port, secret=closed_secret)
+        )
         # Another gateway's port with a wrong secret: busy or reused, so kept.
         wrong = write(
             data, f"{other.port}.json", record(other.port, secret="fictional-wrong")
