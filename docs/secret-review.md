@@ -115,10 +115,13 @@ registrations and automatic rules, or handle the gateway's review refusal.
   labels and delimited credential-like tokens now mask automatically.
 - Credential command options and URL parameters whose values are not already
   fully covered by the automatic rules.
-- Unquoted credential assignments with trailing words and unsupported block
-  forms. Supported indented YAML credential blocks now mask automatically.
-  An ambiguous unquoted phrase conservatively covers the remaining
-  line; quote values to make their boundary clear.
+- Unquoted assignments that may continue past the automatic mask, such as a
+  compact `NAME=value` followed by more words on the line (an unquoted multiword
+  `.env` value) or a first word that ends a sentence, and unsupported block
+  forms. Other unquoted values after `:` or a spaced `=` and supported indented
+  YAML credential blocks now mask automatically. An ambiguous unquoted phrase
+  conservatively covers the remaining line; quote values to make their boundary
+  clear.
 - Long tokens with varied characters, including unknown provider formats. A
   random-looking hash can also trigger review; randomness does not prove secrecy.
 - Sign-in instructions such as `Use "…" to sign in`, recovery/backup-code labels,

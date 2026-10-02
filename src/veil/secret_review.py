@@ -22,7 +22,7 @@ from ._review_context import PII_REVIEW_TYPES, contextual_values, fragment_conte
 from .detectors._secrets import (
     _ASSIGNMENT,
     SECRET_TYPES,
-    _assignment_value,
+    _assigned_value,
     _literal,
     credential_type,
 )
@@ -128,21 +128,29 @@ def candidates(
         if kind and exposed(value):
             found[value] = Candidate(value, kind, "multiline credential value")
             _bounded(found)
-    for match in _ASSIGNMENT.finditer(text):
-        kind = credential_type(match["name"])
-        if kind is None or text[match.end() : match.end() + 1] in {'"', "'", "`"}:
+    # Skip consumed values, as detection does: assignments inside one value
+    # must not rescan the rest of its line.
+    cursor = 0
+    while assignment := _ASSIGNMENT.search(text, cursor):
+        cursor = assignment.end()
+        kind = credential_type(assignment["name"])
+        if kind is None:
             continue
-        offsets = _assignment_value(text, match.end())
+        offsets = _assigned_value(text, assignment)
         if offsets is None:
             continue
-        start, end = offsets
+        start, end, quoted = offsets
+        cursor = max(cursor, end)
+        if quoted:
+            continue
         line_end = text.find("\n", end)
         line_end = len(text) if line_end < 0 else line_end
         tail = text[end:line_end].strip()
         value = text[start:line_end].strip()
         if (
             tail
-            and tail[0] not in "#,;"
+            # A comment or sentence end after a whole masked value is no reason.
+            and not tail.startswith(("#", ",", ";", ".", "!", "?"))
             and _literal(text[start:end])
             and exposed(value)
         ):
