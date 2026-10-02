@@ -1,0 +1,15 @@
+# ggshield configuration (CLI, pre-commit hook, GitHub Action).
+#
+# Every credential under these paths is an obviously fictional fixture for the
+# masking detectors: made-up keys, example.com addresses, 555 numbers. Source,
+# docs, examples, benchmark scripts and CI configuration are still scanned.
+#
+# The GitGuardian GitHub App check does not read this file. To silence it for
+# the same fixtures, add these paths to the dashboard's Secrets detection
+# excluded filepaths for this repository.
+version: 2
+
+secret:
+  ignored_paths:
+    - "tests/**/*"
+    - "benchmarks/*.json"
