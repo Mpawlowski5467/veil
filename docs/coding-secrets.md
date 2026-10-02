@@ -54,10 +54,13 @@ This is not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous. An unquoted value is read as code, not a credential, when it is a
 type (`String`, `Option<String>`, `&str`, `SecretStr`), repeats the field name
 or one of its words (`password=password`, `api_key=API_KEY`,
-`POSTGRES_PASSWORD: postgres`), or is itself a credential-named identifier
+`POSTGRES_PASSWORD: postgres`), or is an identifier of several parts (joined
+by `_`, `.` or an inner capital) that ends in a credential name
 (`password=db_password`, `api_key=args.api_key`, `token: AuthToken`). Any other
-bare value, including a weak password such as `PASSWORD=letmein`, is masked.
-Quote a real value that looks like code.
+bare value, including a weak password such as `PASSWORD=letmein` or a lone
+credential word such as `PASSWORD=secret`, is masked. A real password written
+one of these ways, such as `ADMIN_PASSWORD=admin`, `POSTGRES_PASSWORD=postgres`
+or `PASSWORD=SuperPassword`, is sent as it is: quote it or register it.
 
 PHP, Ruby, and Perl `=>` pairs are recognized when the value is a quoted
 literal, such as `'password' => '…'`, `:api_key => "…"`, `(password => '…')`,
@@ -215,9 +218,11 @@ masking and review separately and records their remaining limitations.
 
 ## Code references and uncertain prose
 
-Unquoted identifiers named after a credential are treated as code references,
-for example `password = settings.database_password`, `connect(password=db_password)`
-or `token: AuthToken`, and so are the types and field-name echoes listed above.
+Unquoted identifiers of several parts that end in a credential name are treated
+as code references, for example `password = settings.database_password`,
+`connect(password=db_password)` or `token: AuthToken`, and so are the types and
+field-name echoes listed above. A single credential word is code only when it
+repeats the field name, so `PASSWORD=secret` and `api_key=token` are masked.
 Quoted lookalikes such as `password = "settings.database_password"` are still
 masked, as are weak bare values such as `PASSWORD=letmein`. This is a syntax
 heuristic; explicitly register a real credential that looks like a code reference.
@@ -225,7 +230,9 @@ Parsed JSON credential strings remain protected regardless of spelling.
 In the gateways, a detected secret that is a single word of letters is also
 masked wherever it appears as a whole word, but not inside longer words or
 identifiers: after a quoted `"postgres"` password, `postgres:16` is masked and
-`postgresql://` stays readable.
+`postgresql://` stays readable. The Python library's leak check still matches
+such a value inside longer words: `Shield.mask` warns about that
+`postgresql://`, and `wrap(strict=True)` raises `ShieldError` for it.
 Ordinary instructions such as “Store API keys in a password manager” stay readable.
 “The password is stored in the operating system keychain” is ambiguous and still
 requires review when review is enabled; it could be a literal passphrase.
