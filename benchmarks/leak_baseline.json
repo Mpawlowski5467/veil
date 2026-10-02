@@ -836,9 +836,9 @@
         ],
         "exposed_annotations": 0,
         "exact_tp": 2,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -902,9 +902,9 @@
         "masked_or_flagged_characters": [],
         "exposed_annotations": 0,
         "exact_tp": 0,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -1870,7 +1870,7 @@
       },
       {
         "id": "code-concatenated-password",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           10,
           10
@@ -1885,11 +1885,11 @@
         ],
         "exposed_annotations": 0,
         "exact_tp": 2,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
-        "review_harmless_characters": 9,
-        "review_findings": 1,
+        "overmasked_characters": 0,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -1951,9 +1951,9 @@
         "masked_or_flagged_characters": [],
         "exposed_annotations": 0,
         "exact_tp": 0,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -2934,9 +2934,9 @@
         ],
         "exposed_annotations": 0,
         "exact_tp": 2,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -3000,9 +3000,9 @@
         "masked_or_flagged_characters": [],
         "exposed_annotations": 0,
         "exact_tp": 0,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true
@@ -3968,7 +3968,7 @@
       },
       {
         "id": "code-concatenated-password",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           10,
           10
@@ -3983,11 +3983,11 @@
         ],
         "exposed_annotations": 0,
         "exact_tp": 2,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
-        "review_harmless_characters": 9,
-        "review_findings": 1,
+        "overmasked_characters": 0,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "restored": true
       },
       {
@@ -4049,9 +4049,9 @@
         "masked_or_flagged_characters": [],
         "exposed_annotations": 0,
         "exact_tp": 0,
-        "exact_fp": 3,
+        "exact_fp": 0,
         "exact_fn": 0,
-        "overmasked_characters": 24,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "restored": true

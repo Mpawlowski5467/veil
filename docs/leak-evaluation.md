@@ -11,7 +11,8 @@ This is an intentionally difficult regression corpus, including unsupported
 formats and future detection targets. It is **not an independently sampled
 accuracy study, a security audit, or a guarantee that every secret is hidden**.
 All values are invented; no credentials are validated and no model is called.
-The results apply to the 0.6.0b1 beta; the older 0.5.0 wheel lacks these secret rules.
+The results below are for the current source, which adds fixes made after the
+0.6.0b1 beta; the older 0.5.0 wheel lacks these secret rules.
 
 ## Current results
 
@@ -24,14 +25,14 @@ does not approve anything automatically or learn the answers from the labels.
 | Annotated occurrences fully masked | 41 / 52 | 41 / 52 |
 | Annotated occurrences partially masked | 1 | 1 |
 | Annotated occurrences not masked | 10 | 10 |
-| Requests held for local review | 0 / 52 | 12 / 52 |
+| Requests held for local review | 0 / 52 | 11 / 52 |
 | Annotated occurrences still exposed in requests ready to send | 11 | 0 |
 | Requests with no private values held for review | 0 / 15 | 3 / 15 |
-| Extra or inexact mask spans | 7 | 7 |
-| Harmless characters masked | 48 | 48 |
+| Extra or inexact mask spans | 1 | 1 |
+| Harmless characters masked | 0 | 0 |
 | Prepared requests restored exactly as Python text | 52 / 52 | 52 / 52 |
 
-The 12 review holds contain nine requests with private values and three harmless
+The 11 review holds contain eight requests with private values and three harmless
 requests. All 11 occurrences not fully masked automatically are fully covered by
 actual review findings. A test checks this per occurrence: an incidental hold
 for an unrelated value cannot satisfy it. **Review is off by default.** Without
@@ -52,6 +53,16 @@ from the `code-attribute-reference` case. Extra/inexact spans fall from nine to
 seven and harmless characters masked from 88 to 48. All other occurrence coverage,
 review holds, and exact restoration are unchanged; every per-case check passes.
 
+After 0.6.0b1, unquoted values that are code (types, echoes of the field name,
+and credential-named identifiers) are no longer masked. `code-self-reference`
+and `code-concatenated-password` lose their six extra spans: extra/inexact spans
+fall from seven to one and harmless characters masked from 48 to zero.
+`code-concatenated-password` is no longer held for review, so review holds fall
+from 12 to 11. Automatic coverage (41/52), zero exposure with review, and exact
+restoration are unchanged. The other fixes made since 0.6.0b1 (typed
+declarations, unquoted clause values, stringified JSON, `=>` assignments, and
+run-together names) change no case in this corpus.
+
 The local HTTP retry tests simulate confirming each actual finding using its
 suggested type, without using corpus labels to find values. After that explicit
 simulation, all 52 annotated occurrences are masked and every document restores
@@ -59,8 +70,8 @@ exactly. This is conditional workflow validation, **not automatic detection or a
 study of whether users make correct decisions**. Choosing to allow a private
 value can still expose it.
 
-Exact span/type precision is 85.42% and recall is 78.85% on these deliberately
-selected examples: 41 exact true positives, seven extra/inexact spans, and 11 exact
+Exact span/type precision is 97.62% and recall is 78.85% on these deliberately
+selected examples: 41 exact true positives, one extra/inexact span, and 11 exact
 misses. A partial mask, wrong type, or oversized replacement can count as both
 an extra span and a miss. Full character coverage therefore differs from exact
 span recall. These figures should not be advertised as overall Veil accuracy.
@@ -96,10 +107,12 @@ with a Unix LF checkout; line-ending escapes inside corpus text stay intact.
   driver's-license examples now have dedicated local review classifications.
   These are scoped context cues, not automatic recognition of arbitrary people
   or addresses. Unlabelled or differently formatted values can still be missed.
-- **False positives:** known unquoted `settings`/`config`/`self`/`this` credential
-  properties remain readable, while quoted lookalikes and weak bare passwords
-  remain protected. Other code-looking strings may still get masked; hashes,
-  trace IDs, and explanatory prose can trigger review. The YAML block marker is
+- **False positives:** unquoted types (`String`, `Option<String>`), echoes of
+  the field name (`api_key=api_key`), and credential-named identifiers such as
+  `settings.database_password` or `db_password` remain readable, while quoted
+  lookalikes and weak bare passwords remain protected. Other code-looking
+  strings may still get masked; hashes, trace IDs, and explanatory prose can
+  trigger review. The YAML block marker is
   now preserved while its content is masked. URL credential masking preserves
   neighboring query parameters in the measured cases.
 
