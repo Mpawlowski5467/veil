@@ -38,13 +38,13 @@ token, not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.
 
 PHP, Ruby, and Perl `=>` pairs are recognized when the value is a quoted
-literal, such as `'password' => '…'`, `:api_key => "…"`, and
-`(password => '…')`. A bare Perl key also needs the literal to end the item
-(a comma, closing bracket, comment, or line end). An unfinished quoted value is
-masked through the end of the input, as for other quoted assignments.
-Variables, calls, and constants after `=>` (`$password`, `env('DB_PASSWORD')`,
-`ENV['DB_PASSWORD']`) stay readable, and so do JavaScript arrow functions such
-as `token => token.trim()`.
+literal, such as `'password' => '…'`, `:api_key => "…"`, `(password => '…')`,
+and Perl named arguments such as `-password => '…'`. A bare or dash-prefixed
+Perl key also needs the literal to end the item (a comma, closing bracket,
+comment, or line end). An unfinished quoted value is masked through the end
+of the input, as for other quoted assignments. Variables, calls, and constants
+after `=>` (`$password`, `env('DB_PASSWORD')`, `ENV['DB_PASSWORD']`) stay
+readable, and so do JavaScript arrow functions such as `token => token.trim()`.
 
 Stringified JSON, meaning a JSON document stored inside a JSON string, is also
 recognized. Examples are an API Gateway/Lambda event `body`, a HAR

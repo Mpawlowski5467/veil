@@ -102,11 +102,12 @@ _ESCAPED_KEY = re.compile(
     r'\\(?<!\\\\)(?P<escape>\\{0,14})"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})'
     r'\\(?P=escape)"[ \t]*:[ \t]*\\(?P=escape)"'
 )
-# PHP/Perl hash keys and Ruby symbols before '=>'; only quoted values follow.
-# Arrow functions make '=>' common, so keys are read back from each arrow.
+# PHP/Perl hash keys, Perl -named arguments and Ruby symbols before '=>'; only
+# quoted values follow. Arrow functions make '=>' common, so keys are read back
+# from each arrow.
 _HASH_ROCKET = re.compile(r"=>[ \t]*(?=[\"'])")
 _ROCKET_KEY = re.compile(
-    r"(?<![\w.$-])(?P<symbol>:?)(?P<quote>[\"']?)"
+    r"(?<![\w.$-])(?P<symbol>[:-]?)(?P<quote>[\"']?)"
     r"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)\Z"
 )
 # A bare key's literal must end the item, unlike an arrow function's body.
@@ -452,7 +453,7 @@ def _hash_rocket_values(text: str) -> Iterator[Span]:
         key_end = arrow.start()
         while key_end > cursor and text[key_end - 1] in " \t":
             key_end -= 1
-        # The longest key is a symbol colon, two quotes and a 128-character name.
+        # The longest key is a ':' or '-', two quotes and a 128-character name.
         key = _ROCKET_KEY.search(text, max(cursor, key_end - 131), key_end)
         cursor = arrow.end()
         if key is None or (kind := credential_type(key["name"])) is None:
@@ -465,7 +466,8 @@ def _hash_rocket_values(text: str) -> Iterator[Span]:
         # Truncated quoted input is protected through the end, as quoted '='
         # and ':' assignments are; nothing remains to scan after it.
         truncated = end == len(text)
-        bare = not key["symbol"] and not key["quote"]
+        # A dash key (-password) is a Perl bareword too.
+        bare = key["symbol"] != ":" and not key["quote"]
         if bare and not truncated and _ROCKET_END.match(text, cursor) is None:
             continue
         if _literal(text[start:end]):

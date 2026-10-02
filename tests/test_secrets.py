@@ -308,6 +308,17 @@ def test_run_together_endings_shared_with_ordinary_words_need_a_separator(name):
         ("'password' => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
         ("password => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
         (
+            "$ftp->login(-user => 'jan', -password => 'Fict-Meadow-46');",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+        (
+            'Net::Fict->new(-api_key => "fictional-orchard-42",\n  -timeout => 30);',
+            "fictional-orchard-42",
+            "API_KEY",
+        ),
+        ("-password => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
+        (
             "  'password' => 'Fict-Meadow-46', # local only",
             "Fict-Meadow-46",
             "PASSWORD",
@@ -333,6 +344,9 @@ def test_hash_rocket_credentials_round_trip(source, value, kind):
         ":password => ENV['DB_PASSWORD']",
         "'password' => $password,",
         "password => $password,",
+        "-password => $password,",
+        "$x-password => 'Fict-Meadow-46',",
+        "-token => 'x' + suffix",
         "'password' => '${DB_PASSWORD}',",
         "'password' => '',",
     ],
