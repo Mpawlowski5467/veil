@@ -54,7 +54,8 @@ seven and harmless characters masked from 88 to 48. All other occurrence coverag
 review holds, and exact restoration are unchanged; every per-case check passes.
 
 After 0.6.0b1, unquoted values that are code (types, echoes of the field name,
-and credential-named identifiers) are no longer masked. `code-self-reference`
+and identifiers of several parts that end in a credential name) are no longer
+masked. `code-self-reference`
 and `code-concatenated-password` lose their six extra spans: extra/inexact spans
 fall from seven to one and harmless characters masked from 48 to zero.
 `code-concatenated-password` is no longer held for review, so review holds fall
@@ -108,12 +109,12 @@ with a Unix LF checkout; line-ending escapes inside corpus text stay intact.
   These are scoped context cues, not automatic recognition of arbitrary people
   or addresses. Unlabelled or differently formatted values can still be missed.
 - **False positives:** unquoted types (`String`, `Option<String>`), echoes of
-  the field name (`api_key=api_key`), and credential-named identifiers such as
-  `settings.database_password` or `db_password` remain readable, while quoted
-  lookalikes and weak bare passwords remain protected. Other code-looking
-  strings may still get masked; hashes, trace IDs, and explanatory prose can
-  trigger review. The YAML block marker is
-  now preserved while its content is masked. URL credential masking preserves
+  the field name (`api_key=api_key`), and identifiers of several parts that end
+  in a credential name, such as `settings.database_password` or `db_password`,
+  remain readable, while quoted lookalikes and weak bare passwords remain
+  protected. Other code-looking strings may still get masked; hashes, trace
+  IDs, and explanatory prose can trigger review. The YAML block marker is now
+  preserved while its content is masked. URL credential masking preserves
   neighboring query parameters in the measured cases.
 
 The webhook finding still covers the entire labelled endpoint, including 41

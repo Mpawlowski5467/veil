@@ -47,7 +47,7 @@ def _clipboard_command(*, write: bool) -> list[str]:
     )
 
 
-def clipboard_read() -> str:
+def clipboard_read(*, timeout: float = 10) -> str:
     """Read text only when the user explicitly selected --clipboard."""
     try:
         result = subprocess.run(
@@ -55,7 +55,7 @@ def clipboard_read() -> str:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=10,
+            timeout=timeout,
             check=True,
         )
         return result.stdout
@@ -63,7 +63,7 @@ def clipboard_read() -> str:
         raise SettingsError("could not read clipboard text") from None
 
 
-def clipboard_write(text: str) -> None:
+def clipboard_write(text: str, *, timeout: float = 10) -> None:
     """Replace clipboard text after a successful transformation."""
     try:
         subprocess.run(
@@ -73,7 +73,7 @@ def clipboard_write(text: str) -> None:
             stderr=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
-            timeout=10,
+            timeout=timeout,
             check=True,
         )
     except (OSError, UnicodeError, subprocess.SubprocessError):
