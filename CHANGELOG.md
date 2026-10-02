@@ -26,8 +26,9 @@
 
 - Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
 - Launchers run end to end with stub Claude Code and Codex clients: a request held for secret review is approved from a separate terminal, with plain `veil review` and with the command from the refusal, and the retried request goes out masked. Gateway selection is covered case by case. Native CI on all three platforms checks launch records, including that `--forget-after-run` keeps its record in the real data folder while the client runs and leaves nothing there afterwards.
-- The gateway selection case with a stopped launch and saved Codex settings can no longer fail now and then. Its stopped launch used a just-closed gateway's port, which the gateway for the Codex settings could be given, so the record was rightly kept as busy and the check that it was cleaned up failed. The stopped launch now uses a port below the ephemeral range, which no gateway can be given.
 - The native clipboard round trip in CI allows a slow first PowerShell start on Windows runners (60 s per call instead of the 10 s default), which previously failed about one Windows job in fifty. The command-line default stays 10 s.
+- The test that records of stopped launches are cleaned up no longer fails now and then on Linux. Its stopped launch used a just-closed gateway's port, which the next gateway could be given, so the record was rightly kept as busy. The stopped launch now uses a port below the ephemeral range, which no gateway can be given.
+- The gateway selection case with a stopped launch and saved Codex settings can no longer fail now and then. Its stopped launch used a just-closed gateway's port, which the gateway for the Codex settings could be given, so the record was rightly kept as busy and the check that it was cleaned up failed. The stopped launch now uses a port below the ephemeral range, which no gateway can be given.
 
 ## 0.6.0b1 — Beta
 
