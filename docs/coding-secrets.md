@@ -24,10 +24,10 @@ After:  apiKey := "[API_KEY_1]"
 
 | Type | Supported evidence |
 | --- | --- |
-| `API_KEY` | Supported key prefixes for OpenAI/Anthropic (`sk-` family), Google (`AIza`), AWS access-key IDs (`AKIA`, `ASIA`), and Stripe secret/restricted keys. Explicit fields such as `API_KEY`, `apiKey`, `x-api-key`, `AWS_SECRET_ACCESS_KEY`, `client_secret`, and `signing_secret`. |
-| `TOKEN` | Supported GitHub, GitLab, Slack, npm, and Hugging Face prefixes; three-part JWT-shaped strings with a JSON header containing `alg`; Bearer values and valid Basic user/password encodings in text; explicit token fields such as `access_token`, `refreshToken`, and `session_token`; supported auth/session cookie values in pasted HTTP headers and signature query parameters. |
-| `PASSWORD` | Explicit fields ending in `password`, `passwd`, `passphrase`, `pwd`, or `pass`, including `DB_PASSWORD` and `dbPass`. |
-| `PRIVATE_KEY` | PEM-style PRIVATE KEY blocks, including RSA, EC, DSA, OpenSSH, and encrypted private keys; explicit private-key fields. An unfinished block is masked through the end of the input. |
+| `API_KEY` | Supported key prefixes for OpenAI/Anthropic (`sk-` family), Google (`AIza`), AWS access-key IDs (`AKIA`, `ASIA`), and Stripe secret/restricted keys. Explicit fields such as `API_KEY`, `apiKey`, `x-api-key`, `AWS_SECRET_ACCESS_KEY`, `client_secret`, and `signing_secret`, and run-together names such as `OPENAIAPIKEY` and `awssecretkey`. |
+| `TOKEN` | Supported GitHub, GitLab, Slack, npm, and Hugging Face prefixes; three-part JWT-shaped strings with a JSON header containing `alg`; Bearer values and valid Basic user/password encodings in text; explicit token fields such as `access_token`, `refreshToken`, and `session_token`; run-together names with a credential qualifier such as `APITOKEN`, `GITHUBTOKEN`, and `authtoken` (an unqualified ending such as `nexttoken` or `ERRORTOKEN` is not a credential); supported auth/session cookie values in pasted HTTP headers and signature query parameters. |
+| `PASSWORD` | Explicit fields whose last word is `password`, `passwd`, `passphrase`, `pwd`, or `pass`, including `DB_PASSWORD`, `dbPass`, and `MYSQL_PWD`, and run-together names ending in `password` or `passphrase`, such as `PGPASSWORD` and `dbpassword`. Run-together endings that also finish ordinary words (`bypass`, `OLDPWD`, `htpasswd`) need a separator, so `adminpass` and `dbpasswd` are not recognized. |
+| `PRIVATE_KEY` | PEM-style PRIVATE KEY blocks, including RSA, EC, DSA, OpenSSH, and encrypted private keys; explicit private-key fields, including run-together `sshprivatekey`. An unfinished block is masked through the end of the input. |
 | `CREDENTIAL` | The `username:password` portion of supported PostgreSQL, MySQL/MariaDB, MongoDB, Redis, AMQP, and HTTP(S) URLs. Percent-encoded spelling is preserved. |
 
 Prefix checks require plausible lengths and character sets. They do not validate
@@ -52,6 +52,24 @@ readable. A compact `NAME=value` reads one shell word, as
 in command prefixes like `DB_PASSWORD=… ./run`. Quote multiword `.env` values.
 This is not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.
+
+PHP, Ruby, and Perl `=>` pairs are recognized when the value is a quoted
+literal, such as `'password' => '…'`, `:api_key => "…"`, `(password => '…')`,
+and Perl named arguments such as `-password => '…'`. A bare or dash-prefixed
+Perl key also needs the literal to end the item (a comma, closing bracket,
+comment, or line end). An unfinished quoted value is masked through the end
+of the input, as for other quoted assignments. Variables, calls, and constants
+after `=>` (`$password`, `env('DB_PASSWORD')`, `ENV['DB_PASSWORD']`) stay
+readable, and so do JavaScript arrow functions such as `token => token.trim()`.
+
+Stringified JSON, meaning a JSON document stored inside a JSON string, is also
+recognized. Examples are an API Gateway/Lambda event `body`, a HAR
+`postData.text`, or a logged `json.dumps` payload. The key and a string value
+must use matching escaped quotes (`{\"password\": \"…\"}`), at one to four
+levels of escaping. Only the value's escaped source spelling is replaced and
+restored, so the outer JSON stays valid. Numeric or bare values inside
+stringified JSON, and other encodings such as base64 or form-encoded bodies,
+are outside this rule.
 
 Additional automatic rules recognize:
 
@@ -170,10 +188,11 @@ gateway's attachment/tool-definition coverage. See [boundaries](../README.md#und
 ## Validation
 
 [The fictional regression fixtures](../tests/test_secrets.py) exercise supported
-prefixes and labels, code/reference negatives, quoted/escaped/multiline values,
-private-key blocks, URL userinfo, streamed restoration, custom overrides,
-persistent sessions, parsed tool arguments, and real local HTTP gateway round
-trips with scripted provider replies. Assertions check the bytes received by the
+prefixes and labels, code/reference negatives,
+quoted/escaped/stringified-JSON/multiline values, private-key blocks, URL
+userinfo, streamed restoration, custom overrides, persistent sessions, parsed
+tool arguments, and real local HTTP gateway round trips with scripted provider
+replies. Assertions check the bytes received by the
 fake provider and the restored response; no live keys or external calls are used.
 The [automatic syntax tests](../tests/test_secret_automatic.py) add prose and
 language variants, shell quoting, YAML boundaries, references, custom overrides,

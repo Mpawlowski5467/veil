@@ -17,6 +17,13 @@ from ..types import Span
 
 SECRET_TYPES = ("API_KEY", "TOKEN", "PASSWORD", "PRIVATE_KEY", "CREDENTIAL")
 _CONCAT = re.compile(r"[ \t]*\+[ \t]*")
+# Run-together names need an unambiguous ending: "pass", "pwd", "passwd", "key"
+# and an arbitrary "...token" also finish ordinary identifiers (bypass, OLDPWD,
+# htpasswd, monkey, ERRORTOKEN), so those still need a separator.
+_QUALIFIED_TOKEN = re.compile(
+    r"(?:api|auth|access|refresh|bearer|session|oauth|bot|app|deploy|personal"
+    r"|service|github|gitlab|slack|npm|pypi|hf|vault)token\Z"
+)
 
 _PREFIXED = re.compile(
     r"(?<![\w-])(?:"
@@ -100,6 +107,24 @@ _COOKIE_NAMES = frozenset(
     }
 )
 _JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
+# A key and string value inside stringified JSON: the same backslash run escapes
+# each quote, e.g. {\"password\": \"...\"} in a Lambda event or HAR body. The
+# leading literal backslash keeps the scan fast; the lookbehind after it makes
+# the run start there.
+_ESCAPED_KEY = re.compile(
+    r'\\(?<!\\\\)(?P<escape>\\{0,14})"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})'
+    r'\\(?P=escape)"[ \t]*:[ \t]*\\(?P=escape)"'
+)
+# PHP/Perl hash keys, Perl -named arguments and Ruby symbols before '=>'; only
+# quoted values follow. Arrow functions make '=>' common, so keys are read back
+# from each arrow.
+_HASH_ROCKET = re.compile(r"=>[ \t]*(?=[\"'])")
+_ROCKET_KEY = re.compile(
+    r"(?<![\w.$-])(?P<symbol>[:-]?)(?P<quote>[\"']?)"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)\Z"
+)
+# A bare key's literal must end the item, unlike an arrow function's body.
+_ROCKET_END = re.compile(r"[ \t]*(?:[,;)\]}#]|\r?\n|\Z)")
 _PROSE_LABEL = re.compile(
     r"(?i:\b(?P<name>api[ _-]?key|access[ _-]?token|refresh[ _-]?token|"
     r"password|passphrase|client[ _-]?secret|private[ _-]?key))"
@@ -159,17 +184,20 @@ def credential_type(name: str) -> str | None:
     parts = re.split(r"[_.-]+", separated.lower())
     last = parts[-1]
     joined = "_".join(parts)
-    if last in {"password", "passwd", "passphrase", "pwd", "pass"}:
+    if last in {"password", "passwd", "passphrase", "pwd", "pass"} or last.endswith(
+        ("password", "passphrase")
+    ):
         return "PASSWORD"
-    if joined.endswith("private_key") or last == "privatekey":
+    if joined.endswith("private_key") or last.endswith("privatekey"):
         return "PRIVATE_KEY"
     if (
         joined.endswith(("api_key", "access_key_id", "secret_access_key"))
         or last in {"apikey", "secret", "secretkey"}
+        or last.endswith(("apikey", "secretkey"))
         or joined.endswith("secret_key")
     ):
         return "API_KEY"
-    if last == "token":
+    if last == "token" or _QUALIFIED_TOKEN.search(last) is not None:
         return "TOKEN"
     return None
 
@@ -524,8 +552,39 @@ def _cookies(text: str) -> tuple[list[Span], set[int]]:
     return found, handled
 
 
+def _escaped_string_end(text: str, start: int, depth: int) -> int:
+    """Find the end of a string value written at one JSON escape depth."""
+    # At depth k = 2**n - 1, a run of r backslashes before '"' encodes
+    # j = (r - k) / (k + 1) inner backslashes; the quote closes the value when
+    # j is even. Encoded trailing backslashes stay inside the value.
+    end = start
+    while end < len(text):
+        if text[end] in '"\r\n':
+            return end
+        if text[end] != "\\":
+            end += 1
+            continue
+        run_end = end
+        while run_end < len(text) and text[run_end] == "\\":
+            run_end += 1
+        if run_end < len(text) and text[run_end] == '"':
+            run = run_end - end
+            if run < depth:  # An enclosing string ended: malformed input.
+                return end
+            inner, remainder = divmod(run - depth, depth + 1)
+            if remainder == 0 and inner % 2 == 0:
+                return run_end - depth
+            run_end += 1
+        end = run_end
+    # Truncated input: protect through the end, not a partial value.
+    return len(text)
+
+
 def _escaped_fields(text: str) -> Iterator[Span]:
-    """Decode JSON field names only; mask the original source value losslessly."""
+    """Decode escaped JSON field names and stringified JSON keys.
+
+    The original source value is masked, so restoration is lossless.
+    """
     if "\\" not in text:
         return
     for field in _JSON_KEY.finditer(text):
@@ -541,6 +600,48 @@ def _escaped_fields(text: str) -> Iterator[Span]:
             start, end = offsets
             if _literal(text[start:end]):
                 yield _span(text, start, end, kind)
+    cursor = 0
+    while key := _ESCAPED_KEY.search(text, cursor):
+        start = cursor = key.end()
+        depth = len(key["escape"]) + 1
+        # Only 1, 3, 7 and 15 backslashes are JSON escape levels one to four.
+        if depth not in {1, 3, 7, 15}:
+            continue
+        kind = credential_type(key["name"])
+        if kind is None:
+            continue
+        end = _escaped_string_end(text, start, depth)
+        cursor = max(start, end)
+        if end > start and _literal(text[start:end]):
+            yield _span(text, start, end, kind)
+
+
+def _hash_rocket_values(text: str) -> Iterator[Span]:
+    """Read quoted PHP, Ruby and Perl '=>' values; arrow functions stay readable."""
+    cursor = 0
+    while arrow := _HASH_ROCKET.search(text, cursor):
+        key_end = arrow.start()
+        while key_end > cursor and text[key_end - 1] in " \t":
+            key_end -= 1
+        # The longest key is a ':' or '-', two quotes and a 128-character name.
+        key = _ROCKET_KEY.search(text, max(cursor, key_end - 131), key_end)
+        cursor = arrow.end()
+        if key is None or (kind := credential_type(key["name"])) is None:
+            continue
+        offsets = _assignment_value(text, cursor)
+        if offsets is None:
+            continue
+        start, end = offsets
+        cursor = end + 1
+        # Truncated quoted input is protected through the end, as quoted '='
+        # and ':' assignments are; nothing remains to scan after it.
+        truncated = end == len(text)
+        # A dash key (-password) is a Perl bareword too.
+        bare = key["symbol"] != ":" and not key["quote"]
+        if bare and not truncated and _ROCKET_END.match(text, cursor) is None:
+            continue
+        if _literal(text[start:end]):
+            yield _span(text, start, end, kind)
 
 
 def _concatenated_literals(text: str, end: int, kind: str) -> Iterator[Span]:
@@ -597,6 +698,7 @@ def detect(text: str) -> list[Span]:
     found.extend(_labelled_values(text))
     found.extend(_flag_values(text))
     found.extend(_escaped_fields(text))
+    found.extend(_hash_rocket_values(text))
     for match in _PREFIXED.finditer(text):
         kind = "API_KEY" if match["api"] is not None else "TOKEN"
         found.append(_span(text, match.start(), match.end(), kind))

@@ -9,8 +9,10 @@ import pytest
 
 from test_gateway_server import FakeAPI, call
 from veil import RegexDetector, Shield, Span
+from veil.detectors._secrets import credential_type
 from veil.detectors.base import Detector
 from veil.gateway import Gateway, Settings, UnsupportedRequestError, open_sessions
+from veil.secret_review import candidates
 
 # Assemble obvious synthetic payloads; no credentials or live provider calls.
 OPENAI = "sk-proj-" + "A1b2" * 10
@@ -89,6 +91,18 @@ def test_standalone_formats_round_trip(value, kind):
         ("session_token", "TOKEN"),
         ("token", "TOKEN"),
         ("PRIVATE_KEY", "PRIVATE_KEY"),
+        ("PGPASSWORD", "PASSWORD"),
+        ("MY_PGPASSWORD", "PASSWORD"),
+        ("dbpassword", "PASSWORD"),
+        ("KEYSTOREPASSWORD", "PASSWORD"),
+        ("masterpassphrase", "PASSWORD"),
+        ("APITOKEN", "TOKEN"),
+        ("GITHUBTOKEN", "TOKEN"),
+        ("authtoken", "TOKEN"),
+        ("x-authtoken", "TOKEN"),
+        ("OPENAIAPIKEY", "API_KEY"),
+        ("awssecretkey", "API_KEY"),
+        ("sshprivatekey", "PRIVATE_KEY"),
     ],
 )
 @pytest.mark.parametrize(
@@ -136,6 +150,72 @@ def test_json_escaped_password_and_parsed_field_are_lossless(value):
 
 
 @pytest.mark.parametrize(
+    "value",
+    ["FictPass1", 'fict"tok42', "ends\\", "two words", "a\nb", '\\"', "Ada Quill 🦊"],
+)
+@pytest.mark.parametrize("depth", [1, 2, 3])
+def test_stringified_json_password_is_lossless(depth, value):
+    source = json.dumps({"user": "jan@example.com", "password": value})
+    for _ in range(depth):
+        source = json.dumps({"body": source})
+    shield = Shield()
+    masked = shield.mask(source)
+    assert shield.restore(masked.text).text == source
+    decoded = json.loads(masked.text)
+    for _ in range(depth):
+        decoded = json.loads(decoded["body"])
+    assert decoded == {"user": "[EMAIL_1]", "password": "[PASSWORD_1]"}
+    assert {e.entity_type for e in masked.entities} == {"EMAIL", "PASSWORD"}
+
+
+@pytest.mark.parametrize(
+    ("source", "masked_text"),
+    [
+        (
+            r'{"httpMethod": "POST", "path": "/login", "body": "{\"username\": '
+            r'\"jan\", \"password\": \"Fict-Meadow-45\"}"}',
+            r'{"httpMethod": "POST", "path": "/login", "body": "{\"username\": '
+            r'\"jan\", \"password\": \"[PASSWORD_1]\"}"}',
+        ),
+        (
+            r'"postData": {"mimeType": "application/json", "text": '
+            r'"{\"email\":\"jan.nowak@example.com\",'
+            r'\"api_key\":\"fictional-orchard-42\"}"}',
+            r'"postData": {"mimeType": "application/json", "text": '
+            r'"{\"email\":\"[EMAIL_1]\",\"api_key\":\"[API_KEY_1]\"}"}',
+        ),
+        (
+            r'{"log": "{\"body\": \"{\\\"access_token\\\": '
+            r'\\\"fictional-orchard-42\\\"}\"}"}',
+            r'{"log": "{\"body\": \"{\\\"access_token\\\": \\\"[TOKEN_1]\\\"}\"}"}',
+        ),
+        (r'{"body":"{\"password\":\"Fict', r'{"body":"{\"password\":\"[PASSWORD_1]'),
+    ],
+)
+def test_stringified_json_from_events_logs_and_truncated_input(source, masked_text):
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == masked_text
+    assert shield.restore(masked.text).text == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        r"{\"password\": \"${DB_PASSWORD}\"}",
+        r"{\"password\": \"\"}",
+        r"{\"password\": null}",
+        r"{\"password_length\": \"12\"}",
+        r"{\"tokenizer\": \"bpe\"}",
+        r'\\"password\\":\\"x\\"',
+        r"{\"password\": \"[PASSWORD_1]\"}",
+    ],
+)
+def test_stringified_json_references_and_other_fields_stay_readable(source):
+    assert Shield().mask(source).text == source
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "password = os.environ['PASSWORD']",
@@ -172,10 +252,116 @@ def test_json_escaped_password_and_parsed_field_are_lossless(value):
         "sk-short",
         "ghp_short",
         "password: [PASSWORD_1]",
+        "passwordless=enabled",
+        "tokenizer=bpe",
+        "monkey=banana",
+        "bypass=fictional-proxy",
+        "compass=north",
+        "lowpass=1000",
+        "OLDPWD=/home/jan",
+        "htpasswd=/etc/nginx/.htpasswd",
+        "ERRORTOKEN = 67",
+        "nexttoken=abc123",
+        "maxtokens=4096",
     ],
 )
 def test_code_and_references_are_not_secret_values(text):
     assert not [s for s in RegexDetector().detect(text) if s.source == "secret"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "adminpass",
+        "dbpasswd",
+        "CLIENTSECRET",
+        "nexttoken",
+        "stoken",
+        "URLToken",
+        "passwordless",
+        "tokenizer",
+    ],
+)
+def test_run_together_endings_shared_with_ordinary_words_need_a_separator(name):
+    assert credential_type(name) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "value", "kind"),
+    [
+        ("'password' => 'Fict-Meadow-46',", "Fict-Meadow-46", "PASSWORD"),
+        (
+            "$config = ['api_key' => 'fictional-orchard-42'];",
+            "fictional-orchard-42",
+            "API_KEY",
+        ),
+        ('"DB_PASSWORD" => "Fict-Meadow-46"', "Fict-Meadow-46", "PASSWORD"),
+        (":password => 'Fict-Meadow-46'", "Fict-Meadow-46", "PASSWORD"),
+        (':"api_key" => "fictional-orchard-42"', "fictional-orchard-42", "API_KEY"),
+        (
+            "my %db = (user => 'jan', password => 'Fict-Meadow-46');",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+        ('%{"token" => "fictional-orchard-42"}', "fictional-orchard-42", "TOKEN"),
+        ("'password'=>'Fict-Meadow-46'", "Fict-Meadow-46", "PASSWORD"),
+        ("'password' => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
+        ("password => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
+        (
+            "$ftp->login(-user => 'jan', -password => 'Fict-Meadow-46');",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+        (
+            'Net::Fict->new(-api_key => "fictional-orchard-42",\n  -timeout => 30);',
+            "fictional-orchard-42",
+            "API_KEY",
+        ),
+        ("-password => 'Fict-Meadow-46", "Fict-Meadow-46", "PASSWORD"),
+        (
+            "  'password' => 'Fict-Meadow-46', # local only",
+            "Fict-Meadow-46",
+            "PASSWORD",
+        ),
+    ],
+)
+def test_hash_rocket_credentials_round_trip(source, value, kind):
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == source.replace(value, f"[{kind}_1]")
+    assert shield.restore(masked.text).text == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "tokens.map(token => token.trim())",
+        "const check = password => password.length > 8;",
+        "const auth = token => `Bearer ${token}`;",
+        'const mask = password => "*".repeat(password.length);',
+        'items.forEach((token) => "x" + token)',
+        "'password' => env('DB_PASSWORD'),",
+        ":password => ENV['DB_PASSWORD']",
+        "'password' => $password,",
+        "password => $password,",
+        "-password => $password,",
+        "$x-password => 'Fict-Meadow-46',",
+        "-token => 'x' + suffix",
+        "'password' => '${DB_PASSWORD}',",
+        "'password' => '',",
+    ],
+)
+def test_arrow_functions_and_hash_references_stay_readable(source):
+    assert Shield().mask(source).text == source
+    assert not candidates(source)
+
+
+def test_run_together_shell_password_keeps_the_command():
+    source = "PGPASSWORD=Fict-Meadow-47 psql -h db.example.com"
+    shield = Shield()
+    masked = shield.mask(source)
+    assert masked.text == "PGPASSWORD=[PASSWORD_1] psql -h db.example.com"
+    assert shield.restore(masked.text).text == source
 
 
 @pytest.mark.parametrize("scheme", ["Bearer", "bearer", "Basic"])
@@ -268,6 +454,18 @@ def test_large_coding_text_and_unterminated_quotes_complete_promptly():
     assert len([s for s in spans if s.entity_type == "PASSWORD"]) == 10000
     assert time.monotonic() - start < 5
     text = 'password="' + "a=password=" * 20000
+    start = time.monotonic()
+    assert any(s.end == len(text) for s in detector.detect(text))
+    assert time.monotonic() - start < 5
+    text = "'password' => 'x" * 20000
+    start = time.monotonic()
+    detector.detect(text)
+    assert time.monotonic() - start < 5
+    text = "'password' => 'x',\n" * 20000 + "'password' => 'unfinished"
+    start = time.monotonic()
+    assert any(s.end == len(text) for s in detector.detect(text))
+    assert time.monotonic() - start < 5
+    text = r"{\"password\":\"x" * 20000
     start = time.monotonic()
     assert any(s.end == len(text) for s in detector.detect(text))
     assert time.monotonic() - start < 5
