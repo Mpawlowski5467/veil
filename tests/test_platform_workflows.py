@@ -108,11 +108,8 @@ def test_native_clipboard_round_trip():
     # Only isolated CI desktops: never replace a user's current clipboard.
     from veil.text_cli import clipboard_read, clipboard_write
 
-    # A cold Windows PowerShell start occasionally exceeds the 10 s default on
-    # CI runners; a hung clipboard still fails within a bounded time.
-    timeout = 60
     text = "Fictional Łucja — jane.doe@example.com\nsecond line"
-    clipboard_write(text, timeout=timeout)
-    assert clipboard_read(timeout=timeout) == text
-    clipboard_write("", timeout=timeout)
-    assert clipboard_read(timeout=timeout) == ""
+    clipboard_write(text)
+    assert clipboard_read() == text
+    clipboard_write("")
+    assert clipboard_read() == ""
