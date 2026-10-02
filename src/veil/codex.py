@@ -19,6 +19,7 @@ from .gateway import (
     open_sessions,
     prepare_data_dir,
 )
+from .launches import published, review_command
 
 Auth = Literal["api-key", "chatgpt"]
 
@@ -142,8 +143,13 @@ def run_codex(
     auth: Auth = "chatgpt",
     codex: str | None = None,
     cwd: Path | None = None,
+    launch_dir: Path | None = None,
 ) -> int:
-    """Keep a gateway alive for one local Codex process and forward its exit code."""
+    """Keep a gateway alive for one local Codex process and forward its exit code.
+
+    The gateway's launch record goes in ``launch_dir`` (by default
+    ``data_dir``), where review and verification in another terminal look.
+    """
     from .cli import _run_child
 
     executable = codex or shutil.which("codex")
@@ -164,7 +170,9 @@ def run_codex(
     settings = load_settings(data_dir / "config.json")
     identity = git_identity(cwd or Path.cwd()) if settings.identity else {}
     sessions = open_sessions(data_dir, settings, identity, api="openai")
+    record_dir = launch_dir or data_dir
     with Gateway(sessions, api="openai", openai_auth=auth) as gateway:
+        gateway.review_command = review_command(gateway.url, record_dir)
         overrides: dict[str, Any] = {
             "model_provider": "veil",
             "model_providers.veil": provider(gateway, environment_secret=True),
@@ -187,4 +195,5 @@ def run_codex(
             "private values in returned tools are limited to direct local patches",
             file=sys.stderr,
         )
-        return _run_child(command, env, cwd)
+        with published(record_dir, "codex", gateway.url, gateway.secret):
+            return _run_child(command, env, cwd)

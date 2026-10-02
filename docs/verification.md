@@ -39,11 +39,21 @@ an independent API request that could be mistaken for your conversation.
 
 ### Select the right gateway
 
-Tools inside sessions launched with `veil claude` or `veil codex` inherit the
-gateway URL and secret privately. The verification CLI uses that endpoint.
-Outside those launchers, it uses the selected Veil provider in Codex's user
-configuration. `--config PATH` explicitly selects a different Codex config and
-takes precedence over the inherited endpoint.
+The verification CLI uses the first of these that applies:
+
+1. `--gateway-url URL`: a running launch at that address in the data folder,
+   otherwise the data folder's saved gateway secret.
+2. `--config PATH`: the Veil provider in that Codex config.
+3. Inside a session launched with `veil claude` or `veil codex`, the gateway URL
+   and secret it inherits privately.
+4. `ANTHROPIC_BASE_URL`, only when `ANTHROPIC_CUSTOM_HEADERS` carries the
+   gateway secret header (manual Claude Code settings).
+5. A running `veil claude` / `veil codex` launch in the data folder (pass the
+   launch's `--data-dir` if it used one), when it is the only running gateway.
+   With several launches, or a launch plus a running gateway from saved Codex
+   settings, the command lists their addresses instead of guessing: choose one
+   with `--gateway-url`, or the Codex one with `--config`.
+6. The selected Veil provider in Codex's user configuration.
 
 For a manually started gateway whose secret is saved in a data folder:
 
@@ -54,9 +64,9 @@ veil --data-dir /path/to/private/veil verify --gateway-url http://127.0.0.1:8484
 
 Use the same endpoint for creation and checking. There is no secret command-line
 argument. Veil proves the gateway's identity before sending its local secret and
-refuses remote URLs, redirects, and browser requests. Private launchers use an
-ephemeral secret, so check those gateways from inside the launched client rather
-than guessing their port or using an unrelated saved data folder.
+refuses remote URLs, redirects, and browser requests. Launch records are
+owner-only, removed when the launch exits, and checked by gateway proof before
+use; records of stopped launches are ignored and cleaned up.
 
 ## Interpret the evidence
 

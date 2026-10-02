@@ -40,6 +40,7 @@ from .gateway import (
 )
 from .gateway.config import APP, Settings
 from .gateway.hooks import hook_settings
+from .launches import published, review_command
 from .vault.sqlite import SQLiteVault
 
 #: Tools that send content through Anthropic-hosted services, or to another
@@ -249,8 +250,13 @@ def run_claude(
     data_dir: Path,
     claude: str | None = None,
     cwd: Path | None = None,
+    launch_dir: Path | None = None,
 ) -> int:
-    """Run Claude Code with ``args`` through a gateway; return its exit code."""
+    """Run Claude Code with ``args`` through a gateway; return its exit code.
+
+    The gateway's launch record goes in ``launch_dir`` (by default
+    ``data_dir``), where review and verification in another terminal look.
+    """
     executable = claude or shutil.which("claude")
     if executable is None:
         print(f"{APP}: the claude command wasn't found on PATH", file=sys.stderr)
@@ -271,7 +277,9 @@ def run_claude(
         )
         if h
     )
+    record_dir = launch_dir or data_dir
     with Gateway(sessions) as gateway:
+        gateway.review_command = review_command(gateway.url, record_dir)
         custom = claude_settings(gateway, data_dir=data_dir, headers=headers)
         env = {k: v for k, v in os.environ.items() if k not in HOOKS_OFF}
         env.update({k: v for k, v in custom["env"].items() if v})
@@ -294,12 +302,13 @@ def run_claude(
         warning = version_warning(claude_version(executable), data_dir)
         if warning is not None:
             print(warning, file=sys.stderr)
-        try:
-            code = _run_child(
-                [executable, "--settings", str(settings_file), *args], env, cwd
-            )
-        finally:
-            settings_file.unlink(missing_ok=True)
+        with published(record_dir, "claude", gateway.url, gateway.secret):
+            try:
+                code = _run_child(
+                    [executable, "--settings", str(settings_file), *args], env, cwd
+                )
+            finally:
+                settings_file.unlink(missing_ok=True)
         # Claude Code has left the terminal: say what it couldn't send, since
         # a background request (a session title, say) fails without a word.
         for line in gateway.refusals.summary():
@@ -395,6 +404,7 @@ def run_gateway(
     with Gateway(
         sessions, port=port, secret=gateway_secret(data_dir), api=api, openai_auth=auth
     ) as gateway:
+        gateway.review_command = review_command(gateway.url, data_dir)
         if api == "openai":
             from .codex import write_configuration
 
@@ -714,12 +724,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "Client transcripts remain. Interrupted cleanup may leave files.",
                     file=sys.stderr,
                 )
+                # Launch records stay in the real data folder, where review
+                # and verification in another terminal look for them.
                 if options.command == "claude":
-                    return run_claude(passed_on, data_dir=private)
+                    return run_claude(passed_on, data_dir=private, launch_dir=data_dir)
                 from .codex import run_codex
 
                 args = options.args[1:] if options.args[:1] == ["--"] else options.args
-                return run_codex(args, data_dir=private, auth=options.auth)
+                return run_codex(
+                    args, data_dir=private, auth=options.auth, launch_dir=data_dir
+                )
         if options.command == "entities":
             from .entities_cli import run_entities
 
