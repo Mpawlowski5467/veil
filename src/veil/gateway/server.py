@@ -298,6 +298,8 @@ class Gateway:
 
     Attributes:
         refusals: The requests refused so far, for a summary.
+        review_command: The command a review refusal tells the user to run;
+            launchers set it to name their own address.
     """
 
     def __init__(
@@ -333,6 +335,7 @@ class Gateway:
         self.keepalive = keepalive
         self.timeout = timeout
         self.refusals = Refusals()
+        self.review_command = f"{APP} review"
         self._server = _QuietServer(("127.0.0.1", port), _handler(self))
         self._server.daemon_threads = True
         self._thread = threading.Thread(
@@ -726,9 +729,10 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                                     403,
                                     "permission_error",
                                     f"Veil review {review_id} is required; "
-                                    "nothing was sent. Open veil review in your "
-                                    "own local terminal, decide each finding, "
-                                    "then retry this request. Do not bypass Veil.",
+                                    "nothing was sent. Run "
+                                    f"`{gateway.review_command}` in your own "
+                                    "local terminal, decide each finding, then "
+                                    "retry this request. Do not bypass Veil.",
                                 )
                         if path == _MESSAGES or not claude:
                             self._observation = gateway.activity.begin(

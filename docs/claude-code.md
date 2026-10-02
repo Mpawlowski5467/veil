@@ -43,6 +43,9 @@ request from inside the launched session. Use the same [data folder and detector
 settings](configuration.md) when registering values. Exit and relaunch after
 upgrading Veil or changing settings. Session mappings survive relaunches.
 
+From another terminal, `veil review`, `veil verify` and `veil status --activity`
+find this launch; use the same `--data-dir` if you passed one.
+
 ## When a request is refused
 
 A request the gateway cannot mask is not sent. For example:

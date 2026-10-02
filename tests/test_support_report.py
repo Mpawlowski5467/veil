@@ -31,7 +31,10 @@ def configured(tmp_path):
 
 
 @pytest.fixture
-def reports(monkeypatch):
+def reports(tmp_path, monkeypatch):
+    # Never this machine's data folder, which may hold a running launch.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr("veil.support_report._client_version", lambda _: "1.2.3")
     monkeypatch.setattr(
         "veil.support_report.endpoint",

@@ -170,6 +170,7 @@ jobs:
         run: >-
           uv run pytest -q tests/test_platform_workflows.py
           tests/test_verification.py tests/test_gateway_response.py
+          tests/test_launch_records.py
           tests/test_gateway_request.py tests/test_gateway_blocks.py
           tests/test_gateway_golden.py tests/test_gateway_leaks.py
           tests/test_gateway_request_fuzz.py tests/test_openai_gateway.py

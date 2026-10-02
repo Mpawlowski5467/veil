@@ -4,6 +4,7 @@ import copy
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from types import SimpleNamespace
 
 import pytest
@@ -11,8 +12,9 @@ import pytest
 from test_gateway_server import FakeAPI, call, sse, stream_reply, text_reply
 from veil import Shield
 from veil.cli import main
-from veil.gateway import Gateway, Sessions
+from veil.gateway import Gateway, Sessions, SettingsError, prepare_data_dir
 from veil.gateway.activity import ACTIVITY_PATH, VERIFY_PATH, Activity
+from veil.launches import FOLDER, published
 from veil.verification import endpoint
 
 
@@ -417,3 +419,185 @@ def test_codex_configuration_endpoint_and_identity_failure(
     selected = endpoint(config=config)
     assert selected.url == gateway.url
     assert selected.secret not in repr(selected)
+
+
+@pytest.fixture
+def isolated(tmp_path, monkeypatch):
+    # Never this machine's data folder or Codex settings, which may select a
+    # running gateway.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    for name in (
+        "VEIL_GATEWAY_URL",
+        "VEIL_GATEWAY_SECRET",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_CUSTOM_HEADERS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return tmp_path
+
+
+class World:
+    """Gateways, launch records and Codex settings for one selection case."""
+
+    def __init__(self, stack, tmp_path, monkeypatch):
+        self.stack = stack
+        self.tmp_path = tmp_path
+        self.env = monkeypatch
+        self.data = prepare_data_dir(tmp_path / "data")
+        self.secrets = []
+
+    def gateway(self):
+        gateway = self.stack.enter_context(Gateway(Sessions(lambda _: Shield())))
+        self.secrets.append(gateway.secret)
+        return gateway
+
+    def launch(self, client="claude"):
+        gateway = self.gateway()
+        self.stack.enter_context(
+            published(self.data, client, gateway.url, gateway.secret)
+        )
+        return gateway
+
+    def closed(self):
+        gateway = Gateway(Sessions(lambda _: Shield()))
+        gateway.close()
+        return gateway
+
+    def codex(self, gateway):
+        folder = self.tmp_path / "codex"
+        folder.mkdir(exist_ok=True)
+        path = folder / "config.toml"
+        path.write_text(
+            'model_provider = "veil"\n'
+            "[model_providers.veil]\n"
+            f'base_url = "{gateway.url}/v1"\n'
+            f'http_headers = {{ "x-gateway-secret" = "{gateway.secret}" }}\n'
+        )
+        path.chmod(0o600)
+        return path
+
+
+def only_launch(world):
+    launch = world.launch()
+    return {"data_dir": world.data}, launch
+
+
+def two_launches(world):
+    claude, codex = world.launch("claude"), world.launch("codex")
+    return {"data_dir": world.data}, [claude.url, codex.url, "--gateway-url"]
+
+
+def stale_launch_and_codex(world):
+    stopped = world.closed()
+    write = published(world.data, "claude", stopped.url, stopped.secret)
+    world.stack.enter_context(write)
+    saved = world.gateway()
+    world.codex(saved)
+    stale = world.data / FOLDER / f"{stopped.port}.json"
+    assert stale.exists()
+    return {"data_dir": world.data}, saved, lambda: not stale.exists()
+
+
+def launch_and_live_codex(world):
+    launch = world.launch()
+    saved = world.gateway()
+    world.codex(saved)
+    expected = [launch.url, f"{saved.url} (saved Codex settings; use --config)"]
+    return {"data_dir": world.data}, expected
+
+
+def launch_and_stopped_codex(world):
+    launch = world.launch()
+    world.codex(world.closed())
+    return {"data_dir": world.data}, launch
+
+
+def explicit_launch_url(world):
+    launch = world.launch()
+    assert not (world.data / "gateway-secret").exists()
+    return {"data_dir": world.data, "gateway_url": launch.url}, launch
+
+
+def inherited_environment(world):
+    inherited = world.gateway()
+    world.env.setenv("VEIL_GATEWAY_URL", inherited.url)
+    world.env.setenv("VEIL_GATEWAY_SECRET", inherited.secret)
+    world.launch()
+    return {"data_dir": world.data}, inherited
+
+
+def base_url_without_header(world):
+    saved = world.gateway()
+    world.codex(saved)
+    world.env.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:4000")
+    return {}, saved
+
+
+def base_url_with_header(world):
+    manual = world.gateway()
+    world.env.setenv("ANTHROPIC_BASE_URL", manual.url)
+    world.env.setenv("ANTHROPIC_CUSTOM_HEADERS", f"x-gateway-secret: {manual.secret}")
+    return {}, manual
+
+
+def explicit_config(world):
+    world.launch()
+    saved = world.gateway()
+    return {"config": world.codex(saved), "data_dir": world.data}, saved
+
+
+def absent_data_folder(world):
+    saved = world.gateway()
+    world.codex(saved)
+    absent = world.tmp_path / "absent"
+    return {"data_dir": absent}, saved, lambda: not absent.exists()
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        only_launch,
+        two_launches,
+        stale_launch_and_codex,
+        launch_and_live_codex,
+        launch_and_stopped_codex,
+        explicit_launch_url,
+        inherited_environment,
+        base_url_without_header,
+        base_url_with_header,
+        explicit_config,
+        absent_data_folder,
+    ],
+    ids=lambda case: case.__name__,
+)
+def test_endpoint_selection(isolated, monkeypatch, case):
+    with ExitStack() as stack:
+        world = World(stack, isolated, monkeypatch)
+        kwargs, expected, *after = case(world)
+        if isinstance(expected, list):
+            with pytest.raises(SettingsError) as error:
+                endpoint(**kwargs)
+            message = str(error.value)
+            assert message.startswith("several local gateways are running")
+            for part in expected:
+                assert part in message
+            for secret in world.secrets:
+                assert secret not in message
+        else:
+            selected = endpoint(**kwargs)
+            assert (selected.url, selected.secret) == (expected.url, expected.secret)
+        for check in after:
+            assert check()
+
+
+def test_cli_finds_the_running_launch(isolated, monkeypatch, capsys):
+    with ExitStack() as stack:
+        world = World(stack, isolated, monkeypatch)
+        launch = world.launch()
+        options = ["--data-dir", str(world.data)]
+        assert main([*options, "status", "--activity", "--json"]) == 0
+        output = capsys.readouterr()
+        assert json.loads(output.out)["gateway_state"] == "ready"
+        assert launch.secret not in output.out + output.err

@@ -25,7 +25,7 @@ For an OpenAI API key, set `OPENAI_API_KEY` in the launching shell, then use:
 veil codex --auth api-key
 ```
 
-Veil starts a loopback gateway on a free port, runs standalone Codex with its provider pinned to the gateway, forwards the exit status, and closes the gateway on exit. It does not edit your Codex configuration. The local gateway secret is passed through an environment header setting, not exposed in process arguments.
+Veil starts a loopback gateway on a free port, runs standalone Codex with its provider pinned to the gateway, forwards the exit status, and closes the gateway on exit. It does not edit your Codex configuration. The local gateway secret is passed through an environment header setting, not exposed in process arguments. From another terminal, `veil review`, `veil verify` and `veil status --activity` find this launch; use the same `--data-dir` if you passed one.
 
 The default `--auth chatgpt` uses Codex's existing sign-in. Veil does not read the credential file itself. Codex supplies authentication; the gateway forwards subscription requests to the Codex backend and API-key requests to `api.openai.com`. A mismatch between the client credential mode and gateway mode is refused.
 

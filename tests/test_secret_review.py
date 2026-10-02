@@ -11,6 +11,7 @@ from test_gateway_server import FakeAPI, call
 from veil import cli
 from veil.gateway import Gateway, Settings, open_sessions
 from veil.gateway.config import SettingsError, parse_settings, prepare_data_dir
+from veil.launches import review_command
 from veil.review_cli import ReviewServer, _gateway_request, run_review
 from veil.secret_review import (
     REVIEW_PATH,
@@ -195,6 +196,37 @@ def test_gateway_requires_review_then_masks_complete_value(tmp_path, api, value)
 
 
 @pytest.mark.parametrize("api", ["anthropic", "openai"])
+def test_refusal_names_the_review_command(tmp_path, api):
+    fake = FakeAPI()
+    try:
+        with (
+            open_sessions(
+                tmp_path,
+                Settings(identity=False, note=False, secret_review=True),
+                {},
+                api=api,
+            ) as sessions,
+            Gateway(sessions, api=api, upstream=fake.host, secure=False) as gateway,
+        ):
+            request = body(api, f'Use "{PHRASE}" to sign in.')
+            response, raw = send(gateway, request)
+            assert response.status == 403
+            message = json.loads(raw)["error"]["message"]
+            assert "Run `veil review` in your own local terminal" in message
+            folder = tmp_path / "my data"
+            gateway.review_command = review_command(gateway.url, folder)
+            response, raw = send(gateway, request)
+            assert response.status == 403
+            message = json.loads(raw)["error"]["message"]
+            assert f"Run `{review_command(gateway.url, folder)}` in your" in message
+            assert f"--gateway-url {gateway.url}" in message
+            assert gateway.secret not in raw.decode()
+            assert fake.received == []
+    finally:
+        fake.close()
+
+
+@pytest.mark.parametrize("api", ["anthropic", "openai"])
 def test_ignore_only_allows_exact_request_and_same_session(tmp_path, api):
     fake = FakeAPI()
     try:
@@ -347,7 +379,12 @@ def test_cancelled_review_never_writes_stdout_or_clipboard(
     assert "review cancelled" in captured.err
 
 
-def test_review_command_refuses_pipes_before_reading_private_findings(monkeypatch):
+def test_review_command_refuses_pipes_before_reading_private_findings(
+    tmp_path, monkeypatch
+):
+    # Never this machine's data folder, which may hold a running launch.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr("sys.stdin", io.StringIO())
     with pytest.raises(SettingsError, match="local interactive terminal"):
         run_review()
