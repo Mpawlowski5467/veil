@@ -8,8 +8,9 @@ veil preview
 
 Windows users can run `.\.venv\Scripts\veil.exe preview` from the installation
 folder. In a source checkout, `uv run veil preview` works too. Use `--no-browser`
-to print the private local URL without opening it automatically. Keep that
-terminal running; Ctrl-C closes the server, which otherwise expires in ten minutes.
+to print a one-time private URL instead of opening it automatically, then open
+it once. Keep that terminal running; Ctrl-C closes the server, which otherwise
+expires in ten minutes.
 
 1. Click **Use fictional example**, or enter text and click **Preview masks**.
 2. Inspect the masked output and each replacement's explanation.
@@ -35,7 +36,9 @@ Use [request verification](verification.md) for routing evidence and
 [`veil review`](secret-review.md) to decide actual held gateway requests.
 
 If the page cannot connect, keep the terminal running or reopen `veil preview`
-and use its new URL. Reloading removes access because the capability is stripped
-from browser history after startup. Opening `preview.html` or `review.html` as a
-file cannot run detection or fetch findings; the appropriate command must start
-the authenticated local server.
+and use its new URL. The URL works once: the page exchanges it for a private
+session when it starts, so reloading the page or opening the same URL again needs
+a new `veil preview`. On Linux the page answers only connections from your own
+OS account. Opening `preview.html` or `review.html` as a file cannot run
+detection or fetch findings; the appropriate command must start the
+authenticated local server.

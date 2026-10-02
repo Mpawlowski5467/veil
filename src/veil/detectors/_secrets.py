@@ -47,10 +47,24 @@ _ASSIGNMENT = re.compile(
     # A removed diff line still contains a credential. Consume just its leading
     # '-' without relaxing boundaries inside ordinary identifiers.
     r"(?:(?<![\w.-])|(?m:^-))"
-    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})"
-    r"(?P=quote)[ \t]*(?::|=(?!=|>))[ \t]*"
+    r"(?P<quote>[\"']?)(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127})(?P=quote)"
+    # Go typed declarations such as: apiKey string = "..."
+    r"(?:[ \t]+(?:string|\[\]byte))?"
+    r"(?P<before>[ \t]*)(?P<separator>:?=(?![=>])|:)(?P<after>[ \t]*)"
 )
+# A type between ':' and the value: str =, Optional[str] =, &'static str =,
+# String :=, str="...". Bounded and lazy, so the first such '=' ends it.
+_ANNOTATION = re.compile(
+    r"(?P<type>[A-Za-z_&*(\[][\w.:&*?!<>\[\](), |']{0,127}?)"
+    r"(?:[ \t]+:?=(?![=>])[ \t]*|:?=(?![=>])(?=[ \t\"'`])[ \t]*)"
+)
+_QUOTES = frozenset("\"'`")
 _BARE = re.compile(r"[^\s\"'`<>{}\[\]()]+")
+# YAML/INI/prose values run to the end of their clause, never stopping mid-phrase.
+_LINE_REST = re.compile(r"[^\r\n]*")
+_CLAUSE_END = re.compile(r"[ \t]+(?:#|//)|[.!?;,](?=[ \t]|$|\r|\n)")
+# The quote that closes a string around a label, as in -H "X-Api-Key: ...".
+_CLOSING = {q: re.compile(re.escape(q) + r"(?![^\s,;)\]}])") for q in _QUOTES}
 _REFERENCE = re.compile(
     r"(?:\$\{[^}\r\n]+\}|\$[A-Za-z_]\w*|%[A-Za-z_]\w*%"
     r"|\{\{[^\r\n]+\}\}|<[^>\r\n]+>|\[[A-Z][A-Z0-9_]*_[0-9]+\])\Z"
@@ -183,7 +197,14 @@ def detect_field(text: str, name: str) -> list[Span]:
     return []
 
 
-def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
+def _assignment_value(
+    text: str, start: int, *, clause: bool = False, closer: str = ""
+) -> tuple[int, int] | None:
+    """Offsets of an assigned value, or None for references and code.
+
+    Quoted values end at their quote; plain values after ':' or a spaced '='
+    end at their clause; compact NAME=value reads one shell word.
+    """
     if start == len(text):
         return None
     if text.startswith(("${", "{{", "#"), start):
@@ -221,7 +242,91 @@ def _assignment_value(text: str, start: int) -> tuple[int, int] | None:
     end = match.end()
     while end > start and text[end - 1] in ",;":
         end -= 1
+    if (
+        clause
+        and end == match.end()
+        and text[end - 1] not in ".!?"
+        and (line := _LINE_REST.match(text, end))
+        and (tail := line[0].lstrip(" \t"))
+        and not tail.startswith(("#", "//", ")", "]", "}", ",", ";"))
+    ):
+        limit = line.end()
+        if closer and (close := _CLOSING[closer].search(text, end, limit)):
+            limit = close.start()
+        stop = _CLAUSE_END.search(text, end, limit)
+        end = stop.start() if stop else limit
+        while text[end - 1] in " \t":
+            end -= 1
     return start, end
+
+
+def _annotated(text: str, start: int) -> int | None:
+    """Where a value starts after a balanced type annotation, if there is one.
+
+    Parameter lists are not annotations: ``f(token: str, retries: int = 3)``
+    has a ',' and a single ':' outside any brackets, so it is rejected.
+    """
+    match = _ANNOTATION.match(text, start)
+    if match is None:
+        return None
+    annotation = match["type"]
+    depth = 0
+    for index, char in enumerate(annotation):
+        if char in "([<":
+            depth += 1
+        elif char in ")]>":
+            depth -= 1
+        # A path such as std::string is a type; a ',' or one ':' starts another
+        # parameter. The first character is never ':', so index - 1 is valid.
+        next_parameter = char == "," or (
+            char == ":" and "::" not in annotation[index - 1 : index + 2]
+        )
+        if depth < 0 or (depth == 0 and next_parameter):
+            return None
+    return match.end() if depth == 0 else None
+
+
+def _ends_string(text: str, match: re.Match[str]) -> bool:
+    """Whether the quote after a label closes the string that holds the label.
+
+    In input("Password: ") or read -p "Password: " pw that quote is no value;
+    reading it as an unterminated one would hide the rest of the text.
+    """
+    start = match.end()
+    quote = text[start]
+    following = text.find(quote, start + 1)
+    # Only the last such quote on its line, after an odd number of them, so
+    # each line is counted at most once.
+    if _CLOSING[quote].match(text, start) is None or (
+        following >= 0 and text.find("\n", start, following) < 0
+    ):
+        return False
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    return text.count(quote, line_start, match.start()) % 2 == 1
+
+
+def _assigned_value(text: str, match: re.Match[str]) -> tuple[int, int, bool] | None:
+    """Value offsets after an assignment, past any type annotation; flag quotes."""
+    start = match.end()
+    clause = match["separator"] != "=" or bool(match["before"] or match["after"])
+    # A label that opens a string, as in curl -H "X-Api-Key: ...", ends with it.
+    name = match.start("name")
+    opener = "" if match["quote"] else text[name - 1 : name]
+    closer = opener if opener in _QUOTES else ""
+    if match["separator"] == ":" and (value := _annotated(text, start)) is not None:
+        offsets = _assignment_value(text, value, clause=True, closer=closer)
+        if offsets is None:
+            return None
+        if text[value : value + 1] in _QUOTES:
+            return (*offsets, True)
+        if offsets[1] <= offsets[0]:  # Nothing assigned: password: str = ;
+            return None
+        # A misread annotation must not leave part of a bare value visible.
+        return start, offsets[1], False
+    if text[start : start + 1] in _QUOTES and _ends_string(text, match):
+        return None
+    offsets = _assignment_value(text, start, clause=clause, closer=closer)
+    return None if offsets is None else (*offsets, text[start : start + 1] in _QUOTES)
 
 
 def _private_keys(text: str) -> Iterator[Span]:
@@ -550,13 +655,13 @@ def detect(text: str) -> list[Span]:
         assigned_type = credential_type(assignment["name"])
         if assigned_type is None or cursor in query_starts:
             continue
-        offsets = _assignment_value(text, cursor)
-        if offsets is not None:
-            start, end = offsets
+        value = _assigned_value(text, assignment)
+        if value is not None:
+            start, end, quoted = value
             cursor = max(cursor, end)
             if _literal(text[start:end]):
                 found.append(_span(text, start, end, assigned_type))
-                if text[assignment.end() : assignment.end() + 1] in {'"', "'", "`"}:
+                if quoted:
                     for fragment in _concatenated_literals(text, end, assigned_type):
                         found.append(fragment)
                         cursor = max(cursor, fragment.end + 1)

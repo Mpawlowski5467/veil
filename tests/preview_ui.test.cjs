@@ -32,9 +32,11 @@ async function page(url, fetchImpl) {
   return { nodes, requests, history };
 }
 function ok(body) { return { ok: true, json: async () => body }; }
+// The page exchanges its one-time launch code once, then uses the session.
+const withSession = impl => (url, options) => url === '/session' ? ok({ token: 'fictional-session' }) : impl(url, options);
 const result = { masked: '[EMAIL_1]', restored: 'fictional@example.org', masks: [{ placeholder: '[EMAIL_1]', reason: 'Privacy pattern' }], findings: [], unresolved: 0 };
 
-for (const url of ['file:///tmp/preview.html', 'http://127.0.0.1:1234/', 'https://example.org/#token']) {
+for (const url of ['file:///tmp/preview.html', 'http://127.0.0.1:1234/', 'https://example.org/#fictional-launch']) {
   test('unsupported or expired URL makes no requests: ' + url, async () => {
     const { nodes, requests, history } = await page(url);
     assert.match(nodes.status.textContent, /Start veil preview/);
@@ -45,10 +47,10 @@ for (const url of ['file:///tmp/preview.html', 'http://127.0.0.1:1234/', 'https:
 }
 
 test('typing does not transmit; explicit run masks; editing clears results and decisions', async () => {
-  const { nodes, requests, history } = await page('http://127.0.0.1:1234/#token', (_, options) => ok(options.method === 'POST' ? result : { choices: ['PASSWORD', 'IGNORE'] }));
+  const { nodes, requests, history } = await page('http://127.0.0.1:1234/#fictional-launch', withSession((_, options) => ok(options.method === 'POST' ? result : { choices: ['PASSWORD', 'IGNORE'] })));
   assert.deepEqual(history, [[null, '', '/']]);
   nodes.input.value = result.restored; nodes.input.oninput();
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   await nodes.run.onclick();
   assert.equal(nodes.output.textContent, result.masked);
   assert.equal(nodes.restored.textContent, result.restored);
@@ -56,26 +58,40 @@ test('typing does not transmit; explicit run masks; editing clears results and d
   nodes.input.oninput();
   assert.equal(nodes.restored.textContent, '');
   assert.equal(nodes.masks.children.length, 0);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   nodes.clear.onclick();
   assert.equal(nodes.input.value, '');
-  for (const [url, options] of requests) {
+  const [[sessionUrl, sessionOptions], ...rest] = requests;
+  assert.equal(sessionUrl, '/session');
+  assert.equal(sessionOptions.method, 'POST');
+  assert.deepEqual({ ...sessionOptions.headers }, { 'X-Veil-Review': 'fictional-launch' });
+  assert.equal(sessionOptions.body, undefined);
+  for (const [url, options] of rest) {
     assert.equal(url, '/data');
-    assert.equal(options.headers['X-Veil-Review'], 'token');
+    assert.equal(options.headers['X-Veil-Review'], 'fictional-session');
+  }
+  for (const [, options] of requests) {
     assert.equal(options.credentials, 'omit');
     assert.equal(options.cache, 'no-store');
   }
 });
 
+test('an already-used link shows the restart message and never calls /data', async () => {
+  const { nodes, requests } = await page('http://127.0.0.1:1234/#fictional-launch', () => ({ ok: false, status: 403 }));
+  assert.match(nodes.status.textContent, /Run veil preview again/);
+  assert.equal(nodes.run.disabled, true);
+  assert.deepEqual(requests.map(([url]) => url), ['/session']);
+});
+
 test('review choices render text safely and apply only to the current text', async () => {
   const value = '<script>fictional</script>';
   const finding = { index: 0, value, reason: 'Possible credential', kind: 'PASSWORD', choice: null };
-  const { nodes, requests } = await page('http://127.0.0.1:1234/#token', (_, options) => {
+  const { nodes, requests } = await page('http://127.0.0.1:1234/#fictional-launch', withSession((_, options) => {
     if (options.method !== 'POST') return ok({ choices: ['PASSWORD', 'IGNORE'] });
     const payload = JSON.parse(options.body);
     finding.choice = payload.choices['0'] || null;
     return ok({ ...result, findings: [finding], unresolved: finding.choice ? 0 : 1 });
-  });
+  }));
   nodes.input.value = value;
   await nodes.run.onclick();
   const card = nodes.findings.children[0];
@@ -91,10 +107,10 @@ test('review choices render text safely and apply only to the current text', asy
 
 test('failed requests remove stale output and explain recovery', async () => {
   let offline = false;
-  const { nodes } = await page('http://127.0.0.1:1234/#token', (_, options) => {
+  const { nodes } = await page('http://127.0.0.1:1234/#fictional-launch', withSession((_, options) => {
     if (offline) throw new TypeError('Failed to fetch');
     return ok(options.method === 'POST' ? result : { choices: [] });
-  });
+  }));
   await nodes.run.onclick(); offline = true;
   await nodes.run.onclick();
   assert.equal(nodes.restored.textContent, '');
@@ -104,8 +120,9 @@ test('failed requests remove stale output and explain recovery', async () => {
 
 test('an in-flight result never replaces edited or cleared text', async () => {
   let finish;
-  const { nodes } = await page('http://127.0.0.1:1234/#token', (_, options) => options.method === 'POST' ? new Promise(resolve => { finish = resolve; }) : ok({ choices: [] }));
+  const { nodes } = await page('http://127.0.0.1:1234/#fictional-launch', withSession((_, options) => options.method === 'POST' ? new Promise(resolve => { finish = resolve; }) : ok({ choices: [] })));
   const pending = nodes.run.onclick();
+  await tick();
   nodes.clear.onclick();
   finish(ok(result));
   await pending;

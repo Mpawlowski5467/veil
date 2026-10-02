@@ -15,6 +15,9 @@ After:  API_KEY="[API_KEY_1]"
 
 Before: password: "fictional example passphrase"
 After:  password: "[PASSWORD_1]"
+
+Before: apiKey := "fictional-orchard-42"
+After:  apiKey := "[API_KEY_1]"
 ```
 
 ## What is recognized
@@ -32,9 +35,22 @@ issuance, permissions, expiry, JWT signatures, or cryptographic key material.
 Public keys and certificates are not private-key matches.
 
 Credential assignments support `.env`-style text, quoted JSON/YAML keys, and
-common code assignment syntax. Quoted values retain spaces, Unicode, newlines,
-and escapes. **Quote complex passwords.** Unquoted detection reads a single
-token, not a general programming-language or YAML parser. Bare identifiers can
+common code assignment syntax. This includes Go `:=` and `apiKey string = …`,
+and type annotations such as Python `API_KEY: Final = …` and `password: str = …`,
+TypeScript `const token: string = …`, Kotlin/Swift `val apiKey: String = …`,
+Rust `let api_key: &str = …`, and Pascal `Password : String := …`. The type
+stays visible; only the value becomes a placeholder. A declaration without a
+value, such as `password: str`, is unchanged. Quoted values retain spaces,
+Unicode, newlines, and escapes. **Quote complex passwords.** An unquoted value
+after `:` or a spaced `=` (YAML, INI, or a label such as `Password: …`) is
+masked through the end of its clause: the end of the line, an inline ` #` or
+` //` comment, or `,` `;` `.` `!` `?` followed by a space. When the label opens
+a quoted string, as in `curl -H "X-Api-Key: …" https://…`, the value also ends
+at that string's closing quote. A label at the end of a prompt string, such as
+`input("Password: ")` or `read -p "Password: " pw`, has no value and stays
+readable. A compact `NAME=value` reads one shell word, as
+in command prefixes like `DB_PASSWORD=… ./run`. Quote multiword `.env` values.
+This is not a general programming-language or YAML parser. Bare identifiers can
 be ambiguous: an assignment such as `password=value` is treated as a credential.
 
 PHP, Ruby, and Perl `=>` pairs are recognized when the value is a quoted
@@ -180,7 +196,10 @@ replies. Assertions check the bytes received by the
 fake provider and the restored response; no live keys or external calls are used.
 The [automatic syntax tests](../tests/test_secret_automatic.py) add prose and
 language variants, shell quoting, YAML boundaries, references, custom overrides,
-and HTTP masking/restoration with review both enabled and disabled.
+and HTTP masking/restoration with review both enabled and disabled. The
+[declaration tests](../tests/test_secret_declarations.py) cover typed Python,
+TypeScript, Go, Kotlin, Swift, Rust, and Pascal declarations, parameter lists
+that must stay readable, and clause-bounded unquoted values.
 
 These authored cases establish regression coverage, not a general accuracy
 percentage. The [30-document detection baseline](detection-results.md) records
