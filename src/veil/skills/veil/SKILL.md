@@ -50,8 +50,10 @@ doctor, start, stop, restart, or undo; it is not the detector config.
 - For a managed background worker: `VEIL status --service --json`. This is a
   worker check only. An `unmanaged` result does not rule out a foreground gateway.
 - For gateway activity, use `VEIL status --activity --json`. Launchers pass the
-  local endpoint privately to their child tools; outside a launcher, this uses
-  saved Codex settings. Never print environment variables to find the secret.
+  local endpoint privately to their child tools; outside a launcher, this finds
+  a running launch in the same data folder or uses saved Codex settings. If it
+  lists several gateways, ask the user which one; never guess. Never print
+  environment variables to find the secret.
   A custom manual gateway can be selected with `--gateway-url URL` and the
   matching `--data-dir` holding its secret. Missing/old gateways need setup or
   an upgrade/restart, not a fallback to another route.

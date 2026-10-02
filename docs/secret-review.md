@@ -37,9 +37,22 @@ has not been sent upstream.** In your own terminal, run:
 veil review
 ```
 
-This opens a private page on `127.0.0.1`. The default command finds your selected
-Codex provider or an inherited Veil launcher environment. For a standalone
-gateway, specify its address and data folder:
+This opens a private page on `127.0.0.1`. The refusal names the exact command
+for that gateway, for example `veil review --gateway-url http://127.0.0.1:PORT`.
+With a non-default data folder the command includes `--data-dir` and its path,
+so that path appears in your client's error message; the refused request itself
+is not sent.
+
+Under `veil claude` or `veil codex` (including `--forget-after-run`), plain
+`veil review` in another terminal finds the running launch. While it runs, each
+launch keeps an owner-only record of its local address and secret in the data
+folder, and removes it on exit. If you launched with `--data-dir`, pass the same
+`--data-dir`. If several gateways are running, for example two launches or a
+launch plus Codex desktop, the command lists their addresses instead of
+guessing. Use the command from the refusal or add `--gateway-url`.
+
+Otherwise the default command uses your selected Codex provider. For a
+standalone gateway, specify its address and data folder:
 
 ```bash
 veil --data-dir /path/to/private/veil-data review --gateway-url http://127.0.0.1:8485

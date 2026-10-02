@@ -53,6 +53,10 @@ report = {
     "data_dir": data_dir,
     "sigint": repr(signal.getsignal(signal.SIGINT)),
 }
+launches = os.environ.get("FAKE_CLIENT_LAUNCHES")
+if launches:
+    found = os.path.isdir(launches)
+    report["launches"] = sorted(os.listdir(launches)) if found else None
 with open(os.environ["FAKE_CLIENT_REPORT"], "w", encoding="utf-8") as f:
     json.dump(report, f)
 sys.exit(int(os.environ.get("FAKE_CLIENT_EXIT", "0")))
@@ -297,17 +301,22 @@ def test_launcher_runs_the_client_through_a_live_gateway(
 
 @pytest.mark.parametrize("client", ["claude", "codex"])
 def test_forget_after_run_uses_and_removes_temporary_storage(
-    stub_clients, tmp_path, client
+    stub_clients, tmp_path, monkeypatch, client
 ):
     source = prepare_data_dir(tmp_path / "private")
     (source / "config.json").write_bytes(CONFIG)
+    monkeypatch.setenv("FAKE_CLIENT_LAUNCHES", str(source / "launches"))
     argv = ["--data-dir", str(source), "--forget-after-run", client]
     assert cli.main(argv) == 0
     assert (source / "config.json").read_bytes() == CONFIG
+    # Nothing is left in the real data folder, not even the launches folder.
     assert os.listdir(source) == ["config.json"]
     assert os.listdir(tempfile.tempdir) == []
     report = read(stub_clients)
     assert report["status"] == 401
+    # While the client ran, its launch record was in the real data folder,
+    # where review and verification in another terminal look.
+    assert report["launches"] == [f"{urlsplit(report['url']).port}.json"]
     if client == "claude":
         used = Path(report["data_dir"])
         assert used.is_relative_to(tempfile.tempdir)

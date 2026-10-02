@@ -7,8 +7,8 @@ Status: maintainer review, 2026-09-29; independent review pending. Applies to th
 
 Protect detected text and registered values from supported model request bodies
 sent to the provider. Preserve correct local restoration and session separation.
-Keep the mapping vault, registrations, gateway secret, setup backups, and client
-credentials out of diagnostics and source control.
+Keep the mapping vault, registrations, gateway secret, launch records, setup
+backups, and client credentials out of diagnostics and source control.
 
 The local client sends its request to a loopback gateway. Veil parses and masks
 supported content, forwards the request over TLS using the client's credentials,
