@@ -82,6 +82,7 @@ def test_quoted_reference_lookalikes_remain_protected(value):
         "PASSWORD=letmein",
         "PASSWORD=secret",
         "password=pass",
+        "api_key=token",
         "api_key=fictional94",
         'POSTGRES_PASSWORD: "postgres"',
     ],
