@@ -490,12 +490,16 @@ def two_launches(world):
 
 
 def stale_launch_and_codex(world):
-    stopped = world.closed()
-    write = published(world.data, "claude", stopped.url, stopped.secret)
+    # A stopped launch. Nothing listens on port 5, and it is below the
+    # ephemeral range, so unlike a just-closed gateway's port it can't be
+    # handed to the gateway opened next.
+    write = published(
+        world.data, "claude", "http://127.0.0.1:5", "fictional-launch-secret-0001"
+    )
     world.stack.enter_context(write)
     saved = world.gateway()
     world.codex(saved)
-    stale = world.data / FOLDER / f"{stopped.port}.json"
+    stale = world.data / FOLDER / "5.json"
     assert stale.exists()
     return {"data_dir": world.data}, saved, lambda: not stale.exists()
 
