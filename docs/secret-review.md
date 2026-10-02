@@ -159,11 +159,18 @@ Confirmed vault mappings have the normal retention rules; persistent vaults are
 plaintext protected by filesystem permissions, not encryption.
 
 The review page has no external scripts, fonts, analytics, or model connection.
-A short-lived browser capability, host/origin checks, no-store responses, and a
-restrictive content policy protect its local endpoints. It shows private values
-only when you reveal them, but those values are present in browser memory. Keep
-the page and its local URL private. Closing it does not revoke choices already
-saved in the gateway.
+The link that `veil review` opens carries a one-time code. The page exchanges it
+for a short-lived private session when it starts; after that, the link, including
+the copy printed in the terminal, no longer grants access. On Linux the page
+answers only connections from your own OS account. Host/origin checks, no-store
+responses, and a restrictive content policy also protect its local endpoints. It
+shows private values only when you reveal them, but those values are present in
+browser memory. Keep the page and its link private. Closing it does not revoke
+choices already saved in the gateway.
+
+If the page says its link was already used, close other tabs opened from it and
+run `veil review` again. If a Linux browser shows only “Refused” because a proxy
+or sandbox connects on its behalf, use `veil review --terminal`.
 
 **This cannot guarantee detection of every secret.** Short values without one of
 the supported cues, unlabelled PII, computed/split values in other forms, unsupported
