@@ -4,10 +4,16 @@
 
 ### Fixed
 
+- `veil claude` and `veil codex` (including `--forget-after-run`) no longer crash on native Windows right after starting the client. The launcher passed on SIGHUP, which Windows doesn't have; the client was left running against a stopped gateway. Signals are now handled per platform: Ctrl-C and Ctrl-Break reach the client directly, SIGTERM (and SIGHUP on macOS/Linux) is passed on, and the client is stopped whenever the launcher exits early.
+- A client ended by a signal now gives the launcher the shell's usual exit code (128 + the signal number, e.g. 143 for SIGTERM) instead of a wrapped value such as 241.
 - Typed declarations and Go `:=` no longer send the real credential. Previously `apiKey := "…"` masked the `=`; `API_KEY: Final = "…"`, Kotlin `val apiKey: String = "…"`, Rust `let api_key: &str = "…"` and Pascal `Password : String := '…'` masked the type name; and Python `DB_PASSWORD: str = "…"`, `Optional[str]` annotations and TypeScript `const password: string = "…"` masked nothing. The value now becomes the placeholder and the type stays readable. Go `apiKey string = "…"` is also covered. Declarations without a value, such as `password: str`, and parameter lists such as `def f(token: str, retries: int = 3)` stay unchanged.
 - An unquoted multiword value after `:` or a spaced `=`, such as `Password: fictional orchard 72`, is now masked through the end of its clause instead of only its first word. A label that opens a quoted string, as in `curl -H "X-Api-Key: …" https://…`, ends at that string's closing quote, so the rest of the command stays readable. Compact `NAME=value` still reads one shell word, so quote multiword `.env` values. Local review no longer asks about typed declarations that are already masked.
 - Local review no longer slows down sharply on long lines with many credential labels or chained `password=…=password=…` text.
 - A credential label at the end of a quoted prompt, such as `input("Password: ")`, `getpass('Database password: ')` or `read -p "Password: " pw`, no longer hides the rest of the text behind a placeholder. Its closing quote was read as the start of an unterminated value; the prompt now stays readable.
+
+### Tests
+
+- Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
 
 ## 0.6.0b1 — Beta
 

@@ -307,31 +307,64 @@ def run_claude(
         return code
 
 
+# Console keys (Ctrl-C, and Ctrl-Break on Windows) reach the client on their
+# own, since it shares the console: this process ignores them and waits.
+# Termination requests are passed on, so the client never outlives its
+# gateway. SIGHUP exists only on POSIX and SIGBREAK only on Windows; closing a
+# Windows console ends every attached process, the client included.
+_IGNORED_SIGNALS = ("SIGINT", "SIGBREAK")
+_FORWARDED_SIGNALS = ("SIGTERM", "SIGHUP")
+
+
+def _exit_code(returncode: int) -> int:
+    """The shell's exit code for a client: 128 + N if signal N ended it."""
+    return 128 - returncode if returncode < 0 else returncode
+
+
 def _run_child(command: list[str], env: dict[str, str], cwd: Path | None) -> int:
     """Run a client, passing on signals, and return its exit code."""
-    child = subprocess.Popen(command, env=env, cwd=cwd)
+    child: subprocess.Popen[bytes] | None = None
+    early: list[int] = []
+
+    def ignore(_signum: int, _frame: object) -> None:
+        pass
 
     def pass_on(signum: int, _frame: object) -> None:
-        child.send_signal(signum)
+        if child is None:
+            early.append(signum)  # before the client started
+        else:
+            child.send_signal(signum)
 
-    # Ctrl-C reaches Claude Code on its own; a SIGTERM or SIGHUP sent to this
-    # process is passed on, so Claude Code never outlives its gateway.
-    previous = {
-        signal.SIGINT: signal.signal(signal.SIGINT, signal.SIG_IGN),
-        signal.SIGTERM: signal.signal(signal.SIGTERM, pass_on),
-        signal.SIGHUP: signal.signal(signal.SIGHUP, pass_on),
-    }
+    # Every handler is in place before the client starts, so no signal finds
+    # this process half ready. Ignoring is a Python function, not SIG_IGN: the
+    # client would inherit SIG_IGN and lose its own Ctrl-C, while a caught
+    # signal is reset to the default in the client.
+    previous: dict[int, Any] = {}
     try:
-        while True:
-            try:
-                return child.wait()
-            except KeyboardInterrupt:
-                continue
+        for names, handler in (
+            (_IGNORED_SIGNALS, ignore),
+            (_FORWARDED_SIGNALS, pass_on),
+        ):
+            for name in names:
+                signum = getattr(signal, name, None)
+                if signum is not None:
+                    previous[signum] = signal.signal(signum, handler)
+        child = subprocess.Popen(command, env=env, cwd=cwd)
+        for signum in early:
+            child.send_signal(signum)
+        return _exit_code(child.wait())
     finally:
+        # The client is stopped first: nothing that fails afterwards can
+        # leave it running against a closed gateway.
+        if child is not None and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
         for signum, handler in previous.items():
             signal.signal(signum, handler)
-        if child.poll() is None:
-            child.terminate()
 
 
 def gateway_secret(data_dir: Path) -> str:

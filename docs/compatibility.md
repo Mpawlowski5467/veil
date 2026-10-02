@@ -13,6 +13,7 @@ real client journey. See [beta gates](release-checklist.md).
 | --- | --- | --- | --- |
 | Python masking/restoration and request/response regressions | Native CI, Python 3.10/3.14 | Full CI, Python 3.10–3.14; native journeys 3.10/3.14 | Native CI, Python 3.10/3.14 |
 | Private data folder, persistent mappings, registration, forget | Tested | Tested | Native ACL and Unicode checks tested; hosted Windows runner uses an administrative account |
+| `veil claude` / `veil codex` launchers and `--forget-after-run` | Native CI with a stub client | Native CI with a stub client | Native CI with a stub `.cmd` client; a real installed client journey is still required |
 | Wheel + desktop extra, skill install/remove, setup/undo | Tested | Tested | Tested |
 | Clipboard text, Unicode, empty text | Native `pbcopy`/`pbpaste` tested | Native X11 `xclip` tested; Wayland not yet validated | Native Windows PowerShell tested |
 | Detached gateway `start`/`stop`/`restart` | Supported and tested | Supported and tested | Unsupported; use foreground `veil gateway` |
@@ -20,7 +21,8 @@ real client journey. See [beta gates](release-checklist.md).
 
 The workflow source is [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 Native Windows tests cover over 5,000 selected protocol/core cases plus public
-CLI/storage/wheel journeys. Unix process-management tests remain in the full
+CLI/storage/wheel journeys. The launchers' SIGTERM handling is tested natively
+on all three; SIGHUP and other Unix process-management tests remain in the full
 Linux suite. Skipped cases are reported; a skip is never evidence of support.
 
 ## Clients and authentication
