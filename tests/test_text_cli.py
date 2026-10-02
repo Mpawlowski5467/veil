@@ -84,7 +84,10 @@ def test_clipboard_backend_failure_does_not_quote_contents(monkeypatch):
     assert "private clipboard" not in str(error.value)
 
 
-def test_clipboard_timeout_defaults_to_ten_seconds_and_can_be_raised(monkeypatch):
+@pytest.mark.parametrize(("platform", "seconds"), [("win32", 30), ("darwin", 10)])
+def test_clipboard_timeout_allows_a_slow_windows_powershell_start(
+    monkeypatch, platform, seconds
+):
     timeouts = []
 
     def slow(command, **kwargs):
@@ -93,11 +96,15 @@ def test_clipboard_timeout_defaults_to_ten_seconds_and_can_be_raised(monkeypatch
 
     monkeypatch.setattr(text_cli.subprocess, "run", slow)
     monkeypatch.setattr(text_cli, "_clipboard_command", lambda **_: ["fake"])
-    with pytest.raises(cli.SettingsError, match="could not write clipboard text"):
+    monkeypatch.setattr(text_cli.sys, "platform", platform)
+    with pytest.raises(
+        cli.SettingsError, match="could not write clipboard text"
+    ) as error:
         text_cli.clipboard_write("Jan Nowak")
+    assert "Jan Nowak" not in str(error.value)
     with pytest.raises(cli.SettingsError, match="could not read clipboard text"):
-        text_cli.clipboard_read(timeout=60)
-    assert timeouts == [10, 60]
+        text_cli.clipboard_read()
+    assert timeouts == [seconds, seconds]
 
 
 def test_session_label_cannot_be_a_path(data_dir, monkeypatch, capsys):

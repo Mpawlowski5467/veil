@@ -47,7 +47,12 @@ def _clipboard_command(*, write: bool) -> list[str]:
     )
 
 
-def clipboard_read(*, timeout: float = 10) -> str:
+def _clipboard_timeout() -> float:
+    # A first Windows PowerShell start can take more than 10 s on a busy machine.
+    return 30 if sys.platform == "win32" else 10
+
+
+def clipboard_read() -> str:
     """Read text only when the user explicitly selected --clipboard."""
     try:
         result = subprocess.run(
@@ -55,7 +60,7 @@ def clipboard_read(*, timeout: float = 10) -> str:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=timeout,
+            timeout=_clipboard_timeout(),
             check=True,
         )
         return result.stdout
@@ -63,7 +68,7 @@ def clipboard_read(*, timeout: float = 10) -> str:
         raise SettingsError("could not read clipboard text") from None
 
 
-def clipboard_write(text: str, *, timeout: float = 10) -> None:
+def clipboard_write(text: str) -> None:
     """Replace clipboard text after a successful transformation."""
     try:
         subprocess.run(
@@ -73,7 +78,7 @@ def clipboard_write(text: str, *, timeout: float = 10) -> None:
             stderr=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
-            timeout=timeout,
+            timeout=_clipboard_timeout(),
             check=True,
         )
     except (OSError, UnicodeError, subprocess.SubprocessError):
