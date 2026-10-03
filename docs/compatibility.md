@@ -31,7 +31,7 @@ Linux suite. Skipped cases are reported; a skip is never evidence of support.
 
 | Client or interface | Checked version / evidence | Supported scope and open work |
 | --- | --- | --- |
-| Claude Code | 2.1.286; 9 live Haiku masking, file-edit, tool-boundary, and resume checks passed on 2026-10-03, plus the five-run continuity exercise below; 1 model-specific effort check skipped. Recorded request census/golden fixtures remain from 2.1.283. | Supported text via `veil claude`; new client releases need the census and a fresh verification. Image/PDF contents pass through unmasked. |
+| Claude Code | 2.1.286; 9 live Haiku masking, file-edit, tool-boundary, and resume checks passed on 2026-10-03; 1 model-specific effort check skipped. The separate five-run continuity exercise below has mixed results. Recorded request census/golden fixtures remain from 2.1.283. | Supported text via `veil claude`; new client releases need the census and a fresh verification. Image/PDF contents pass through unmasked. |
 | Codex CLI, ChatGPT sign-in | 0.160.0; live fictional email round trip with an outbound-body assertion passed on 2026-10-03 using `gpt-6-luna` | Experimental Responses adapter; text and supported local tools. |
 | Codex app-server runtime | 0.160.0 executable; local scripted fixture, three live `gpt-6-luna` verification turns, and the six-turn continuity exercise below passed on 2026-10-03 | Exercises the runtime used by rich clients. This is not a manual desktop UI test or proof that every installed app build matches this executable. |
 | OpenAI API-key route | Local request/response, header, error, and streaming regressions | **Live validation pending**; no API key was available for the readiness run. |
@@ -54,9 +54,10 @@ into “every client feature works.” The app-server lifecycle follows
 
 These automated macOS exercises used authenticated installed clients and real
 provider replies, with fictional addresses. They are separately opt-in because
-they consume more quota than a single round trip. They passed once on the
-versions above; they are not human beta feedback, a desktop UI journey, a
-context-window exhaustion test, or evidence for Linux/Windows installed clients.
+they consume more quota than a single round trip. Results below include failed
+Claude rechecks; these exercises are not human beta feedback, a desktop UI
+journey, a context-window exhaustion test, or evidence for Linux/Windows
+installed clients.
 
 - **Codex / ChatGPT sign-in / `gpt-6-luna`:** three turns recalled an address
   introduced only in the first prompt. Codex then generated its summary through
@@ -69,7 +70,28 @@ context-window exhaustion test, or evidence for Linux/Windows installed clients.
   The prompts added, recalled, replaced, and recalled fictional contacts. The
   checks verified restored replies, unchanged masked history prefixes, and
   absence of the addresses in outbound requests. Tools were explicitly disabled
-  for this text-only exercise. One scenario passed in 13.45 seconds.
+  for this text-only exercise. An initial scenario passed in 13.45 seconds, but
+  a later recheck failed at the first reply: the model declined the exercise and
+  described it as testing improper manipulation of placeholder data. Its generated
+  text omitted the contact placeholder. The upstream request succeeded with HTTP
+  200 and contained the masked contact, so the reply offered no contact token for
+  Veil to restore.
+
+The Claude prompt was then clarified to require copying literal contact text,
+including bracketed placeholders, while later recall prompts still omitted the
+remembered addresses. Two fresh scenarios with this wording produced one pass
+in 11.96 seconds and one first-reply failure in 8.02 seconds. In the failed run,
+outbound privacy assertions passed before the reply assertion failed; the model
+again returned HTTP 200 but declined on privacy grounds. It treated repeating
+even fictional contacts as disallowed and interpreted the literal-copy rule as
+bypassing its judgment; its final text contained no contact placeholder. Neither
+failure cited unavailable tools or persistent-memory requirements. Both used
+`claude-haiku-4-5-20251001` with Veil's default system note explaining exact
+placeholder copying and local restoration enabled. The note's contribution was
+not isolated. The test retains the required restored contacts, replacement
+checks, and masked-history assertions. **This live continuity scenario remains
+unreliable with the tested Haiku model**; a passing run does not establish
+consistent model compliance with masked-token instructions.
 
 API-key live validation remains pending: neither `OPENAI_API_KEY` nor
 `ANTHROPIC_API_KEY` was available. Natural multi-hour work, interruption during

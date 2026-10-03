@@ -373,6 +373,12 @@ def test_repeated_live_resumes_preserve_updates_and_masked_history(tmp_path):
     first = "resume.first@example.org"
     second = "resume.second@example.org"
     replacement = "resume.replacement@example.org"
+    literal_contact_rule = (
+        "This is a fictional, in-chat contact-list exercise. "
+        "Copy the exact contact text you see or recall from this conversation, "
+        "including any bracketed placeholder syntax, without interpreting or "
+        "replacing it. Do not use tools or save anything outside this chat. "
+    )
     steps = [
         (
             f"Remember my fictional primary contact {first}. "
@@ -401,33 +407,42 @@ def test_repeated_live_resumes_preserve_updates_and_masked_history(tmp_path):
     session_id = None
     previous = None
     for number, (prompt, expected) in enumerate(steps):
+        context = f"Claude continuity step {number + 1}"
         root = tmp_path / f"gateway-{number}"
         root.mkdir()
         with serve(data_dir, root) as (gateway, recorder):
             run = ws.run(
-                prompt,
+                literal_contact_rule + prompt,
                 resume=session_id,
                 max_turns=2,
                 timeout=90,
                 extra_args=["--tools", ""],
                 extra_settings=claude_settings(gateway, data_dir=data_dir),
             )
-        assert run.returncode == 0, "Claude continuity run failed"
-        assert run.result
-        assert run.result.get("is_error") is False
-        reply = run.result.get("result", "")
-        assert all(address in reply for address in expected)
-        if number >= 3:
-            assert second not in reply
-        if session_id is not None:
-            assert run.session_id == session_id
-        session_id = run.session_id
+        # Check the privacy boundary first, even if the provider declines the
+        # exercise or does not echo the requested tokens in its successful reply.
         bodies = sent_bodies(recorder)
-        assert bodies
+        assert bodies, f"{context}: no outbound model request recorded"
         sent = json.dumps(bodies)
-        assert all(address not in sent for address in (first, second, replacement))
+        assert all(address not in sent for address in (first, second, replacement)), (
+            f"{context}: raw fictional address in outbound request"
+        )
         if previous is not None:
             assert as_the_api_reads(bodies[0]["messages"][: len(previous)]) == (
                 as_the_api_reads(previous)
-            )
+            ), f"{context}: masked history prefix changed"
         previous = bodies[-1]["messages"]
+        assert run.returncode == 0, f"{context}: client process failed"
+        assert run.result, f"{context}: no client result"
+        assert run.result.get("is_error") is False, f"{context}: client reported error"
+        if session_id is not None:
+            assert run.session_id == session_id, f"{context}: session ID changed"
+        session_id = run.session_id
+        reply = run.result.get("result", "")
+        assert all(address in reply for address in expected), (
+            f"{context}: reply omitted a required restored contact"
+        )
+        if number >= 3:
+            assert second not in reply, (
+                f"{context}: reply retained the replaced contact"
+            )

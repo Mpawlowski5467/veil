@@ -9,7 +9,7 @@
 
 ### Validation
 
-- Opt-in live continuity checks exercise six Codex turns across client compaction and a gateway restart, plus five Claude launches of one conversation with four resumes and contact replacement. They assert outbound masking and local restoration; scripted live checks do not replace desktop UI, natural long-session, or external-user evidence.
+- Opt-in live continuity checks exercise six Codex turns across client compaction and a gateway restart, plus five Claude launches of one conversation with four resumes and contact replacement. Codex passed; Claude/Haiku results remain mixed because some first replies refuse to echo the fictional contact placeholders despite correct outbound masking. The tests retain their privacy/restoration assertions and document the failures. These scripted checks do not replace desktop UI, natural long-session, or external-user evidence.
 - Private GitHub vulnerability reporting is enabled. An independent-review handoff now pins the published baseline, maps sensitive boundaries to implementation and tests, and defines finding/retest requirements. Independent human review remains pending.
 
 ## 0.6.0b2 — Beta
