@@ -60,13 +60,21 @@ def check() -> dict:
     }
     try:
         from veil import __version__
+        from veil.gateway import prepare_data_dir
     except ImportError:
         report["checks"].append({"code": "installation", "state": "fail"})
         return report
     if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc)[0-9]+)?", __version__):
         report["veil_version"] = __version__
     with tempfile.TemporaryDirectory(prefix="veil-beta-") as directory:
-        root = Path(directory)
+        # Python 3.14's Windows temporary-folder ACL uses OWNER RIGHTS. Let
+        # Veil create its own child with the same explicit ACL as normal use.
+        # Do not relax production permission validation for this exercise.
+        try:
+            root = prepare_data_dir(Path(directory) / "data")
+        except (OSError, ValueError):
+            report["checks"].append({"code": "storage", "state": "fail"})
+            return report
         (root / "config.json").write_text(
             '{"identity":false,"secret_review":false}', encoding="utf-8"
         )
