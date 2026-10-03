@@ -482,12 +482,31 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         f"{self.command} {shown} isn't served by the gateway, so "
                         f"nothing was sent. {advice}",
                     )
+                target = path + (f"?{address.query}" if "?" in self.path else "")
+                if self.path != target:
+                    # Forward only origin-form targets. urlsplit otherwise
+                    # hides fragments and authorities that _forward would send.
+                    raise _RefusedError(
+                        400, "invalid_request_error", "unsupported request target"
+                    )
                 if gateway.api == "openai" and path == "/v1/models":
                     self._models(address.query)
                     return
                 if gateway.api == "openai" and address.query:
                     raise _RefusedError(
                         400, "invalid_request_error", "query parameters are unsupported"
+                    )
+                if gateway.api != "openai" and self.path not in {
+                    path,
+                    f"{path}?beta=true",
+                }:
+                    # Claude uses this exact query on both model routes. Refuse
+                    # unrecognized query text before reading the request body.
+                    raise _RefusedError(
+                        400,
+                        "invalid_request_error",
+                        "unsupported request target; only an optional beta=true "
+                        "query is supported",
                     )
                 self._masked(path, self._read_body())
             except _RefusedError as refusal:

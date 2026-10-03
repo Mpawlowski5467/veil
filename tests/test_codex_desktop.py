@@ -14,11 +14,20 @@ from test_gateway_server import FakeAPI, stream_reply
 from test_openai_gateway import text_events
 from veil import Shield
 from veil.codex import provider, toml_value
-from veil.gateway import Gateway, Sessions
+from veil.gateway import Gateway, Sessions, Settings, open_sessions, prepare_data_dir
 
 
 def app_round_trip(
-    binary, gateway, tmp_path, email, *, prompt=None, turns=1, compact=False
+    binary,
+    gateway,
+    tmp_path,
+    email,
+    *,
+    prompt=None,
+    turns=1,
+    compact=False,
+    followup_prompt=None,
+    after_compaction=None,
 ):
     config = provider(gateway, environment_secret=True)
     config.update(request_max_retries=0, stream_max_retries=0)
@@ -100,7 +109,12 @@ def app_round_trip(
         assert started["thread"]["ephemeral"] is True
         thread_id = started["thread"]["id"]
         for generation in range(2 if compact else 1):
-            for _ in range(turns):
+            for number in range(turns):
+                current_prompt = (
+                    followup_prompt
+                    if followup_prompt and (generation or number)
+                    else prompt or f"Reply with exactly {email}. Do not use tools."
+                )
                 send(
                     "turn/start",
                     {
@@ -108,8 +122,7 @@ def app_round_trip(
                         "input": [
                             {
                                 "type": "text",
-                                "text": prompt
-                                or f"Reply with exactly {email}. Do not use tools.",
+                                "text": current_prompt,
                             }
                         ],
                     },
@@ -156,6 +169,8 @@ def app_round_trip(
                         break
                 else:
                     pytest.fail("app-server did not complete local compaction")
+                if after_compaction is not None:
+                    after_compaction()
     finally:
         process.stdin.close()
         process.terminate()
@@ -241,3 +256,78 @@ def test_desktop_runtime_live_chatgpt(tmp_path):
         while gateway.activity.probe(probe["verification_id"])["state"] != "verified":
             assert time.monotonic() < deadline, "completed request was not verified"
             time.sleep(0.01)
+
+
+@pytest.mark.live
+def test_live_continuity_across_compaction_and_gateway_restart(tmp_path):
+    if (
+        os.environ.get("VEIL_LIVE_SUSTAINED") != "1"
+        or os.environ.get("VEIL_LIVE_CODEX_APP") != "1"
+    ):
+        pytest.skip("set VEIL_LIVE_SUSTAINED=1 and VEIL_LIVE_CODEX_APP=1")
+    data_dir = prepare_data_dir(tmp_path / "veil")
+    email = "continuity.canary@example.org"
+    counts = [0, 0]
+    gateways = []
+
+    def start(**options):
+        gateway = Gateway(
+            open_sessions(
+                data_dir, Settings(identity=False, note=False), {}, api="openai"
+            ),
+            api="openai",
+            openai_auth="chatgpt",
+            **options,
+        )
+        generation = len(gateways)
+        gateways.append(gateway)
+        connect = gateway._connect
+
+        def checked_connect():
+            connection = connect()
+            request = connection.request
+
+            def checked_request(method, url, body=None, headers=None, **kwargs):
+                if method == "POST":
+                    assert url == "/backend-api/codex/responses"
+                    assert email.encode() not in body
+                    assert b"[EMAIL_1]" in body
+                    counts[generation] += 1
+                return request(method, url, body=body, headers=headers, **kwargs)
+
+            connection.request = checked_request
+            return connection
+
+        gateway._connect = checked_connect
+        return gateway
+
+    gateway = start()
+
+    def restart():
+        port, secret = gateway.port, gateway.secret
+        gateway.close()
+        start(port=port, secret=secret)
+
+    try:
+        app_round_trip(
+            binary_path(),
+            gateway,
+            tmp_path,
+            email,
+            prompt=(
+                "For this fictional continuity exercise, remember the contact "
+                f"address {email}. Retain it in any summary. "
+                "Reply with exactly that address and nothing else. Do not use tools."
+            ),
+            followup_prompt=(
+                "Reply with exactly the contact address I asked you to remember "
+                "and nothing else. Do not use tools."
+            ),
+            turns=3,
+            compact=True,
+            after_compaction=restart,
+        )
+        assert counts[0] >= 4  # three turns and the client's summary request
+        assert counts[1] >= 3  # same conversation through a freshly opened vault
+    finally:
+        gateways[-1].close()

@@ -21,6 +21,10 @@ can use real values. See [coverage and limits](../README.md#understand-the-bound
 New text fields and block types are masked generically. Keys, types, numbers,
 unrecognized file-byte fields, and opaque values that cannot safely be masked
 are refused. Known image/PDF attachment contents pass through unmasked.
+Model routes accept no query or exactly `?beta=true`, the query used by the
+recorded client. Other queries, fragments, and absolute-form request targets are
+refused before reading or forwarding the body. A refusal does not echo the
+unsupported target. This route restriction is a post-b2 checkout improvement.
 Provider-origin blocks can be replayed unchanged, unless they contain registered
 private text. Hooks check routing
 before each prompt and inspect tool arguments for known real values. Shell calls
@@ -33,8 +37,9 @@ Claude Code arguments are forwarded, except `--settings`, `--bare`, and
 existing `ANTHROPIC_BASE_URL` also prevents startup. `veil gateway` is available
 for manually configured clients; `veil claude` manages its own gateway lifecycle.
 
-The repository's live tests record compatibility checks against Claude Code
-2.1.283. Re-run live tests after client updates; this document describes the
+The recorded request census and golden fixtures cover Claude Code 2.1.283.
+Selected checks against newer clients are listed separately in the
+[compatibility matrix](compatibility.md). Re-run live tests after client updates; this document describes the
 current checkout. Another version produces a one-line startup warning once per
 client/Veil version pair; it does not prevent startup.
 

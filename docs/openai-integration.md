@@ -175,6 +175,7 @@ This is a check before model-generated arguments reach the client, not a Codex e
 
 - Images, files, audio, hosted tools, structured output formats, unknown fields, and unknown input items are refused. File text read by a local tool can be masked when it enters a supported tool-result request.
 - Only Responses and the model catalog are forwarded. Uploads, `/responses/compact`, and other endpoints are refused. A remote-compaction request receives a final HTTP 400 with `x-should-retry: false` and instructions to start a new protected chat. Its history is not forwarded.
+- The unreleased checkout also rejects fragments and absolute-form model request targets before forwarding. Existing Responses and validated model-catalog query rules remain in place.
 - Stored conversation references and `previous_response_id` are refused. Replay history locally and start new conversations through Veil. Unseen encrypted state from imported conversations is refused.
 - Local execution, MCP/app traffic, hooks, telemetry from other processes, cloud tasks, and clients selecting a different provider are outside the gateway.
 - Detection and restoration have the [same limits as the rest of Veil](../README.md#understand-the-boundaries). Unknown placeholders can remain in gateway replies. No detection system proves that every secret was found.

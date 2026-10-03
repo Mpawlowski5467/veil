@@ -77,7 +77,7 @@ with review enabled cannot be generalized. The initial set includes:
   trace identifiers held for review. These quantify friction separately from
   coverage.
 
-## Current candidate results
+## Published 0.6.0b2 results
 
 The unchanged labels exposed two gaps that are now covered: triple-quoted
 credential assignments are automatically masked, and a qualified label such as
@@ -101,6 +101,39 @@ change increases the harmless-request hold count. All other per-case measures
 remain unchanged, including the unknown-literal warning. The remaining examples
 above remain gaps or explicit scope limits; this candidate does not claim to
 recognize every credential, spelling, name, address, or encoding.
+
+## Unreleased follow-up results
+
+After 0.6.0b2, the current source adds bounded form-body, explicit encoded
+credential-field, and namespaced auth/session-cookie rules. The published b2
+wheel does not include these additions. With the same immutable labels, both
+adapters now produce:
+
+| Measurement, per adapter | Defaults | Review | Explicit registration | Registration + review |
+| --- | ---: | ---: | ---: | ---: |
+| Annotated occurrences fully masked | 21 / 36 | 21 / 36 | 23 / 36 | 23 / 36 |
+| Occurrences exposed in ready requests | 15 | 12 | 13 | 10 |
+| Requests withheld for review | 0 / 44 | 6 / 44 | 0 / 44 | 6 / 44 |
+| Harmless requests withheld | 0 / 11 | 2 / 11 | 0 / 11 | 2 / 11 |
+| Extra or inexact automatic mask spans | 0 | 0 | 0 | 0 |
+| Harmless characters masked | 0 | 0 | 0 | 0 |
+| Requests restored as exact local text | 44 / 44 | 44 / 44 | 44 / 44 | 44 / 44 |
+
+Only two cases change from b2. `http-form-password` keeps full coverage but now
+preserves the 15 harmless characters in `&remember=false`, so its mask has the
+exact annotated span. `base64-account-password` gains one automatic mask of its
+28-character original encoded spelling; no decoding or inferred registration is
+used. Every other per-case metric is unchanged, including review burden and the
+unknown-literal warning. The original 52-request evaluation also has no per-case
+metric changes.
+
+Cookie additions have separate positive and negative tests rather than adding
+names to fit the score. In particular, `tenant_access` remains a recorded miss:
+that ambiguous suffix does not establish an authentication cookie. The
+`feature_access`, `access_level`, preference-cookie, and code-reference negatives
+remain readable. The [exact syntax and limits](coding-secrets.md#unreleased-explicit-forms-encoded-credential-fields-and-namespaced-cookies)
+apply; arbitrary names, encodings, split fragments, and code-looking defaults
+still need explicit registration or further bounded rules.
 
 ## Reproduce and compare
 

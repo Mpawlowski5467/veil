@@ -21,7 +21,7 @@ import pytest
 from live import harness as h
 from live.recorder import Recorder
 from veil.cli import claude_settings
-from veil.gateway import Gateway, load_settings, open_sessions
+from veil.gateway import Gateway, load_settings, open_sessions, prepare_data_dir
 
 pytestmark = [
     pytest.mark.live,
@@ -362,3 +362,72 @@ def test_a_resumed_session_masks_its_history_the_same_way(resumed):
     assert as_the_api_reads(after[: len(before)]) == as_the_api_reads(before)
     assert_nothing_real_left(recorder)
     assert_per_turn_effort(recorder)
+
+
+def test_repeated_live_resumes_preserve_updates_and_masked_history(tmp_path):
+    if os.environ.get("VEIL_LIVE_SUSTAINED") != "1":
+        pytest.skip("set VEIL_LIVE_SUSTAINED=1 for repeated live resume checks")
+    data_dir = prepare_data_dir(tmp_path / "veil")
+    (data_dir / "config.json").write_text('{"identity":false}', encoding="utf-8")
+    ws = h.Workspace(tmp_path / "project")
+    first = "resume.first@example.org"
+    second = "resume.second@example.org"
+    replacement = "resume.replacement@example.org"
+    steps = [
+        (
+            f"Remember my fictional primary contact {first}. "
+            "Reply with exactly the primary address. Do not use tools.",
+            (first,),
+        ),
+        (
+            f"Add fictional secondary contact {second}. "
+            "Reply with both contact addresses only. Do not use tools.",
+            (first, second),
+        ),
+        (
+            "Repeat both remembered addresses only. Do not use tools.",
+            (first, second),
+        ),
+        (
+            f"Replace the secondary address with {replacement}. "
+            "Reply with both current addresses only. Do not use tools.",
+            (first, replacement),
+        ),
+        (
+            "Repeat both current addresses only. Do not use tools.",
+            (first, replacement),
+        ),
+    ]
+    session_id = None
+    previous = None
+    for number, (prompt, expected) in enumerate(steps):
+        root = tmp_path / f"gateway-{number}"
+        root.mkdir()
+        with serve(data_dir, root) as (gateway, recorder):
+            run = ws.run(
+                prompt,
+                resume=session_id,
+                max_turns=2,
+                timeout=90,
+                extra_args=["--tools", ""],
+                extra_settings=claude_settings(gateway, data_dir=data_dir),
+            )
+        assert run.returncode == 0, "Claude continuity run failed"
+        assert run.result
+        assert run.result.get("is_error") is False
+        reply = run.result.get("result", "")
+        assert all(address in reply for address in expected)
+        if number >= 3:
+            assert second not in reply
+        if session_id is not None:
+            assert run.session_id == session_id
+        session_id = run.session_id
+        bodies = sent_bodies(recorder)
+        assert bodies
+        sent = json.dumps(bodies)
+        assert all(address not in sent for address in (first, second, replacement))
+        if previous is not None:
+            assert as_the_api_reads(bodies[0]["messages"][: len(previous)]) == (
+                as_the_api_reads(previous)
+            )
+        previous = bodies[-1]["messages"]

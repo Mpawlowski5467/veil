@@ -561,10 +561,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -805,18 +805,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -1518,10 +1518,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -1762,18 +1762,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -2475,10 +2475,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -2719,18 +2719,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -3432,10 +3432,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -3676,18 +3676,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -4389,10 +4389,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -4633,18 +4633,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -5346,10 +5346,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -5590,18 +5590,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -6303,10 +6303,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -6547,18 +6547,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
@@ -7260,10 +7260,10 @@
           26
         ],
         "exposed_annotations": 0,
-        "exact_tp": 0,
-        "exact_fp": 1,
-        "exact_fn": 1,
-        "overmasked_characters": 15,
+        "exact_tp": 1,
+        "exact_fp": 0,
+        "exact_fn": 0,
+        "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,
         "registrations_applied": 0,
@@ -7504,18 +7504,18 @@
         "id": "base64-account-password",
         "status": "ready",
         "masked_characters": [
-          0
+          28
         ],
         "review_characters": [
           0
         ],
         "masked_or_flagged_characters": [
-          0
+          28
         ],
-        "exposed_annotations": 1,
-        "exact_tp": 0,
+        "exposed_annotations": 0,
+        "exact_tp": 1,
         "exact_fp": 0,
-        "exact_fn": 1,
+        "exact_fn": 0,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
         "review_findings": 0,

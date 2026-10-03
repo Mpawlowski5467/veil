@@ -2,6 +2,8 @@
 
 **Current behavior: 0.6.0b2. Coding-secret detection was introduced in 0.6.0b1;
 upgrade to b2 for the declaration, escaped-JSON, and multiline fixes below.**
+The transport additions marked **Unreleased** require the updated source checkout;
+they are not included in the published 0.6.0b2 wheel.
 Upgrade Veil and restart existing
 gateways or relaunch clients to use them.
 
@@ -131,6 +133,39 @@ Pasted `Cookie:` / `Set-Cookie:` headers recognize `sid`, `session`, `sessionid`
 `csrf_token`, including `__Host-` / `__Secure-` prefixes. Other cookie names and
 attributes are unchanged. These rules inspect text supplied to the model; they
 do not read a browser cookie store or rewrite actual transport headers.
+
+### Unreleased: explicit forms, encoded credential fields, and namespaced cookies
+
+In pasted HTTP text, a `Content-Type: application/x-www-form-urlencoded` header,
+any following header lines, and a blank separator identify a single-line form
+body. Credential field names are percent-decoded once. Each original value is
+masked only up to its `&` separator, keeping neighboring parameters readable;
+percent escapes, `+`, and `=` within the value restore exactly. This does not
+parse arbitrary ampersands in prose or shell commands, multipart forms, or bodies
+without that explicit header framing.
+
+JSON text containing an explicit `"encoding":"base64"` or `"base64url"` marker
+also masks a quoted credential payload field, such as `password_payload`,
+`api_key_payload`, or `clientSecretPayload`. The field must have a recognized
+credential name followed by `_payload`, `.payload`, `-payload`, or `Payload`.
+The decoded JSON string spelling must contain at least eight base64/base64url
+characters with plausible length and trailing padding. JSON key/value escapes
+are handled while the entire original escaped value is retained for restoration.
+The encoding marker is context within that text, not a validated schema or proof
+that two fields belong to the same object. The payload itself is not decoded,
+executed, or reconstructed. Short values, malformed encodings, arbitrary payload
+names, nested/stringified JSON encodings, and separated parsed fields remain
+outside this rule.
+
+`Cookie:` / `Set-Cookie:` headers additionally recognize explicit credential
+names (for example `api_key`, `tenant_password`, and `org_access_token`) and
+namespaced names ending in `auth`, `session`, `sessionid`, or `session_id`, with
+components separated by `_`, `-`, or `.`. `tenant_session` and `portal.auth` are
+examples. These are values in pasted headers, not code references. Unknown
+cookie names remain unsupported: `tenant_access`, `feature_access`,
+`access_level`, and preference cookies are not automatically classified. A broad
+`access` suffix would mask unrelated feature settings, so register a private
+value in such a cookie explicitly.
 
 Environment references such as `${API_KEY}`, `$API_KEY`, `%API_KEY%`, and common
 `os.environ`/`process.env` expressions are left as references. Identifiers such
