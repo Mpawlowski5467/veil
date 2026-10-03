@@ -1484,12 +1484,12 @@
       },
       {
         "id": "shell-header-value",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           21
         ],
         "review_characters": [
-          21
+          0
         ],
         "masked_or_flagged_characters": [
           21
@@ -1499,8 +1499,8 @@
         "exact_fp": 0,
         "exact_fn": 0,
         "overmasked_characters": 0,
-        "review_harmless_characters": 37,
-        "review_findings": 1,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -1783,18 +1783,18 @@
       },
       {
         "id": "split-credential-fragments",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -1802,7 +1802,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -3398,12 +3398,12 @@
       },
       {
         "id": "shell-header-value",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           21
         ],
         "review_characters": [
-          21
+          0
         ],
         "masked_or_flagged_characters": [
           21
@@ -3413,8 +3413,8 @@
         "exact_fp": 0,
         "exact_fn": 0,
         "overmasked_characters": 0,
-        "review_harmless_characters": 37,
-        "review_findings": 1,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -3697,18 +3697,18 @@
       },
       {
         "id": "split-credential-fragments",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -3716,7 +3716,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -5312,12 +5312,12 @@
       },
       {
         "id": "shell-header-value",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           21
         ],
         "review_characters": [
-          21
+          0
         ],
         "masked_or_flagged_characters": [
           21
@@ -5327,8 +5327,8 @@
         "exact_fp": 0,
         "exact_fn": 0,
         "overmasked_characters": 0,
-        "review_harmless_characters": 37,
-        "review_findings": 1,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -5611,18 +5611,18 @@
       },
       {
         "id": "split-credential-fragments",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -5630,7 +5630,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -7226,12 +7226,12 @@
       },
       {
         "id": "shell-header-value",
-        "status": "held",
+        "status": "ready",
         "masked_characters": [
           21
         ],
         "review_characters": [
-          21
+          0
         ],
         "masked_or_flagged_characters": [
           21
@@ -7241,8 +7241,8 @@
         "exact_fp": 0,
         "exact_fn": 0,
         "overmasked_characters": 0,
-        "review_harmless_characters": 37,
-        "review_findings": 1,
+        "review_harmless_characters": 0,
+        "review_findings": 0,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0
@@ -7525,18 +7525,18 @@
       },
       {
         "id": "split-credential-fragments",
-        "status": "ready",
+        "status": "held",
         "masked_characters": [
           0,
           0
         ],
         "review_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "masked_or_flagged_characters": [
-          0,
-          0
+          8,
+          9
         ],
         "exposed_annotations": 2,
         "exact_tp": 0,
@@ -7544,7 +7544,7 @@
         "exact_fn": 2,
         "overmasked_characters": 0,
         "review_harmless_characters": 0,
-        "review_findings": 0,
+        "review_findings": 2,
         "registrations_applied": 0,
         "restored": true,
         "restoration_warnings": 0

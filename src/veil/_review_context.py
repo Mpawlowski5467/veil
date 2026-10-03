@@ -74,9 +74,17 @@ _WEBHOOK_CONTEXT = re.compile(
 )
 _SPLIT = re.compile(r"(?i:\b(?:fragments?|pieces|parts|split|concatenat\w*)\b)")
 _CREDENTIAL_WORD = re.compile(
-    r"(?i:\b(?:password|passphrase|api[ _-]?key|access[ _-]?token|secret)\b)"
+    r"(?i:\b(?:password|passphrase|api[ _-]?key|access[ _-]?token|"
+    r"secret|credentials?)\b)"
 )
 _TOKEN_LINE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./+~-]{3,}={0,2}\Z")
+_FRAGMENT_LABEL = re.compile(
+    r"(?i:\b(?:(?:first|second|third|fourth|last|next)[ \t]+(?:part|piece|fragment)|"
+    r"(?:part|piece|fragment)(?:[ \t]+(?:[0-9]{1,3}|[a-z]))?))"
+    r"[ \t]*[:=][ \t]*"
+)
+# Dotted expressions can be code references; quote them to establish a value.
+_FRAGMENT_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_/+~-]{3,}={0,2}\Z")
 _NAME = re.compile(r"[^\W\d_][\w'\u2019.-]*(?:[ \t]+[^\W\d_][\w'\u2019.-]*){1,4}\Z")
 _DATE = re.compile(r"(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\Z")
 
@@ -151,6 +159,23 @@ def fragment_context(text: str) -> bool:
     )
 
 
+def _labelled_fragments(text: str) -> Iterator[str]:
+    """Read explicit fragment labels, preserving source escapes and boundaries."""
+    for line in text.splitlines():
+        cursor = 0
+        while label := _FRAGMENT_LABEL.search(line, cursor):
+            start = cursor = label.end()
+            value = _phrase(line, start=start)
+            # Consume a proposed value once. Repeated label-like words in an
+            # unbounded value must not rescan the remaining line quadratically.
+            cursor = max(cursor, start + len(value))
+            if value and (
+                line[start : start + 1] in {'"', "'", "`"}
+                or _FRAGMENT_TOKEN.fullmatch(value)
+            ):
+                yield value
+
+
 def contextual_values(
     text: str, *, fragments: bool = False
 ) -> Iterator[tuple[str, str, str]]:
@@ -204,6 +229,8 @@ def contextual_values(
             if decoded:
                 yield value, "CREDENTIAL", "explicitly encoded payload needs review"
     if fragments:
+        for value in _labelled_fragments(text):
+            yield value, "CREDENTIAL", "labelled fragment of a described credential"
         for line in text.splitlines():
             value = line.strip().strip("\"'`")
             if _TOKEN_LINE.fullmatch(value):

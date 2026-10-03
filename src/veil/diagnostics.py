@@ -157,6 +157,10 @@ def inspect_configuration(config: Path) -> tuple[list[Check], dict[str, Any]]:
                 "Review the profile; this check does not resolve profile overrides.",
             )
         )
+    if data.get("model_provider") != "veil":
+        # A leftover Veil table does not describe the selected route. Do not
+        # probe its gateway or infer an authentication mode from missing fields.
+        return checks, {}
     features = data.get("features", {})
     if (
         not isinstance(features, dict)
@@ -323,6 +327,10 @@ def _doctor_checks(
                 "Check config.json. Its values are omitted from diagnostics.",
             )
         )
+    if not provider:
+        # Local storage and detector checks are still useful without a route;
+        # comparing secrets or asking for an API key would invent its auth mode.
+        return checks
     secret_path = directory / "gateway-secret"
     try:
         secret = read_private_file(secret_path).strip()
