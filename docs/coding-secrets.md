@@ -221,8 +221,9 @@ masking and review separately and records their remaining limitations.
 Unquoted identifiers of several parts that end in a credential name are treated
 as code references, for example `password = settings.database_password`,
 `connect(password=db_password)` or `token: AuthToken`, and so are the types and
-field-name echoes listed above. A single credential word is code only when it
-repeats the field name, so `PASSWORD=secret` and `api_key=token` are masked.
+field-name echoes listed above. A single word is code only when it repeats the
+field name or one of its words, so `PASSWORD=secret` and `api_key=token` are
+masked.
 Quoted lookalikes such as `password = "settings.database_password"` are still
 masked, as are weak bare values such as `PASSWORD=letmein`. This is a syntax
 heuristic; explicitly register a real credential that looks like a code reference.
@@ -231,8 +232,8 @@ In the gateways, a detected secret that is a single word of letters is also
 masked wherever it appears as a whole word, but not inside longer words or
 identifiers: after a quoted `"postgres"` password, `postgres:16` is masked and
 `postgresql://` stays readable. The Python library's leak check still matches
-such a value inside longer words: `Shield.mask` warns about that
-`postgresql://`, and `wrap(strict=True)` raises `ShieldError` for it.
+such a value inside longer words: `Shield.mask` reports that `postgresql://` in
+the result's `warnings`, and `wrap(strict=True)` raises `ShieldError` for it.
 Ordinary instructions such as “Store API keys in a password manager” stay readable.
 “The password is stored in the operating system keychain” is ambiguous and still
 requires review when review is enabled; it could be a literal passphrase.
