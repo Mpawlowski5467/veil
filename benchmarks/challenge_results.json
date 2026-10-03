@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": "0.6.0b2",
-  "implementation_sha256": "a17cb45e4a5e649fcd61f05641bcebd3b8b237612db3ae2489acaf38c4444b21",
+  "implementation_sha256": "2bfb7acce80b4d5d5c4c68ac0c56c93de0eca37518e639b4e0e1a7af5fb9add3",
   "corpus_sha256": "33bd35e5f377709268ccff4340b4c25fca8ddf4b8389a593b6cb7edff70b9003",
   "platform": "Darwin",
   "python": "3.14.6",
@@ -1043,14 +1043,14 @@
         "exact_fp": 0,
         "exact_fn": 15,
         "overmasked_characters": 0,
-        "review_findings": 6,
-        "review_harmless_characters": 137,
+        "review_findings": 7,
+        "review_harmless_characters": 100,
         "annotations": 36,
         "fully_masked": 21,
         "partially_masked": 0,
         "unmasked": 15,
-        "fully_flagged_for_review": 4,
-        "exposed_in_ready_requests": 12,
+        "fully_flagged_for_review": 5,
+        "exposed_in_ready_requests": 10,
         "held_requests": 6,
         "refused_requests": 0,
         "exact_precision": 1.0,
@@ -1070,7 +1070,7 @@
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 0,
-          "fully_flagged_for_review": 1,
+          "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
@@ -1094,8 +1094,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 3,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 3
+          "fully_flagged_for_review": 2,
+          "exposed_in_ready_requests": 1
         }
       },
       "cases": [
@@ -1623,12 +1623,12 @@
         },
         {
           "id": "shell-header-value",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
             21
           ],
           "review_characters": [
-            21
+            0
           ],
           "masked_or_flagged_characters": [
             21
@@ -1638,8 +1638,8 @@
           "exact_fp": 0,
           "exact_fn": 0,
           "overmasked_characters": 0,
-          "review_harmless_characters": 37,
-          "review_findings": 1,
+          "review_harmless_characters": 0,
+          "review_findings": 0,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -1922,18 +1922,18 @@
         },
         {
           "id": "split-credential-fragments",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -1941,7 +1941,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -3091,14 +3091,14 @@
         "exact_fp": 0,
         "exact_fn": 13,
         "overmasked_characters": 0,
-        "review_findings": 6,
-        "review_harmless_characters": 137,
+        "review_findings": 7,
+        "review_harmless_characters": 100,
         "annotations": 36,
         "fully_masked": 23,
         "partially_masked": 0,
         "unmasked": 13,
-        "fully_flagged_for_review": 4,
-        "exposed_in_ready_requests": 10,
+        "fully_flagged_for_review": 5,
+        "exposed_in_ready_requests": 8,
         "held_requests": 6,
         "refused_requests": 0,
         "exact_precision": 1.0,
@@ -3118,7 +3118,7 @@
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 0,
-          "fully_flagged_for_review": 1,
+          "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
@@ -3142,8 +3142,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 3,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 3
+          "fully_flagged_for_review": 2,
+          "exposed_in_ready_requests": 1
         }
       },
       "cases": [
@@ -3671,12 +3671,12 @@
         },
         {
           "id": "shell-header-value",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
             21
           ],
           "review_characters": [
-            21
+            0
           ],
           "masked_or_flagged_characters": [
             21
@@ -3686,8 +3686,8 @@
           "exact_fp": 0,
           "exact_fn": 0,
           "overmasked_characters": 0,
-          "review_harmless_characters": 37,
-          "review_findings": 1,
+          "review_harmless_characters": 0,
+          "review_findings": 0,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -3970,18 +3970,18 @@
         },
         {
           "id": "split-credential-fragments",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -3989,7 +3989,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -5139,14 +5139,14 @@
         "exact_fp": 0,
         "exact_fn": 15,
         "overmasked_characters": 0,
-        "review_findings": 6,
-        "review_harmless_characters": 137,
+        "review_findings": 7,
+        "review_harmless_characters": 100,
         "annotations": 36,
         "fully_masked": 21,
         "partially_masked": 0,
         "unmasked": 15,
-        "fully_flagged_for_review": 4,
-        "exposed_in_ready_requests": 12,
+        "fully_flagged_for_review": 5,
+        "exposed_in_ready_requests": 10,
         "held_requests": 6,
         "refused_requests": 0,
         "exact_precision": 1.0,
@@ -5166,7 +5166,7 @@
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 0,
-          "fully_flagged_for_review": 1,
+          "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
@@ -5190,8 +5190,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 3,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 3
+          "fully_flagged_for_review": 2,
+          "exposed_in_ready_requests": 1
         }
       },
       "cases": [
@@ -5719,12 +5719,12 @@
         },
         {
           "id": "shell-header-value",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
             21
           ],
           "review_characters": [
-            21
+            0
           ],
           "masked_or_flagged_characters": [
             21
@@ -5734,8 +5734,8 @@
           "exact_fp": 0,
           "exact_fn": 0,
           "overmasked_characters": 0,
-          "review_harmless_characters": 37,
-          "review_findings": 1,
+          "review_harmless_characters": 0,
+          "review_findings": 0,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -6018,18 +6018,18 @@
         },
         {
           "id": "split-credential-fragments",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -6037,7 +6037,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -7187,14 +7187,14 @@
         "exact_fp": 0,
         "exact_fn": 13,
         "overmasked_characters": 0,
-        "review_findings": 6,
-        "review_harmless_characters": 137,
+        "review_findings": 7,
+        "review_harmless_characters": 100,
         "annotations": 36,
         "fully_masked": 23,
         "partially_masked": 0,
         "unmasked": 13,
-        "fully_flagged_for_review": 4,
-        "exposed_in_ready_requests": 10,
+        "fully_flagged_for_review": 5,
+        "exposed_in_ready_requests": 8,
         "held_requests": 6,
         "refused_requests": 0,
         "exact_precision": 1.0,
@@ -7214,7 +7214,7 @@
           "fully_masked": 6,
           "partially_masked": 0,
           "unmasked": 0,
-          "fully_flagged_for_review": 1,
+          "fully_flagged_for_review": 0,
           "exposed_in_ready_requests": 0
         },
         "PASSWORD": {
@@ -7238,8 +7238,8 @@
           "fully_masked": 1,
           "partially_masked": 0,
           "unmasked": 3,
-          "fully_flagged_for_review": 0,
-          "exposed_in_ready_requests": 3
+          "fully_flagged_for_review": 2,
+          "exposed_in_ready_requests": 1
         }
       },
       "cases": [
@@ -7767,12 +7767,12 @@
         },
         {
           "id": "shell-header-value",
-          "status": "held",
+          "status": "ready",
           "masked_characters": [
             21
           ],
           "review_characters": [
-            21
+            0
           ],
           "masked_or_flagged_characters": [
             21
@@ -7782,8 +7782,8 @@
           "exact_fp": 0,
           "exact_fn": 0,
           "overmasked_characters": 0,
-          "review_harmless_characters": 37,
-          "review_findings": 1,
+          "review_harmless_characters": 0,
+          "review_findings": 0,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0
@@ -8066,18 +8066,18 @@
         },
         {
           "id": "split-credential-fragments",
-          "status": "ready",
+          "status": "held",
           "masked_characters": [
             0,
             0
           ],
           "review_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "masked_or_flagged_characters": [
-            0,
-            0
+            8,
+            9
           ],
           "exposed_annotations": 2,
           "exact_tp": 0,
@@ -8085,7 +8085,7 @@
           "exact_fn": 2,
           "overmasked_characters": 0,
           "review_harmless_characters": 0,
-          "review_findings": 0,
+          "review_findings": 2,
           "registrations_applied": 0,
           "restored": true,
           "restoration_warnings": 0

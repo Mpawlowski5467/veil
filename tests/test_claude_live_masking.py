@@ -11,6 +11,7 @@ every request, which must never appear in what leaves.
 import json
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from contextlib import closing, contextmanager
 import pytest
 
 from live import harness as h
+from live.haiku_comparison import MODEL, RequestBudget, guarded_gateway
 from live.recorder import Recorder
 from veil.cli import claude_settings
 from veil.gateway import Gateway, load_settings, open_sessions, prepare_data_dir
@@ -446,3 +448,100 @@ def test_repeated_live_resumes_preserve_updates_and_masked_history(tmp_path):
             assert second not in reply, (
                 f"{context}: reply retained the replaced contact"
             )
+
+
+def test_live_contact_file_update_after_resume(tmp_path):
+    if os.environ.get("VEIL_LIVE_FILE_RESUME") != "1":
+        pytest.skip("set VEIL_LIVE_FILE_RESUME=1 for the bounded file/resume check")
+    data_dir = prepare_data_dir(tmp_path / "veil")
+    (data_dir / "config.json").write_text('{"identity":false}', encoding="utf-8")
+    ws = h.Workspace(tmp_path / "project")
+    contact_file = ws.work / "contact.json"
+    first = "file.primary@example.org"
+    second = "file.secondary@example.org"
+    replacement = "file.updated@example.org"
+    budget = RequestBudget(4, (first, second, replacement))
+    record = {"primary": first, "secondary": second}
+    steps = [
+        (
+            f"Create contact.json for a contact-card application's test fixture: "
+            f"{json.dumps(record)}. Use Write once to save this JSON object, then "
+            "report both addresses in the saved file. Do not create other files.",
+            "Write",
+            record,
+        ),
+        (
+            f"Update contact.json: change only the secondary field to {replacement}. "
+            "Keep primary unchanged. Use Edit once on the file you just wrote, "
+            "then report both current addresses. Do not create other files.",
+            "Edit",
+            {**record, "secondary": replacement},
+        ),
+    ]
+    session_id = None
+    previous = None
+    for number, (prompt, tool, expected) in enumerate(steps, start=1):
+        context = f"Claude file/resume step {number}"
+        root = tmp_path / f"gateway-{number}"
+        root.mkdir()
+        with guarded_gateway(data_dir, root, budget, 2) as (gateway, recorder):
+            settings = claude_settings(gateway, data_dir=data_dir)
+            settings["hooks"].setdefault("PreToolUse", []).append(
+                {
+                    "matcher": "Write|Edit",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": shlex.join(
+                                [
+                                    sys.executable,
+                                    str(h.HERE / "work_file_guard.py"),
+                                    str(contact_file),
+                                ]
+                            ),
+                        }
+                    ],
+                }
+            )
+            run = ws.run(
+                prompt,
+                resume=session_id,
+                model=MODEL,
+                max_turns=2,
+                timeout=60,
+                allowed_tools=[tool],
+                extra_args=["--tools", tool],
+                extra_settings=settings,
+            )
+        bodies = sent_bodies(recorder)
+        assert bodies, f"{context}: no outbound model request recorded"
+        assert all(
+            value not in json.dumps(bodies) for value in (first, second, replacement)
+        ), f"{context}: raw fictional contact in outbound history"
+        assert len(bodies) == len(run.api_requests()) == 2, (
+            f"{context}: expected one tool turn and one final reply"
+        )
+        if previous is not None:
+            assert as_the_api_reads(bodies[0]["messages"][: len(previous)]) == (
+                as_the_api_reads(previous)
+            ), f"{context}: masked history prefix changed"
+        previous = bodies[-1]["messages"]
+        assert run.returncode == 0, f"{context}: client process failed"
+        assert run.result.get("is_error") is False, f"{context}: client reported error"
+        if session_id is not None:
+            assert run.session_id == session_id, f"{context}: session ID changed"
+        session_id = run.session_id
+        assert run.calls("PostToolUse", tool), f"{context}: expected file tool not run"
+        assert contact_file.is_file(), f"{context}: output file missing"
+        assert json.loads(contact_file.read_text()) == expected, (
+            f"{context}: saved contact record differs"
+        )
+        reply = run.result.get("result", "")
+        assert all(value in reply for value in expected.values()), (
+            f"{context}: reply omitted a required restored contact"
+        )
+        if number == 2:
+            assert second not in reply, (
+                f"{context}: reply retained the replaced contact"
+            )
+    assert budget.used == 4

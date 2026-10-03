@@ -105,35 +105,47 @@ recognize every credential, spelling, name, address, or encoding.
 ## Unreleased follow-up results
 
 After 0.6.0b2, the current source adds bounded form-body, explicit encoded
-credential-field, and namespaced auth/session-cookie rules. The published b2
-wheel does not include these additions. With the same immutable labels, both
-adapters now produce:
+credential-field, and namespaced auth/session-cookie rules, plus review of
+explicitly labelled credential fragments and more precise quoted-header review.
+The published b2 wheel does not include these additions. With the same immutable
+labels, both adapters now produce:
 
 | Measurement, per adapter | Defaults | Review | Explicit registration | Registration + review |
 | --- | ---: | ---: | ---: | ---: |
 | Annotated occurrences fully masked | 21 / 36 | 21 / 36 | 23 / 36 | 23 / 36 |
-| Occurrences exposed in ready requests | 15 | 12 | 13 | 10 |
+| Occurrences exposed in ready requests | 15 | 10 | 13 | 8 |
 | Requests withheld for review | 0 / 44 | 6 / 44 | 0 / 44 | 6 / 44 |
 | Harmless requests withheld | 0 / 11 | 2 / 11 | 0 / 11 | 2 / 11 |
 | Extra or inexact automatic mask spans | 0 | 0 | 0 | 0 |
 | Harmless characters masked | 0 | 0 | 0 | 0 |
 | Requests restored as exact local text | 44 / 44 | 44 / 44 | 44 / 44 | 44 / 44 |
 
-Only two cases change from b2. `http-form-password` keeps full coverage but now
+Four cases change from b2. `http-form-password` keeps full coverage but now
 preserves the 15 harmless characters in `&remember=false`, so its mask has the
 exact annotated span. `base64-account-password` gains one automatic mask of its
 28-character original encoded spelling; no decoding or inferred registration is
-used. Every other per-case metric is unchanged, including review burden and the
-unknown-literal warning. The original 52-request evaluation also has no per-case
-metric changes.
+used.
+
+The next review refinement changes two more rows, only in review-enabled runs.
+`split-credential-fragments` is now withheld with two findings covering all 8 and
+9 characters of its two labelled pieces. These are review findings, not automatic
+masks. `shell-header-value` now proceeds with its complete automatic mask intact:
+the matching quote after a `-H` header establishes that the following URL is
+outside the credential. Its redundant finding, which also flagged 37 harmless
+characters, disappears. Review exposures therefore fall from 12 to 10 (10 to 8
+with registrations), while total holds stay at six and harmless holds stay at
+two. Every other per-case metric is unchanged, including the unknown-literal
+warning. The original 52-request evaluation also has no per-case metric changes.
 
 Cookie additions have separate positive and negative tests rather than adding
 names to fit the score. In particular, `tenant_access` remains a recorded miss:
 that ambiguous suffix does not establish an authentication cookie. The
 `feature_access`, `access_level`, preference-cookie, and code-reference negatives
 remain readable. The [exact syntax and limits](coding-secrets.md#unreleased-explicit-forms-encoded-credential-fields-and-namespaced-cookies)
-apply; arbitrary names, encodings, split fragments, and code-looking defaults
-still need explicit registration or further bounded rules.
+apply. [Labelled fragment review](secret-review.md#unreleased-review-boundary-refinements)
+also has explicit context and delimiter limits; arbitrary names, encodings,
+fragmentation, and code-looking defaults still need registration or further
+bounded rules.
 
 ## Reproduce and compare
 

@@ -10,6 +10,10 @@ Windows background service management is explicitly outside the current scope.
 - Native macOS/Linux/Windows suites on Python 3.10 and 3.14, including private
   storage, Unicode registration, mask/restore, forgetting, skill install/remove,
   Codex setup/undo, protocol regressions, clipboard, and clean wheel installs.
+- Separate Windows installed-wheel checks under two ordinary local accounts,
+  verifying non-administrative tokens, setup/undo, session separation, and real
+  cross-account denial for private files and live SQLite sidecars. These remain
+  scripted CLI/storage checks, separate from installed-client and human journeys.
 - Install the base wheel without desktop dependencies, then add `[desktop]` and
   exercise setup/undo and the skill's pinned runtime from outside the checkout.
 - Upgrade/rollback test using separate installed 0.4.1, 0.5.0, 0.6.0b1, and candidate wheels,

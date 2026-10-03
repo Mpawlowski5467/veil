@@ -53,6 +53,11 @@ _MULTILINE = re.compile(
     r"(?m)^[ \t]*(?P<name>[A-Za-z_][A-Za-z0-9_.-]{0,127}):[ \t]*[|>][+-]?[ \t]*\r?\n"
     r"(?P<value>(?:[ \t]+[^\r\n]+(?:\r?\n|$))+)"
 )
+_HEADER_OPTION = re.compile(
+    r"\A[ \t]*(?:\r?\n[ \t]*)*curl[ \t]+"
+    r"(?:[A-Za-z0-9_./:@+=,-]+[ \t]+)*"
+    r"(?:-H[ \t]*|--header(?:[ \t]+|=))(?P<quote>[\"'])\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,30 @@ def _value(raw: str) -> str:
                 end += 1
         return raw[1:]
     return raw
+
+
+def _header_boundary(text: str, assignment: re.Match[str], end: int) -> bool:
+    """Recognize a closing shell quote after an explicit header option value."""
+    if assignment["quote"] or assignment["separator"] != ":":
+        return False
+    name = assignment.start("name")
+    # A local '-H' can itself be text inside a quoted argument. Only waive a
+    # hold for a bounded first curl command with a plain, unquoted prefix;
+    # multiline quotes, escapes and shell expressions remain conservative.
+    if name > 256:
+        return False
+    option = _HEADER_OPTION.fullmatch(text, 0, name)
+    return bool(
+        option
+        and text[end : end + 1] == option["quote"]
+        # Escaped delimiters and concatenated shell words remain uncertain.
+        and text[end - 1 : end] != "\\"
+        and (
+            end + 1 == len(text)
+            or text[end + 1] in " \t\n"
+            or text.startswith("\r\n", end + 1)
+        )
+    )
 
 
 def candidates(
@@ -145,6 +174,14 @@ def candidates(
             continue
         line_end = text.find("\n", end)
         line_end = len(text) if line_end < 0 else line_end
+        if _header_boundary(text, assignment, end):
+            # The rest of this line is outside the header. Still review any
+            # unmasked part *inside* its value, rather than waiving by overlap.
+            value = text[start:end]
+            if _literal(value) and exposed(value):
+                found[value] = Candidate(value, kind, "credential header value")
+                _bounded(found)
+            continue
         tail = text[end:line_end].strip()
         value = text[start:line_end].strip()
         if (

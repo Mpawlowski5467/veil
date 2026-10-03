@@ -9,13 +9,12 @@ import pytest
 from veil import Shield, cli
 from veil.codex_setup import setup_codex
 from veil.diagnostics import run_diagnostics
-from veil.gateway import Gateway, Sessions
+from veil.gateway import Gateway, Sessions, prepare_data_dir
 
 
 @pytest.fixture
 def configured(tmp_path):
-    directory = tmp_path / "veil"
-    directory.mkdir(mode=0o700)
+    directory = prepare_data_dir(tmp_path / "veil")
     secret = "never-print-this-secret"
     (directory / "gateway-secret").write_text(secret)
     (directory / "gateway-secret").chmod(0o600)
@@ -135,6 +134,57 @@ def test_missing_config_and_data_are_not_created(tmp_path, capsys):
     assert cli.main(["status", "--config", str(config), "--json"]) == 1
     assert json.loads(capsys.readouterr().out)["ready"] is False
     assert not config.parent.exists()
+
+
+@pytest.mark.parametrize("doctor", [False, True])
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        'model = "test-model"\n',
+        'model_provider = "other"\n'
+        "[model_providers.veil]\n"
+        'base_url = "http://127.0.0.1:8485/v1"\n'
+        "requires_openai_auth = false\n"
+        'env_key = "OPENAI_API_KEY"\n'
+        "[model_providers.veil.http_headers]\n"
+        'x-gateway-secret = "fictional-unused-secret"\n',
+        'profile = "work"\n[profiles.work]\nmodel_provider = "veil"\n',
+    ],
+)
+def test_unselected_veil_does_not_probe_stale_route_or_invent_api_key_mode(
+    tmp_path, monkeypatch, capsys, doctor, configuration
+):
+    config = tmp_path / "config.toml"
+    config.write_text(configuration, encoding="utf-8")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("an unselected route attempted a gateway or login check")
+
+    monkeypatch.setattr("veil.diagnostics._gateway_check", forbidden)
+    monkeypatch.setattr("veil.diagnostics.subprocess.run", forbidden)
+    assert (
+        run_diagnostics(
+            config=config, data_dir=tmp_path / "absent", doctor=doctor, json_output=True
+        )
+        == 1
+    )
+    report = json.loads(capsys.readouterr().out)
+    names = {check["name"] for check in report["checks"]}
+    assert "routing" in names
+    assert not names.intersection(
+        {"authentication", "api_key", "login", "data_folder", "transport", "gateway"}
+    )
+    assert report["gateway_url"] is None
+    assert report["gateway_command"] is None
+    assert report["service_command"] is None
+    assert report["activity"] is None
+    assert report["ready"] is False
+    assert config.read_text(encoding="utf-8") == configuration
+    assert not (tmp_path / "absent").exists()
+    if doctor:
+        assert "local_round_trip" in names
+    if "profile =" in configuration:
+        assert "profile" in names
 
 
 def test_doctor_does_not_confuse_masked_context_with_masked_email(

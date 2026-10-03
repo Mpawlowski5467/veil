@@ -70,15 +70,19 @@ new adversarial examples without removing hard cases or relabelling misses.
 | Replay, escaping, and streams | `gateway/ledger.py`, `gateway/response.py`, `gateway/openai_response.py` | `test_gateway_golden.py`, `test_gateway_response.py`, `test_stream.py`; test replay after restart, escaped tool JSON, interrupted streams, and final completion accounting. |
 | Session separation and recovery | `gateway/store.py`, `gateway/server.py` | `test_workflow_reliability.py`, `test_compaction_recovery.py`; mix concurrent sessions, evict caches, retry after cancellation, and confirm mappings survive refused compaction. |
 | Local authentication and browser access | `gateway/server.py`, `review_cli.py`, `preview.py` | `test_gateway_server.py`, `test_secret_review.py`, `test_preview.py`, `test_launch_review.py`; challenge Host/Origin checks, launch-code reuse, gateway tokens, and Linux cross-account connections. |
-| Private files and persistence | `gateway/config.py`, `_windows.py`, `vault/sqlite.py` | `test_gateway_store.py`, `test_sqlite_vault.py`, `test_platform_workflows.py`; inspect links, owners, ACL inheritance, SQLite sidecars, deletion, and failures under a normal Windows account. |
+| Private files and persistence | `gateway/config.py`, `_windows.py`, `vault/sqlite.py` | `test_gateway_store.py`, `test_sqlite_vault.py`, `test_platform_workflows.py`, plus `benchmarks/windows_standard_user.ps1` / `.py`; inspect links, owners, ACL inheritance, SQLite sidecars, deletion, and failures under a normal Windows account. |
 | Tool delivery and configuration | `gateway/hooks.py`, `gateway/openai_tools.py`, `codex_setup.py` | `test_gateway_hooks.py`, `test_codex_setup.py`, `test_launchers.py`; examine restored arguments, hook failures, config conflicts, setup/undo preservation, and launch cleanup. |
 | Diagnostics | `diagnostics.py`, `support_report.py`, `gateway/activity.py` | `test_diagnostics.py`, `test_support_report.py`, `test_verification.py`; inject fictional secrets into errors and unexpected fields, then inspect every emitted report. |
 | Detection precision and misses | `detectors/_secrets.py`, `_review_context.py` | `test_secret_precision.py`, `test_detection_challenge.py`; separately record exposed occurrences, partial/inexact masks, harmless changes, review holds, and exact restoration. |
 
 Implementation paths above are relative to `src/veil/`; test paths are relative
-to `tests/`. Native CI is useful evidence, but its elevated Windows runner does
-not establish ordinary-user isolation. Use disposable accounts or virtual
-machines for cross-account checks. Do not use personal data as attack material.
+to `tests/`, and benchmark paths are relative to the repository root. The usual
+native Windows job runs elevated. A separate installed-wheel exercise now
+verifies two ordinary account tokens and actual cross-account denial, including
+live SQLite sidecars; its [dated evidence and retained harness failure](compatibility.md#unreleased-ordinary-windows-accounts-2026-10-03)
+do not replace independent review or installed-client journeys. Use disposable
+accounts or virtual machines for further cross-account checks. Do not use
+personal data as attack material.
 
 ## Internal agent audit follow-up, 2026-10-03
 

@@ -141,6 +141,45 @@ registrations and automatic rules, or handle the gateway's review refusal.
   alphanumeric numbers after passport or driver's-license labels. The suggested
   type is a question, not a verified identity or document-number check.
 
+### Unreleased review boundary refinements
+
+The source after 0.6.0b2 also recognizes explicitly labelled pieces when the same
+request contains a line with both a credential cue (`password`, `passphrase`,
+`API key`, `access token`, `secret`, or `credential`) and a fragmentation cue.
+For example, `The credential was split. First part: birch731; second part:
+maple914.` produces two findings and withholds the request. It does not gain two
+automatic masks. The published b2 wheel does not include this refinement.
+
+Labels use `part`, `piece`, or `fragment`, optionally numbered 0–999 or lettered,
+or preceded by first, second, third, fourth, last, or next, followed by `:` or `=`.
+An unquoted value must be a token of at least four characters with a clear
+clause/line boundary; quoted values may be shorter or contain spaces. Source
+escapes stay literal. An unfinished quote proposes the rest of that line;
+arbitrary multiline expressions are not parsed or joined. Code expressions and
+unquoted dotted references do not establish a fragment value. Missing delimiters,
+unrecognized labels, and arbitrary splitting remain outside this rule. Context is
+request-scoped, and already protected values do not add findings.
+
+A matching, unescaped closing quote on an explicit `-H` or `--header` option can
+also bound review of its credential value in a simple `curl` command. This narrow
+case must begin the input, apart from blank lines/indentation, and have at most
+256 characters of plain unquoted ASCII words/options before the header name.
+Earlier quotes, escapes, shell operators, substitutions, or nonblank content keep
+conservative review: a later apparent command can be inside a multiline string.
+When the full header value is already masked, an unrelated following argument
+no longer creates a redundant hold. A partly visible value still requires review;
+escaped or mismatched quotes and concatenated shell words do not gain this
+exemption. Only ASCII space, tab, newline, CRLF, or the end of input establishes
+the closing boundary; other Unicode or control whitespace can still belong to
+the value. Unknown hashes and request identifiers can still trigger the existing
+token review rule.
+
+The [focused fictional regressions](../tests/test_review_boundaries.py) cover
+positive and negative syntax, per-request context, partial coverage, escapes,
+bounded findings, and actual loopback gateway holds, approvals, outbound masks,
+and exact response restoration. They are authored regression evidence, not a
+general language parser or independent human evaluation.
+
 Both gateways now learn detected values across supported fields before their
 final masking pass. A value mentioned early without a label can therefore be
 masked when a later supported field identifies it as a credential. Review checks

@@ -190,6 +190,8 @@ jobs:
           tests/test_compaction_recovery.py
           tests/test_secret_transport.py
           tests/test_anthropic_routes.py
+          tests/test_review_boundaries.py
+          tests/test_diagnostics.py
           tests/test_launchers.py
       - name: Measure fictional workflow leaks and check the baseline
         run: uv run python benchmarks/leaks.py --check --output leak-report.json
@@ -222,6 +224,38 @@ jobs:
           VEIL_NATIVE_CLIPBOARD: "1"
       - run: uv build
       - run: uv run python benchmarks/wheel_smoke.py
+
+  windows-standard-user:
+    name: Windows standard-user isolation (Python ${{ matrix.python }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.14"]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv build
+      - run: uv run python benchmarks/beta_pack.py
+      - name: Exercise installed wheel as two ordinary local accounts
+        shell: pwsh
+        run: |
+          $basePython = uv run python -c 'import sys; print(sys._base_executable)'
+          $wheel = (Get-ChildItem dist/veil-*.whl).FullName
+          $pack = (Get-ChildItem dist/veil-*-beta.zip).FullName
+          ./benchmarks/windows_standard_user.ps1 -Python $basePython -Wheel $wheel -BetaPack $pack -Output windows-standard-user-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-standard-user-py${{ matrix.python }}
+          path: windows-standard-user-report.json
+          if-no-files-found: warn
 
   upgrade:
     name: Upgrade and rollback from ${{ matrix.previous }}
