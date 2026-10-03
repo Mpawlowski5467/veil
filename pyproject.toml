@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 authors = [{ name = "Mateusz Pawlowski" }]
 keywords = ["pii", "privacy", "llm", "masking", "redaction", "anonymization"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",

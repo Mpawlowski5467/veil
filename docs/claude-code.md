@@ -51,7 +51,7 @@ find this launch; use the same `--data-dir` if you passed one.
 A request the gateway cannot mask is not sent. For example:
 
 ```
-API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.6.0b1 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].attestation.signature (opaque data that can't be masked)
+API Error: 400 veil: can't mask this request, so nothing was sent. This is Claude Code 2.1.290, and veil 0.6.0b2 was tested with 2.1.283: update veil. If it happens on every prompt, it is in the conversation: /rewind to before the prompt that brought it in, or start a new one. Not handled: messages[4].content[1].attestation.signature (opaque data that can't be masked)
 ```
 
 Update Veil when Claude Code is newer than the tested version. If a refused

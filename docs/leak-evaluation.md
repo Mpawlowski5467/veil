@@ -1,6 +1,6 @@
 # Workflow leak evaluation
 
-Veil 0.6.0b1 has an offline evaluation of **52 authored, fictional
+Veil has an offline evaluation of **52 authored, fictional
 requests, 52 annotated private occurrences, and 15 requests with no private
 values**. It covers 14 formats, including emails, `.env` files, JSON, YAML,
 shell commands, HTTP headers, logs, diffs, and conversations with tool output.
@@ -11,8 +11,11 @@ This is an intentionally difficult regression corpus, including unsupported
 formats and future detection targets. It is **not an independently sampled
 accuracy study, a security audit, or a guarantee that every secret is hidden**.
 All values are invented; no credentials are validated and no model is called.
-The results below are for the current source, which adds fixes made after the
-0.6.0b1 beta; the older 0.5.0 wheel lacks these secret rules.
+The results below describe 0.6.0b2, which includes fixes made after the
+0.6.0b1 beta; the older 0.5.0 wheel lacks these secret rules. The separate
+[44-case detection challenge](detection-challenge.md) deliberately tests other
+formats and records misses even with review enabled. Do not combine the two
+corpora into a single score or infer universal coverage from either.
 
 ## Current results
 

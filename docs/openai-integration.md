@@ -174,19 +174,49 @@ This is a check before model-generated arguments reach the client, not a Codex e
 ## Other boundaries
 
 - Images, files, audio, hosted tools, structured output formats, unknown fields, and unknown input items are refused. File text read by a local tool can be masked when it enters a supported tool-result request.
-- Only Responses and the model catalog are forwarded. Uploads, `/responses/compact`, and other endpoints are refused. Long sessions that request remote compaction will stop with an error.
+- Only Responses and the model catalog are forwarded. Uploads, `/responses/compact`, and other endpoints are refused. A remote-compaction request receives a final HTTP 400 with `x-should-retry: false` and instructions to start a new protected chat. Its history is not forwarded.
 - Stored conversation references and `previous_response_id` are refused. Replay history locally and start new conversations through Veil. Unseen encrypted state from imported conversations is refused.
 - Local execution, MCP/app traffic, hooks, telemetry from other processes, cloud tasks, and clients selecting a different provider are outside the gateway.
 - Detection and restoration have the [same limits as the rest of Veil](../README.md#understand-the-boundaries). Unknown placeholders can remain in gateway replies. No detection system proves that every secret was found.
 
 Mappings and the ledger live in `~/.veil` by default. Original values are plaintext in the owner-only vault. Codex can also store restored values in local history. `veil forget --session ID` or `veil forget --all` removes Veil's mappings and ledger entries, not Codex history. After forgetting a session, its old encrypted reasoning is refused.
 
+## Recover when a long chat needs compaction
+
+Codex 0.160.0 with the Veil custom provider can summarize through ordinary
+`/responses` calls. A scripted installed app-server test covers an initial
+turn, this summary, and a continuation that replays the summary with private
+values masked. That does not establish live long-session reliability or support
+for the separate remote-compaction endpoint; routing can change with client or
+provider configuration.
+
+If Codex reports `veil: remote compaction is not supported`, keep the gateway
+running and start a fresh chat through the same Veil provider. In the CLI use
+`/new`; in the desktop app use **New chat** and keep Veil selected. A new chat
+gets a separate conversation ID and fresh mappings. Files already edited in
+your workspace remain available.
+
+Continue with a short handoff you review locally: the task, decisions, changed
+files, checks completed, and the next step. Enter it as ordinary text in the new
+protected chat so Veil can mask it. Carry over only the context needed for that
+step. Retrying `/compact`, resuming, or forking the full old history does not
+remove this limit. The refusal does not delete your old Veil mappings or Codex
+transcript.
+
+Veil does not generate a replacement summary or synthesize encrypted context.
+OpenAI's [compaction contract](https://developers.openai.com/api/docs/guides/compaction)
+returns an opaque encrypted item and a canonical replacement context window;
+safe handling of that lifecycle is still unsupported. This recovery starts a
+new conversation, so it does not preserve every detail of the previous chat.
+The CLI's [`/new` command](https://learn.chatgpt.com/docs/developer-commands#start-a-new-chat-with-new)
+resets chat context while keeping the CLI session open.
+
 ## Validation
 
-Local tests cover rejected requests, replay, session isolation, quoted JSON arguments, chunked streams, tool blocking, credential routing, model catalogs, and configuration output. Opt-in installed-client checks use fictional credentials and scripted loopback replies:
+Local tests cover rejected requests, replay, session isolation, quoted JSON arguments, chunked streams, tool blocking, credential routing, model catalogs, configuration output, and remote-compaction refusal followed by a fresh protected conversation for both authentication routes. The opt-in app-server check covers the current custom-provider summary and continuation through ordinary Responses calls. These installed-client checks use fictional credentials and scripted loopback replies:
 
 ```bash
-VEIL_LOCAL_CODEX=1 uv run pytest -q tests/test_codex_local.py tests/test_codex_desktop.py -m "not live"
+VEIL_LOCAL_CODEX=1 uv run pytest -q tests/test_codex_local.py tests/test_codex_desktop.py tests/test_compaction_recovery.py -m "not live"
 ```
 
 Live checks are separate and make real model calls:
@@ -197,4 +227,4 @@ VEIL_LIVE_OPENAI=1 uv run pytest -q tests/test_codex_live.py -k api-key
 VEIL_LIVE_CODEX_APP=1 uv run pytest -q tests/test_codex_desktop.py -m live
 ```
 
-`VEIL_CODEX_APP_BINARY` selects the desktop app's bundled `codex` executable; otherwise the app-server test uses `codex` from PATH. Verified clients: CLI 0.156.1 and desktop-bundled runtime 0.155.0-alpha.16. ChatGPT-authenticated live tests passed with `gpt-6-luna`. API-key live testing is pending because no key was available. These checks do not establish compatibility with every model, client version, or desktop feature.
+`VEIL_CODEX_APP_BINARY` selects the desktop app's bundled `codex` executable; otherwise the app-server test uses `codex` from PATH. On 2026-10-03, CLI 0.160.0 and that executable's app-server runtime passed the ChatGPT-authenticated live tests with `gpt-6-luna`, including three app-server turns. API-key live testing is pending because no key was available. This is runtime evidence, not a manual desktop UI check or proof that a bundled desktop runtime matches the CLI. These checks do not establish compatibility with every model, client version, or desktop feature.

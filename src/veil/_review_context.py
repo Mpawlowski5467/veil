@@ -47,7 +47,8 @@ _LABELS = (
     ),
     (
         re.compile(
-            r"(?i:\b(?:lives[ \t]+at|(?:home|street|postal)[ \t]+address))"
+            r"(?i:\b(?:lives[ \t]+at|(?:home|street|postal|customer|patient|"
+            r"employee|billing|shipping)[ \t]+address))"
             r"[ \t]*[:=]?[ \t]+"
         ),
         "ADDRESS",

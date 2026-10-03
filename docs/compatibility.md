@@ -1,8 +1,8 @@
 # Compatibility and validation
 
-The tables retain live-client evidence recorded 2026-09-29 for 0.5.0.
-The 0.6.0b1 candidate adds the scripted checks described below; it does not
-claim new live-provider or external beta evidence. **All three target
+The tables include macOS live-client checks repeated on 2026-10-03 for the
+0.6.0b2 candidate and the scripted checks described below. They do not claim
+external beta evidence. **All three target
 platforms must pass before 1.0**, including native Windows. “CI passed” means
 scripted checks on a hosted runner; it does not mean a new user completed a
 real client journey. See [beta gates](release-checklist.md).
@@ -29,15 +29,20 @@ Linux suite. Skipped cases are reported; a skip is never evidence of support.
 
 | Client or interface | Checked version / evidence | Supported scope and open work |
 | --- | --- | --- |
-| Claude Code | 2.1.283; live Haiku masking, file-edit, tool-boundary, and resume checks; recorded request census/golden fixtures | Supported text via `veil claude`; new client releases need the census and a fresh verification. Image/PDF contents pass through unmasked. |
-| Codex CLI, ChatGPT sign-in | 0.156.1; live fictional email round trip with an outbound-body assertion | Experimental Responses adapter; text and supported local tools. |
-| Codex app-server runtime | 0.156.1 executable; local scripted fixture plus three live turns with outbound masking and verification | Exercises the runtime used by rich clients. This is not a manual desktop UI test or proof that every installed app build matches this executable. |
+| Claude Code | 2.1.286; 9 live Haiku masking, file-edit, tool-boundary, and resume checks passed on 2026-10-03; 1 model-specific effort check skipped. Recorded request census/golden fixtures remain from 2.1.283. | Supported text via `veil claude`; new client releases need the census and a fresh verification. Image/PDF contents pass through unmasked. |
+| Codex CLI, ChatGPT sign-in | 0.160.0; live fictional email round trip with an outbound-body assertion passed on 2026-10-03 using `gpt-6-luna` | Experimental Responses adapter; text and supported local tools. |
+| Codex app-server runtime | 0.160.0 executable; local scripted fixture and three live `gpt-6-luna` turns with outbound masking and verification passed on 2026-10-03 | Exercises the runtime used by rich clients. This is not a manual desktop UI test or proof that every installed app build matches this executable. |
 | OpenAI API-key route | Local request/response, header, error, and streaming regressions | **Live validation pending**; no API key was available for the readiness run. |
 | Python callable integration | Clean installed-wheel round trip | Caller chooses the provider; async/structured flows require explicit mask/restore boundaries. |
 | Ordinary ChatGPT app/browser or other providers | Local clipboard/stdin workflows | Explicit copied text only; no automatic interception or attachment protection. |
 
 The [OpenAI integration guide](openai-integration.md) describes refusals and tool
-limits. OpenAI hosted tools, media, and remote compaction remain refused.
+limits. OpenAI hosted tools, media, and remote compaction remain refused. Remote
+compaction gives a final error with a [fresh-chat recovery procedure](openai-integration.md#recover-when-a-long-chat-needs-compaction);
+both authentication routes have scripted gateway recovery coverage.
+An opt-in scripted Codex 0.160.0 app-server check covers its custom-provider
+summary through ordinary Responses calls and a subsequent masked replay.
+This is distinct from remote-compaction support or a live long-session test.
 Claude compaction and replay have recorded/golden coverage; long natural sessions
 and updates still need the beta scenarios. Do not translate fixture coverage
 into “every client feature works.” The app-server lifecycle follows

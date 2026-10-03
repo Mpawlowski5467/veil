@@ -16,7 +16,7 @@ For example, `jane.doe@example.com` becomes `[EMAIL_1]`. Names can be registered
 explicitly. It includes a Claude Code gateway, an experimental Codex integration,
 and Python/clipboard workflows for other providers.
 
-Version **0.6.0b1 is a prerelease**, and I'm looking for **5–10 people** to try it on
+Version **0.6.0b2 is a prerelease**, and I'm looking for **5–10 people** to try it on
 macOS, Linux, or native Windows. The first exercise needs no API key and uses
 fictional data. Its demo reply is simulated; there's a separate verification
 step for a real client request.
@@ -29,6 +29,7 @@ private permissions, and the project still needs an independent security review.
 Please use fictional data while testing.
 
 - [First five minutes](https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md)
+- [Self-serve beta pack](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2), with fictional files, local checks, recovery exercises, and a feedback worksheet
 - [36-second demo video](https://github.com/Mpawlowski5467/veil/blob/main/docs/assets/veil-demo.mp4)
 - [Repository and source](https://github.com/Mpawlowski5467/veil)
 - [Feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml)
@@ -42,7 +43,7 @@ It works with Python and Claude Code, with experimental Codex support. Try a
 local round trip in about five minutes, then optionally verify a real client
 request. macOS, Linux, and Windows testers welcome.
 
-0.6.0b1 is a prerelease: use fictional data, expect detection limits, and send me
+0.6.0b2 is a prerelease: use fictional data, expect detection limits, and send me
 the confusing parts of setup.
 
 Start here: https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md
@@ -74,3 +75,7 @@ Good initial measures: invitations accepted, installs completed, local round
 trips completed, real requests verified, time to first success, and blockers.
 Stars and impressions are secondary. Use the [full beta protocol](release-checklist.md)
 for deeper journeys after this first exercise.
+
+The [beta results log](beta-results.md) starts with zero external participants.
+The pack is ready for volunteers; preparing it and running it automatically are
+not completed participant journeys. No invitations have been sent by this work.

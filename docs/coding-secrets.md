@@ -1,6 +1,7 @@
 # Mask coding secrets
 
-**Included in the 0.6.0b1 beta; the older 0.5.0 wheel lacks these rules.**
+**Current behavior: 0.6.0b2. Coding-secret detection was introduced in 0.6.0b1;
+upgrade to b2 for the declaration, escaped-JSON, and multiline fixes below.**
 Upgrade Veil and restart existing
 gateways or relaunch clients to use them.
 
@@ -41,7 +42,17 @@ TypeScript `const token: string = …`, Kotlin/Swift `val apiKey: String = …`,
 Rust `let api_key: &str = …`, and Pascal `Password : String := …`. The type
 stays visible; only the value becomes a placeholder. A declaration without a
 value, such as `password: str`, is unchanged. Quoted values retain spaces,
-Unicode, newlines, and escapes. **Quote complex passwords.** An unquoted value
+Unicode, newlines, and escapes. Unprefixed triple single/double-quoted credential assignments
+also mask the complete raw inner value, preserving the delimiters and neighboring
+settings. Truncated quoted values are masked through the end of the input;
+escaped delimiters do not end the value. This remains a syntax heuristic, not a
+full TOML or programming-language parser. A TOML literal string ending in a
+backslash is ambiguous with an escaped delimiter in Python; Veil conservatively
+masks through the remaining text in that case. Python prefixed strings (`r`,
+`f`, `b`, and combinations) and interpolation are not covered by this multiline
+rule and may be only partially masked. Preview such input and explicitly
+register required source values instead of assuming the whole value is hidden.
+**Quote complex passwords.** An unquoted value
 after `:` or a spaced `=` (YAML, INI, or a label such as `Password: …`) is
 masked through the end of its clause: the end of the line, an inline ` #` or
 ` //` comment, or `,` `;` `.` `!` `?` followed by a space. When the label opens
@@ -215,6 +226,10 @@ percentage. The [30-document detection baseline](detection-results.md) records
 the earlier published 0.5.0 behavior; it does not measure these new secret rules.
 The [52-document workflow evaluation](leak-evaluation.md) measures current automatic
 masking and review separately and records their remaining limitations.
+The separate [44-case challenge set](detection-challenge.md) includes weak
+code-looking passwords and formats absent from the original corpus. Its labels
+were authored before evaluation; it is not an independent human review or a
+general accuracy study. Keep its results separate from the older measurements.
 
 ## Code references and uncertain prose
 

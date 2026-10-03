@@ -1,6 +1,6 @@
 # Beta and 1.0 release checklist
 
-The 0.6.0b1 checkout is a beta candidate under evaluation. It is not Veil 1.0.
+The 0.6.0b2 checkout is a beta candidate under evaluation. It is not Veil 1.0.
 All three target platforms — macOS, Linux, and native Windows — require evidence.
 Windows background service management is explicitly outside the current scope.
 
@@ -12,9 +12,12 @@ Windows background service management is explicitly outside the current scope.
   Codex setup/undo, protocol regressions, clipboard, and clean wheel installs.
 - Install the base wheel without desktop dependencies, then add `[desktop]` and
   exercise setup/undo and the skill's pinned runtime from outside the checkout.
-- Upgrade/rollback test using separate installed 0.4.1, 0.5.0, and candidate wheels.
+- Upgrade/rollback test using separate installed 0.4.1, 0.5.0, 0.6.0b1, and candidate wheels,
+  including mappings actually created by the b1 secret detector.
 - Live Codex ChatGPT and Claude runs; API-key runs separately with local keys.
 - Reproduce [workflow measurements](leak-evaluation.md) against the unchanged corpus; explain per-case differences.
+- Reproduce the separate [detection challenges](detection-challenge.md), retaining
+  their documented misses and false positives rather than removing difficult cases.
 - Run the local preview browser checks, report allowlist tests, and both adapters’ restart/concurrency/recovery scenarios.
 
 CI uploads wheel/source distributions as `veil-distributions-from-*`. These are review
@@ -22,6 +25,13 @@ artifacts, not a PyPI release. Download artifacts only from the intended commit'
 successful run. Never include personal logs, credentials, vaults, or transcripts.
 
 ## External beta protocol — participants still needed
+
+Give participants the versioned **self-serve beta pack ZIP** on the release page.
+Its [instructions](../beta/README.md), fictional workspace, local check script,
+and [feedback worksheet](../beta/feedback.md) are also available in this repository.
+The script records only software versions and fixed local-check outcomes and
+makes no model calls. Client exercises are manual and reports are sent only by
+the participant. Track aggregate outcomes in [beta results](beta-results.md).
 
 Recruit at least one new user on each OS, with both clients represented. Use
 invented contact details first. Record exact OS, Python, Veil commit, client
@@ -59,6 +69,18 @@ Severity / workaround:
 Do not ask participants to upload real prompts, vaults, secrets, transcripts, or
 full configuration files. Publish a sanitized findings log and resolve blockers.
 No participant testing has been claimed or performed by the automated suite.
+
+### Candidate publication
+
+Build from the intended commit after its full CI succeeds. Publish the wheel,
+source distribution, beta pack ZIP, and SHA-256 checksums together as a GitHub
+prerelease. Run the pack's check using the installed wheel outside the checkout.
+The beta archive has an explicit file allowlist; never archive a working data
+directory, environment, generated feedback, or live-test recordings.
+
+Changing the client version recorded in the compatibility matrix requires an
+actual observed check with that version. A selected live smoke suite does not
+advance the full Claude request census or validate every model/feature.
 
 ## Stable contracts and upgrade policy
 

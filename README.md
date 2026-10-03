@@ -8,11 +8,11 @@
 
 Veil runs on your computer. It replaces detected private values with placeholders such as `[EMAIL_1]`, then puts the originals back into the model's response. Use the assistant skill to manage Veil in Codex or Claude Code, or use the Python package with your own AI provider.
 
-**[v0.6.0b1 · Prerelease](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b1) · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
+**[v0.6.0b2 · Prerelease](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2) · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
 
 [First five minutes](docs/first-five-minutes.md) · [Start with the skill](#start-with-the-veil-skill) · [Python quickstart](#use-veil-in-python) · [What gets masked](#what-veil-detects) · [Troubleshooting](#troubleshooting) · [Road to 1.0](ROADMAP.md)
 
-> Start with the [released 0.6.0b1 wheel](docs/first-five-minutes.md#1-install-the-released-version) or install from this source checkout. Installing the skill gives your assistant commands for managing Veil. Automatic masking requires a session routed through the Veil gateway. Names need registration; detection can miss values.
+> Start with the [released 0.6.0b2 wheel](docs/first-five-minutes.md#1-install-the-released-version) or install from this source checkout. Installing the skill gives your assistant commands for managing Veil. Automatic masking requires a session routed through the Veil gateway. Names need registration; detection can miss values.
 
 ## Try it in five minutes
 
@@ -317,13 +317,13 @@ Keep the same session label for the conversation and choose a new one for the ne
 | `CREDIT_CARD` | Supported layouts checked against issuer prefixes, lengths, and the Luhn checksum. |
 | `IBAN` | Supported country codes and layouts with checksum validation. |
 | `SSN` | US numbers with hyphens; compact or space-separated numbers require an explicit SSN label. Invalid area/group/serial ranges are rejected. |
-| Coding secrets | Supported API keys, tokens, labelled passwords, private-key blocks, and URL credentials. [Formats, examples, and limits](docs/coding-secrets.md). Included in 0.6.0b1. |
+| Coding secrets | Supported API keys, tokens, labelled passwords, private-key blocks, and URL credentials. [Formats, examples, and limits](docs/coding-secrets.md). Included in 0.6.0b2. |
 | Your types | Exact registered values or custom regular expressions. |
 
 Detection is based on patterns and explicit registration. Names, organizations, street addresses, and arbitrary secrets are not all discovered automatically. False positives and missed values are possible. See the [measured examples and limitations](docs/detection-results.md); exact registration improves coverage without making names or secrets automatically detectable.
 
 For unfamiliar values, enable [local secret review](docs/secret-review.md) in the
-0.6.0b1 beta. Veil asks you to classify uncertain findings on a private
+0.6.0b2 beta. Veil asks you to classify uncertain findings on a private
 local page before that request can be sent. This also covers specific labelled
 personal details such as names, birth dates, addresses, and document numbers.
 Confirmed private values are masked; unresolved
@@ -338,7 +338,7 @@ Coding-secret matches are masked into placeholders such as `[API_KEY_1]` and
 `[PASSWORD_1]`; supported requests continue, and replies restore locally.
 Credential names inside parsed tool data are preserved as detection context.
 As with other mappings, persistent vaults retain the original values in plaintext
-under private file permissions. Upgrade to 0.6.0b1 and restart/relaunch
+under private file permissions. Upgrade to 0.6.0b2 and restart/relaunch
 Veil to try the new rules; [the coding-secret guide](docs/coding-secrets.md) lists
 the boundaries and Python examples.
 
@@ -380,7 +380,7 @@ to an issue; [report options and limitations](docs/support-report.md).
 
 ## Road to version 1.0
 
-The 0.6.0b1 prerelease has the core workflows, a skill-first quickstart, native
+The 0.6.0b2 prerelease has the core workflows, a skill-first quickstart, native
 macOS/Linux/Windows checks, detection measurements, temporary session storage,
 and tested upgrade/rollback. It is available for external beta testing, **not 1.0**.
 

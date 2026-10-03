@@ -25,7 +25,7 @@ body:
     attributes:
       label: Versions
       description: Veil, Python, OS version, and client version if used. No account details.
-      placeholder: "Veil 0.5.0, Python 3.14, macOS 26; local Python demo only"
+      placeholder: "Veil 0.6.0b2, Python 3.14, macOS 26; Codex CLI version ..."
     validations:
       required: true
   - type: dropdown
@@ -41,6 +41,34 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: auth
+    attributes:
+      label: Authentication route
+      options:
+        - Local exercise only
+        - Codex — ChatGPT sign-in
+        - Codex — OpenAI API key
+        - Claude — signed-in account
+        - Claude — API key
+        - Other / unsure
+    validations:
+      required: true
+  - type: checkboxes
+    id: exercises
+    attributes:
+      label: Exercises attempted
+      description: Check what you attempted, including failed attempts. Explain results below or attach the completed fictional beta worksheet.
+      options:
+        - label: Local check.py round trip
+        - label: Verified a real client request
+        - label: Read and edited fictional files
+        - label: Reviewed a held request and retried it
+        - label: Resume, concurrent conversations, or cancellation
+        - label: Gateway stop/restart and verification
+        - label: Long session or compaction recovery
+        - label: Client update or Veil upgrade/rollback
+        - label: Forgetting and removal of setup/skill settings
+  - type: dropdown
     id: result
     attributes:
       label: How far did you get?
@@ -50,6 +78,8 @@ body:
         - Local demo worked
         - Client setup or verification did not complete
         - Client request verified
+        - Daily-work and recovery exercises completed
+        - Upgrade/rollback and removal completed
     validations:
       required: true
   - type: textarea

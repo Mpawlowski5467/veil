@@ -21,8 +21,8 @@ must stay separate from public issue attachments and source control.
 
 ## What was tested
 
-`benchmarks/upgrade.py` runs **previous → 0.6.0b1 → previous → 0.6.0b1** in separate
-installed environments, for both previous releases **0.4.1 and 0.5.0**. It verifies
+`benchmarks/upgrade.py` runs **previous → 0.6.0b2 → previous → 0.6.0b2** in separate
+installed environments, for previous releases **0.4.1, 0.5.0, and 0.6.0b1**. It verifies
 stable existing placeholders, new person and confirmed-password mappings,
 old masked ledger text, additive provider-block hashes, and deletion after
 returning to the candidate. The test uses fictional local data and no provider.
@@ -30,6 +30,16 @@ CI performs this installed-wheel check on Linux. This does not promise downgrade
 compatibility with every historical/future
 schema or client conversation. Native Windows privacy validation is new in 0.5.0;
 rolling back to 0.4.1 on Windows loses those checks.
+
+For the 0.6.0b1 path, both gateways create persistent mappings using the installed
+old detector, then reopen them with 0.6.0b2. Previously stored types and credential
+words such as `String`, `api_key`, and `password` stay readable after upgrade;
+stored weak passwords such as `postgres` and `letmein` mask whole words while
+leaving `postgresql` and `letmein_old` readable. Every old placeholder still
+restores, including the old false positives, through upgrade, rollback, and
+return. A quoted weak password added in 0.6.0b2 also restores under 0.6.0b1.
+Rollback restores the old detector's broader matching as well as its known
+misses; preserving mappings does not backport the fixes.
 
 The provider-block ledger table is additive. An old release ignores it and its
 forget command does not know to delete it. Use the candidate to forget data
@@ -39,8 +49,8 @@ will be absent, so later replies may no longer restore.
 
 ## Rollback and failure recovery
 
-The 0.6.0b1 configuration can contain `secret_review`, which older versions do
-not accept. Restore the old configuration from the private backup as well as
+The 0.6 beta configuration can contain `secret_review`, which releases before
+0.6.0b1 do not accept. Restore the old configuration from the private backup as well as
 the old runtime; do not expect new commands or detection rules after rollback.
 Mapping compatibility does not make an older detector equivalent to the beta.
 

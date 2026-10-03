@@ -49,6 +49,13 @@ jobs:
         run: node --test tests/review_ui.test.cjs tests/preview_ui.test.cjs
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv build
+      - name: Build the allowlisted beta exercise pack
+        run: uv run python benchmarks/beta_pack.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: veil-beta-pack
+          path: dist/veil-*-beta.zip
+          if-no-files-found: error
       - name: Install the wheel alone and run the README example
         run: |
           uv venv /tmp/smoke
@@ -179,6 +186,8 @@ jobs:
           tests/test_fuzz.py tests/test_readme.py
           tests/test_workflow_reliability.py tests/test_support_report.py
           tests/test_preview.py tests/test_secret_precision.py
+          tests/test_detection_challenge.py
+          tests/test_compaction_recovery.py
           tests/test_launchers.py
       - name: Measure fictional workflow leaks and check the baseline
         run: uv run python benchmarks/leaks.py --check --output leak-report.json
@@ -187,6 +196,14 @@ jobs:
         with:
           name: leak-evaluation-${{ runner.os }}-py${{ matrix.python }}
           path: leak-report.json
+          if-no-files-found: warn
+      - name: Measure separate fictional detection challenges
+        run: uv run python benchmarks/challenge.py --check --output challenge-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detection-challenge-${{ runner.os }}-py${{ matrix.python }}
+          path: challenge-report.json
           if-no-files-found: warn
       - name: Install native Linux clipboard tools
         if: runner.os == 'Linux'
@@ -210,7 +227,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        previous: ["0.4.1", "0.5.0"]
+        previous: ["0.4.1", "0.5.0", "0.6.0b1"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0

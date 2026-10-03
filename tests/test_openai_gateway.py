@@ -756,7 +756,7 @@ class TestHTTP:
                 403,
             ),
             ("/v1/responses?email=" + EMAIL, {"thread-id": "s1"}, {"input": "hi"}, 400),
-            ("/v1/responses/compact", {"thread-id": "s1"}, {"input": EMAIL}, 404),
+            ("/v1/responses/compact", {"thread-id": "s1"}, {"input": EMAIL}, 400),
             (
                 "/v1/responses",
                 {"thread-id": "s1"},

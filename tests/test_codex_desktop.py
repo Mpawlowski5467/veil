@@ -17,7 +17,9 @@ from veil.codex import provider, toml_value
 from veil.gateway import Gateway, Sessions
 
 
-def app_round_trip(binary, gateway, tmp_path, email, *, prompt=None, turns=1):
+def app_round_trip(
+    binary, gateway, tmp_path, email, *, prompt=None, turns=1, compact=False
+):
     config = provider(gateway, environment_secret=True)
     config.update(request_max_retries=0, stream_max_retries=0)
     if gateway.openai_auth == "api-key":
@@ -96,37 +98,64 @@ def app_round_trip(binary, gateway, tmp_path, email, *, prompt=None, turns=1):
         )
         started = response(1)
         assert started["thread"]["ephemeral"] is True
-        for _ in range(turns):
-            send(
-                "turn/start",
-                {
-                    "threadId": started["thread"]["id"],
-                    "input": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                            or f"Reply with exactly {email}. Do not use tools.",
-                        }
-                    ],
-                },
-                2,
-            )
-            response(2)
-            output = []
-            deadline = time.monotonic() + 45
-            while time.monotonic() < deadline:
-                message = incoming.get(timeout=max(0.01, deadline - time.monotonic()))
-                if message.get("method") == "item/completed":
-                    item = message["params"]["item"]
-                    if item.get("type") == "agentMessage":
-                        output.append(item["text"])
-                if message.get("method") == "turn/completed":
-                    turn = message["params"]["turn"]
-                    assert turn["status"] == "completed", turn.get("error")
-                    assert email in "".join(output)
-                    break
-            else:
-                pytest.fail("app-server did not complete its turn")
+        thread_id = started["thread"]["id"]
+        for generation in range(2 if compact else 1):
+            for _ in range(turns):
+                send(
+                    "turn/start",
+                    {
+                        "threadId": thread_id,
+                        "input": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                                or f"Reply with exactly {email}. Do not use tools.",
+                            }
+                        ],
+                    },
+                    2,
+                )
+                response(2)
+                output = []
+                deadline = time.monotonic() + 45
+                while time.monotonic() < deadline:
+                    message = incoming.get(
+                        timeout=max(0.01, deadline - time.monotonic())
+                    )
+                    if message.get("method") == "item/completed":
+                        item = message["params"]["item"]
+                        if item.get("type") == "agentMessage":
+                            output.append(item["text"])
+                    if message.get("method") == "turn/completed":
+                        turn = message["params"]["turn"]
+                        assert turn["status"] == "completed", json.dumps(
+                            turn.get("error")
+                        )
+                        assert email in "".join(output)
+                        break
+                else:
+                    pytest.fail("app-server did not complete its turn")
+            if compact and generation == 0:
+                send("thread/compact/start", {"threadId": thread_id}, 3)
+                response(3)
+                deadline = time.monotonic() + 30
+                compacted = False
+                while time.monotonic() < deadline:
+                    message = incoming.get(
+                        timeout=max(0.01, deadline - time.monotonic())
+                    )
+                    if message.get("method") == "error":
+                        pytest.fail(json.dumps(message["params"]["error"]))
+                    if message.get("method") == "item/completed":
+                        compacted |= (
+                            message["params"]["item"]["type"] == "contextCompaction"
+                        )
+                    if message.get("method") == "turn/completed":
+                        assert message["params"]["turn"]["status"] == "completed"
+                        assert compacted
+                        break
+                else:
+                    pytest.fail("app-server did not complete local compaction")
     finally:
         process.stdin.close()
         process.terminate()

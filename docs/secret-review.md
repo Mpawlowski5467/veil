@@ -1,6 +1,7 @@
 # Review uncertain secrets locally
 
-**Included in the 0.6.0b1 beta. Upgrade from 0.5.0 to use it.**
+**Current behavior: 0.6.0b2. Review was introduced in 0.6.0b1; upgrade to b2
+for launcher discovery and the local review-page security fixes.**
 
 Veil can ask you about unfamiliar values before a model request leaves your
 computer. Clear matches still use the normal [coding-secret masking](coding-secrets.md).
@@ -135,7 +136,8 @@ registrations and automatic rules, or handle the gateway's review refusal.
   for unrelated requests and is not a general code or language parser.
 - Specific personal-data labels: title-cased multiword names after customer,
   patient, employee, or full-name labels; numeric street addresses after home,
-  street, postal, or “lives at” labels; dates after birth-date labels; and
+  street, postal, customer, patient, employee, billing, shipping, or “lives at”
+  labels; dates after birth-date labels; and
   alphanumeric numbers after passport or driver's-license labels. The suggested
   type is a question, not a verified identity or document-number check.
 

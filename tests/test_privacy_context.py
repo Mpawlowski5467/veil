@@ -7,6 +7,7 @@ import pytest
 
 from test_gateway_server import FakeAPI, call
 from test_leak_evaluation import leaks
+from test_openai_gateway import reply_item
 from veil import Shield, cli
 from veil.gateway import Gateway, Settings, open_sessions, prepare_data_dir
 from veil.secret_review import (
@@ -129,6 +130,77 @@ def test_context_variants_ask_locally_without_asserting_secrecy(text, value, kin
     assert any(f.value == value and f.kind == kind for f in candidates(text))
     assert value not in repr(candidates(text))
     assert kind in CHOICES
+
+
+@pytest.mark.parametrize(
+    "label", ["Customer", "PATIENT", "Employee", "Billing", "Shipping"]
+)
+def test_explicit_address_labels_require_numeric_street_values(label):
+    value = "84 Fictional Birch St., Apt. 2"
+    text = f"{label} address: {value}. Delivery is tomorrow."
+    findings = candidates(text)
+    assert [(f.value, f.kind) for f in findings] == [(value, "ADDRESS")]
+    assert not candidates(f"{label} address fields should be optional.")
+    assert not candidates(f"{label} address: unspecified")
+
+
+@pytest.mark.parametrize("api", ["anthropic", "openai"])
+def test_new_address_label_holds_before_forwarding_and_confirms_on_retry(tmp_path, api):
+    upstream = FakeAPI()
+    source = "Customer address: 84 Fictional Birch Lane\nOrder: shipped"
+    expected = source.replace("84 Fictional Birch Lane", "[ADDRESS_1]")
+    route = "/v1/responses" if api == "openai" else "/v1/messages"
+    reply = (
+        {"output": [reply_item(expected)]}
+        if api == "openai"
+        else {"content": [{"type": "text", "text": expected}]}
+    )
+    upstream.routes[route] = (200, "application/json", [json.dumps(reply).encode()])
+    body = (
+        {"model": "test", "input": source}
+        if api == "openai"
+        else {
+            "model": "test",
+            "max_tokens": 20,
+            "messages": [{"role": "user", "content": source}],
+        }
+    )
+    headers = {
+        "thread-id" if api == "openai" else "x-claude-code-session-id": "address"
+    }
+    try:
+        with (
+            open_sessions(
+                tmp_path,
+                Settings(identity=False, note=False, secret_review=True),
+                {},
+                api=api,
+            ) as sessions,
+            Gateway(sessions, api=api, upstream=upstream.host, secure=False) as gateway,
+        ):
+            response, _ = call(gateway, "POST", route, body, headers=headers)
+            assert response.status == 403
+            assert not upstream.received
+            review = gateway.reviews.report()["reviews"][0]
+            finding = review["findings"][0]
+            assert finding["kind"] == "ADDRESS"
+            gateway.reviews.decide(review["id"], finding["index"], "ADDRESS")
+            response, restored = call(gateway, "POST", route, body, headers=headers)
+            assert response.status == 200
+            sent = json.loads(upstream.received[0][3])
+            masked = (
+                sent["input"] if api == "openai" else sent["messages"][0]["content"]
+            )
+            assert masked == expected
+            decoded = json.loads(restored)
+            assert (
+                decoded["output"][0]["content"][0]["text"]
+                if api == "openai"
+                else decoded["content"][0]["text"]
+            ) == source
+            assert sessions.get("address").shield.restore(masked).text == source
+    finally:
+        upstream.close()
 
 
 @pytest.mark.parametrize(

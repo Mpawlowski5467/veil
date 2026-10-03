@@ -29,7 +29,7 @@ from .types import (
 )
 from .vault import MemoryVault, SQLiteVault, Vault
 
-__version__ = "0.6.0b1"
+__version__ = "0.6.0b2"
 
 __all__ = [
     "Detector",
