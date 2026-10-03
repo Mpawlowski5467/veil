@@ -54,8 +54,8 @@ SESSION_HEADER = "x-claude-code-session-id"
 # Codex sends the thread id on each request. Manual API clients can send it too.
 OPENAI_SESSION_HEADER = "thread-id"
 
-# (method, path) pairs the gateway masks and forwards; everything else gets a
-# 404, but for the connection check, which is answered here.
+# (method, path) pairs the gateway masks and forwards; other paths are refused,
+# apart from the local checks and controls answered here.
 _MESSAGES = "/v1/messages"
 _COUNT_TOKENS = "/v1/messages/count_tokens"
 _ROUTES = {("POST", _MESSAGES), ("POST", _COUNT_TOKENS)}
@@ -455,6 +455,19 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     return
                 if gateway.api == "openai":
                     self._check_openai_auth()
+                    if self.command == "POST" and path == "/v1/responses/compact":
+                        # Compaction returns opaque state we cannot safely make
+                        # or inspect locally. Refuse before reading the history;
+                        # a fresh chat can continue through this same gateway.
+                        raise _RefusedError(
+                            400,
+                            "invalid_request_error",
+                            "remote compaction is not supported; nothing was sent. "
+                            "Start a new Codex chat with /new (or New chat in the "
+                            "desktop app), keeping Veil selected. Continue with a "
+                            "short handoff you have reviewed locally. Retrying or "
+                            "resuming this full conversation will not compact it.",
+                        )
                 routes = _OPENAI_ROUTES if gateway.api == "openai" else _ROUTES
                 if (self.command, path) not in routes:
                     shown = path if _SHOWN_PATH.fullmatch(path) else "this path"

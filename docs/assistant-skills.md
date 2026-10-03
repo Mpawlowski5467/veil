@@ -10,7 +10,7 @@ This guide covers installation options and everyday file workflows in more detai
 
 ## Install
 
-After installing the [0.6.0b1 beta](first-five-minutes.md#1-install-the-released-version),
+After installing the [0.6.0b2 beta](first-five-minutes.md#1-install-the-released-version),
 run `veil skill install`. To install from a source checkout instead:
 
 ```sh
@@ -20,7 +20,7 @@ veil skill install
 
 Or use `uv run veil skill install` in the checkout. The `desktop` extra is needed
 for Codex configuration editing; skill installation and mask/restore work with
-the base package. These commands are included in the 0.6.0b1 prerelease.
+the base package. These commands are included in the 0.6.0b2 prerelease.
 
 The installer creates a personal `veil` skill in `~/.agents/skills` for Codex and
 `~/.claude/skills` for Claude Code. Install just one with `veil skill install
@@ -108,7 +108,7 @@ need registration. Compact or space-separated SSNs need an explicit label, and
 impossible SSN ranges are rejected. Undetected values can remain in output. Neither
 the skill nor the gateway is a sandbox for every local tool or network action.
 
-The 0.6.0b1 beta also includes [coding-secret detection](coding-secrets.md)
+The 0.6.0b2 beta also includes [coding-secret detection](coding-secrets.md)
 for supported keys, tokens, passwords, private-key blocks, and URL credentials.
 The skill uses whatever rules its installed Veil runtime supplies; upgrade that
 runtime and restart/relaunch gateways before testing new detection rules.

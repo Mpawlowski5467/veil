@@ -2,12 +2,21 @@
 
 ## Unreleased
 
+## 0.6.0b2 — Beta
+
+### Added
+
+- A versioned self-serve beta pack with fictional files, a local installed-package check, and a manual feedback form. The check uses disposable storage and writes only allowlisted versions and outcome codes; it sends no report and does not claim a verified client journey. Native wheel CI runs the packaged check, and release ZIPs contain only a fixed file allowlist.
+- A separate 44-case fictional detection challenge covering additional credential formats, contextual personal details, code, and harmless prose. Its labels and measurements remain separate from the original 52-case corpus; it is regression evidence, not external beta testing or an independent security audit.
+
 ### Security
 
 - `veil review` and `veil preview` now open their page with a one-time link. The page exchanges it for a private session when it starts, so the link no longer grants access once the page is open; opening the page again needs a new command. On Linux, these pages also accept only connections from the OS account that started them. Previously, on a Linux computer shared with other accounts, another local account could gain access to an open review or preview page, including pending review values and review choices. Windows and default macOS setups were not affected. Update if you use `veil review` on a shared Linux machine.
 
 ### Fixed
 
+- Credentials in supported unprefixed triple-quoted values are masked through their matching delimiter, preserving exact restoration. Quoted concatenations starting with an empty string or reference still mask their later literal fragments. Local review recognizes numeric street addresses labelled customer, patient, employee, billing, or shipping that previously went unflagged. Python prefixed/interpolated strings remain outside this multiline rule; see the coding-secret limits.
+- A Codex request to the unsupported remote compaction endpoint now stops with a clear, nonretryable error explaining how to continue in a new chat with Veil selected. The refusal does not forward the old transcript or delete its mappings. Installed Codex's local-summary path is tested separately through supported Responses requests.
 - `veil claude` and `veil codex` (including `--forget-after-run`) no longer crash on native Windows right after starting the client. The launcher passed on SIGHUP, which Windows doesn't have; the client was left running against a stopped gateway. Signals are now handled per platform: Ctrl-C and Ctrl-Break reach the client directly, SIGTERM (and SIGHUP on macOS/Linux) is passed on, and the client is stopped whenever the launcher exits early.
 - A client ended by a signal now gives the launcher the shell's usual exit code (128 + the signal number, e.g. 143 for SIGTERM) instead of a wrapped value such as 241.
 - `veil review`, `veil verify`, `veil status --activity`, and `veil report` now find gateways started by `veil claude` and `veil codex`, including `--forget-after-run`, from your own terminal. Previously a request held for secret review under a launcher could not be approved. While it runs, each launch keeps an owner-only record of its local address and secret in the data folder's `launches` folder, and removes it on exit. Records of stopped launches are ignored and cleaned up. With several gateways running, the command lists their addresses instead of guessing.
@@ -25,6 +34,8 @@
 
 ### Tests
 
+- Selected live checks on macOS passed with Codex CLI/app-server 0.160.0 (ChatGPT sign-in) and Claude Code 2.1.286 (Haiku), including Claude file edits and resume. Installed-client local fixtures also cover Codex summary/replay. Live OpenAI API-key, manual desktop UI, and external beta journeys remain pending.
+- Installed-wheel upgrade and rollback checks now include 0.6.0b1, alongside 0.4.1 and 0.5.0. Both gateways reopen mappings actually created by 0.6.0b1: stored code stays readable after upgrading, weak passwords match whole words, and every existing placeholder restores before and after rollback.
 - Native CI on Windows, macOS, and Linux now starts both launchers and `--forget-after-run` against a stub client through a live local gateway, checking exit codes, signal handling, and removal of the temporary storage.
 - Launchers run end to end with stub Claude Code and Codex clients: a request held for secret review is approved from a separate terminal, with plain `veil review` and with the command from the refusal, and the retried request goes out masked. Gateway selection is covered case by case. Native CI on all three platforms checks launch records, including that `--forget-after-run` keeps its record in the real data folder while the client runs and leaves nothing there afterwards.
 - The test that records of stopped launches are cleaned up no longer fails now and then on Linux. Its stopped launch used a just-closed gateway's port, which the next gateway could be given, so the record was rightly kept as busy. The stopped launch now uses a port below the ephemeral range, which no gateway can be given.

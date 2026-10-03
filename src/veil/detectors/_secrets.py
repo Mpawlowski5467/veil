@@ -272,16 +272,28 @@ def _assignment_value(
         return None
     quote = text[start]
     if quote in "\"'`":
-        end = start + 1
+        # TOML/Python multiline strings begin with three quotes. Reading the
+        # second quote as an empty value would leave the entire secret visible.
+        width = 3 if quote != "`" and text.startswith(quote * 3, start) else 1
+        delimiter = quote * width
+        end = start + width
         while end < len(text):
             if text[end] == "\\":
                 end += 2
-            elif text[end] == quote:
-                return start + 1, end
+            elif text.startswith(delimiter, end):
+                # TOML permits one or two literal quotes just before a triple
+                # closing delimiter. Include them in the protected value.
+                if width == 3:
+                    run_end = end + width
+                    while run_end < len(text) and text[run_end] == quote:
+                        run_end += 1
+                    if run_end - end in (4, 5):
+                        end = run_end - width
+                return start + width, end
             else:
                 end += 1
         # Truncated quoted input: protect through the end, not a partial token.
-        return start + 1, len(text)
+        return start + width, len(text)
     match = _BARE.match(text, start)
     if match is None:
         return None
@@ -644,9 +656,12 @@ def _hash_rocket_values(text: str) -> Iterator[Span]:
             yield _span(text, start, end, kind)
 
 
-def _concatenated_literals(text: str, end: int, kind: str) -> Iterator[Span]:
+def _concatenated_literals(
+    text: str, start: int, end: int, kind: str
+) -> Iterator[Span]:
     """Protect each literal in a simple quoted credential concatenation."""
-    cursor = end + 1  # end is just before the closing quote of the first literal
+    width = 3 if text[max(0, start - 3) : start] in {'"""', "'''"} else 1
+    cursor = end + width
     while cursor < len(text):
         operator = _CONCAT.match(text, cursor)
         if operator is None:
@@ -660,7 +675,8 @@ def _concatenated_literals(text: str, end: int, kind: str) -> Iterator[Span]:
         start, end = offsets
         if end > start and _literal(text[start:end]):
             yield _span(text, start, end, kind)
-        cursor = end + 1
+        width = 3 if text[max(0, start - 3) : start] in {'"""', "'''"} else 1
+        cursor = end + width
 
 
 def _jwt_header(value: str) -> bool:
@@ -726,8 +742,10 @@ def detect(text: str) -> list[Span]:
             cursor = max(cursor, end)
             if _literal(text[start:end]):
                 found.append(_span(text, start, end, assigned_type))
-                if quoted:
-                    for fragment in _concatenated_literals(text, end, assigned_type):
-                        found.append(fragment)
-                        cursor = max(cursor, fragment.end + 1)
+            if quoted:
+                # An empty/reference prefix can still be followed by a real
+                # literal fragment. It must not exempt the rest of the value.
+                for fragment in _concatenated_literals(text, start, end, assigned_type):
+                    found.append(fragment)
+                    cursor = max(cursor, fragment.end + 1)
     return found

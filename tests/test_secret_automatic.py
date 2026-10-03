@@ -9,6 +9,91 @@ from veil import RegexDetector, Shield
 from veil.gateway import Gateway, Settings, open_sessions
 
 
+@pytest.mark.parametrize("quote", ['"""', "'''"])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("name", ["password", "DB_PASSWORD", "api_key"])
+def test_triple_quoted_credentials_keep_delimiters_and_neighboring_settings(
+    quote, newline, name
+):
+    value = f"fictional 'cedar' \"meadow\"{newline}line two"
+    text = f"{name} = {quote}{value}{quote}{newline}retries = 3{newline}"
+    shield = Shield()
+    kind = "API_KEY" if name == "api_key" else "PASSWORD"
+    masked = shield.mask(text).text
+    assert masked == text.replace(value, f"[{kind}_1]")
+    assert shield.restore(masked).text == text
+
+
+@pytest.mark.parametrize("quote", ['"""', "'''"])
+def test_triple_quoted_truncated_and_concatenated_credentials(quote):
+    value = "fictional cedar\nline two"
+    shield = Shield()
+    source = f"password = {quote}{value}"
+    masked = shield.mask(source).text
+    assert masked == f"password = {quote}[PASSWORD_1]"
+    assert shield.restore(masked).text == source
+    source = f'password = {quote}{value}{quote} + "extra-fragment"; retries = 3'
+    masked = shield.mask(source).text
+    assert masked == (
+        f'password = {quote}[PASSWORD_1]{quote} + "[PASSWORD_2]"; retries = 3'
+    )
+    assert shield.restore(masked).text == source
+
+
+def test_escaped_triple_delimiter_does_not_end_the_credential():
+    value = 'fictional \\""" cedar\nline two'
+    source = f'password = """{value}"""\npublic = 3'
+    shield = Shield()
+    masked = shield.mask(source).text
+    assert masked == 'password = """[PASSWORD_1]"""\npublic = 3'
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("extra", [1, 2])
+def test_toml_trailing_literal_quotes_are_part_of_the_secret(quote, extra):
+    value = "fictional-quartz-81" + quote * extra
+    source = f"password = {quote * 3}{value}{quote * 3}\nretries = 3"
+    shield = Shield()
+    masked = shield.mask(source).text
+    assert masked == f"password = {quote * 3}[PASSWORD_1]{quote * 3}\nretries = 3"
+    assert shield.restore(masked).text == source
+
+
+def test_ambiguous_literal_backslash_is_conservatively_masked_through_the_tail():
+    # TOML treats the backslash literally; Python may use it to escape a quote.
+    # Without a language parser, keep all possible secret text protected.
+    source = "password = '''fictional-quartz-81\\'''\nretries = 3"
+    shield = Shield()
+    masked = shield.mask(source).text
+    assert "fictional-quartz" not in masked
+    assert masked == "password = '''[PASSWORD_1]"
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize(
+    "prefix", ['""', '""""""', '"${DATABASE_PASSWORD}"', "'''${DATABASE_PASSWORD}'''"]
+)
+def test_empty_or_reference_prefix_does_not_exempt_following_secret_fragments(prefix):
+    source = f'password = {prefix} + "fictional-quartz-82"; retries = 3'
+    shield = Shield()
+    masked = shield.mask(source).text
+    assert masked == f'password = {prefix} + "[PASSWORD_1]"; retries = 3'
+    assert shield.restore(masked).text == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'password = """"""',
+        "password = '''${PASSWORD}'''",
+        'description = """ordinary text"""',
+    ],
+)
+def test_empty_triple_quotes_and_references_are_not_credentials(source):
+    assert Shield().mask(source).text == source
+
+
 @pytest.mark.parametrize(
     ("label", "kind"),
     [
@@ -178,6 +263,11 @@ def test_repeated_labels_and_long_nonmatching_tokens_stay_bounded():
         ("Hasło to fikcyjny-fern-94.", "fikcyjny-fern-94", "PASSWORD"),
         ("Recovery code: fictional-fern-94.", "fictional-fern-94", "CREDENTIAL"),
         ("export PGPASSWORD=Fict-Meadow-47", "Fict-Meadow-47", "PASSWORD"),
+        (
+            'password = """fictional-birch\nsecond-line"""\nretries = 3',
+            "fictional-birch\nsecond-line",
+            "PASSWORD",
+        ),
         ("export GITHUBTOKEN=fictional-orchard-42", "fictional-orchard-42", "TOKEN"),
         ("'password' => 'Fict-Meadow-46',", "Fict-Meadow-46", "PASSWORD"),
         (":api_key => 'fictional-orchard-42'", "fictional-orchard-42", "API_KEY"),

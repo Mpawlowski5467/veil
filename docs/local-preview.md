@@ -1,6 +1,6 @@
 # Local masking preview
 
-Install the [0.6.0b1 beta](first-five-minutes.md), then run:
+Install the [0.6.0b2 beta](first-five-minutes.md), then run:
 
 ```bash
 veil preview

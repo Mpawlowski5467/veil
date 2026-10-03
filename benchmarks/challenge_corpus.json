@@ -1,0 +1,545 @@
+[
+  {
+    "id": "env-admin-default",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "APP_ENV=staging\nADMIN_PASSWORD=[[PASSWORD|admin]]\nPORT=8090\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "compose-postgres-default",
+    "format": "yaml",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "services:\n  database:\n    environment:\n      POSTGRES_PASSWORD: [[PASSWORD|postgres]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-credential-shaped-literal",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "PASSWORD=[[PASSWORD|SuperPassword]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-type-shaped-literal",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "PASSWORD=[[PASSWORD|String]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-same-name-literal",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "PASSWORD=[[PASSWORD|password]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-weak-distinct-literal",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "PASSWORD=[[PASSWORD|letmein]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-quoted-defaults",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "ADMIN_PASSWORD=\"[[PASSWORD|admin]]\"\nPOSTGRES_PASSWORD='[[PASSWORD|postgres]]'\nPASSWORD=\"[[PASSWORD|SuperPassword]]\"\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "env-credential-shaped-registered",
+    "format": "dotenv",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "PASSWORD=[[PASSWORD|SuperPassword]]\n"
+      }
+    ],
+    "registrations": [
+      {
+        "type": "PASSWORD",
+        "value": "SuperPassword"
+      }
+    ]
+  },
+  {
+    "id": "python-field-references",
+    "format": "python",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "client = Client(api_key=api_key, password=settings.database_password)\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "rust-type-declaration",
+    "format": "rust",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "pub struct Credentials {\n    pub api_key: String,\n    pub token: Option<String>,\n}\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "typescript-arrow-and-reference",
+    "format": "typescript",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "const read = (token) => token.trim();\nconst password = settings.database_password;\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "shell-environment-references",
+    "format": "shell",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "client --password \"$DB_PASSWORD\" --api-key \"${SERVICE_KEY}\"\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "python-password-prompt",
+    "format": "python",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "password = getpass(\"Database password: \")\nprint(\"next step\")\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "yaml-template-reference",
+    "format": "yaml",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "password: {{ vault_database_password }}\napi_key: ${SERVICE_API_KEY}\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "python-typed-literal",
+    "format": "python",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "DB_PASSWORD: str = \"[[PASSWORD|fictional-cedar-731]]\"\nMAX_RETRIES: int = 3\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "go-typed-literal",
+    "format": "go",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "var apiKey string = \"[[API_KEY|fictional-tundra-824]]\"\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "rust-typed-literal",
+    "format": "rust",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "let password: &str = \"[[PASSWORD|fictional-larch-619]]\";\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "typescript-typed-literal",
+    "format": "typescript",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "const apiKey: string = \"[[API_KEY|fictional-alder-502]]\";\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "kotlin-typed-literal",
+    "format": "kotlin",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "val apiKey: String = \"[[API_KEY|fictional-willow-416]]\"\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "ruby-hash-literal",
+    "format": "ruby",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": ":api_key => \"[[API_KEY|fictional-birch-683]]\", :retries => 3\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "json-stringified-body",
+    "format": "json",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "{\"body\":\"{\\\"password\\\":\\\"[[PASSWORD|fictional-spruce-957]]\\\",\\\"retries\\\":3}\"}"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "json-unicode-field-name",
+    "format": "json",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "{\"pass\\u0077ord\":\"[[PASSWORD|fictional-elm-248]]\",\"retries\":3}"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "yaml-block-with-comment",
+    "format": "yaml",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "database:\n  password: |- # deployment secret\n[[PASSWORD|    fictional blue cedar\n    second line]]\n  retries: 3\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "toml-multiline-password",
+    "format": "toml",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "password = \"\"\"[[PASSWORD|fictional first line\nsecond line]]\"\"\"\nretries = 3\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "shell-header-value",
+    "format": "shell",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "curl -H \"X-Api-Key: [[API_KEY|fictional-sequoia-162]]\" https://service.example.test/health\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "http-form-password",
+    "format": "http",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "POST /login HTTP/1.1\nContent-Type: application/x-www-form-urlencoded\n\nusername=demo&password=[[PASSWORD|fictional%20cedar%20phrase]]&remember=false"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "url-encoded-query-name",
+    "format": "url",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "https://service.example.test/inspect?%61pi_key=[[API_KEY|fictional-maple-936]]&format=text"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "http-custom-session-cookie",
+    "format": "http",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "GET /account HTTP/1.1\nHost: service.example.test\nCookie: tenant_access=[[TOKEN|fictional-ash-714]]; theme=light\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "http-supported-session-cookie",
+    "format": "http",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "GET /account HTTP/1.1\nHost: service.example.test\nCookie: __Host-session=[[TOKEN|fictional-oak-325]]; theme=light\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "prose-sign-in-phrase",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Use '[[PASSWORD|fictional amber cedar]]' to sign in to the dashboard."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "prose-german-password",
+    "format": "prose",
+    "language": "de",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Mein Passwort lautet [[PASSWORD|fiktiver-zedernwald-583]]. Bitte erkläre den Fehler."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "prose-short-labelled-password",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Password: [[PASSWORD|orchard]]\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "unlabelled-client-name",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Please write a welcome note for [[PERSON|Irena Wolska]] about the sample project."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "registered-client-name",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Please write a welcome note for [[PERSON|Irena Wolska]] about the sample project."
+      }
+    ],
+    "registrations": [
+      {
+        "type": "PERSON",
+        "value": "Irena Wolska"
+      }
+    ]
+  },
+  {
+    "id": "registered-name-case-variant",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Please welcome [[PERSON|IRENA WOLSKA]] to the sample project."
+      }
+    ],
+    "registrations": [
+      {
+        "type": "PERSON",
+        "value": "Irena Wolska"
+      }
+    ]
+  },
+  {
+    "id": "labelled-customer-address",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "Customer address: [[ADDRESS|47 Fictional Cedar Lane]]\nOrder status: shipped"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "base64-account-password",
+    "format": "json",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "{\"encoding\":\"base64\",\"password_payload\":\"[[PASSWORD|ZmljdGlvbmFsLWNlZGFyLTUzOA==]]\"}"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "split-credential-fragments",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "The credential was split for storage. First part: [[TOKEN|cedar538]]; second part: [[TOKEN|willow926]]."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "harmless-password-advice",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "A password manager stores passwords. Never paste a password into public chat. Reset expired credentials through the account page."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "harmless-public-build-digest",
+    "format": "log",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "Public build SHA-256: 8c63a2019fb47de06a51c932d708be44f25a60d981b7c32a09de4567f813ac20\nstatus=passed\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "harmless-request-trace",
+    "format": "log",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "trace_id=3b86d901-71ca-4e29-b935-029fc571b480 duration_ms=17 status=200\n"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "harmless-token-count",
+    "format": "json",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "tool_output",
+        "text": "{\"max_tokens\":4096,\"token_count\":712,\"password_length\":20,\"api_key_file\":\"/run/secrets/service\"}"
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "harmless-literal-placeholder",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "The documentation example uses [PASSWORD_1] and [PERSON_1] as labels."
+      }
+    ],
+    "registrations": []
+  },
+  {
+    "id": "email-in-long-password",
+    "format": "prose",
+    "language": "en",
+    "sections": [
+      {
+        "surface": "prompt",
+        "text": "My password is \"[[PASSWORD|fictional.nora@example.test with cedar leaves]]\"."
+      }
+    ],
+    "registrations": []
+  }
+]

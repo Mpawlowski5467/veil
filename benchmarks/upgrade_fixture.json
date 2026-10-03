@@ -1,0 +1,15 @@
+{
+  "description": "Fictional b1 upgrade/rollback detection inputs; never use as real credentials.",
+  "source": "pub struct Config { pub api_key: String }\nclient = Client(api_key=api_key, password=password)\ntoken: Option<String>,\nPOSTGRES_PASSWORD: \"postgres\"\nPASSWORD=letmein\nAPI_KEY=\"fictional-orchard-42\"",
+  "old_mappings": {
+    "[API_KEY_1]": "String",
+    "[API_KEY_2]": "api_key",
+    "[PASSWORD_1]": "password",
+    "[TOKEN_1]": "Option",
+    "[PASSWORD_2]": "postgres",
+    "[PASSWORD_3]": "letmein",
+    "[API_KEY_3]": "fictional-orchard-42"
+  },
+  "probe": "fn a() -> String { ToString } config.api_key hash_password(password) Option<u8> postgresql://db.example.com postgres letmein_old letmein fictional-orchard-42x",
+  "expected": "fn a() -> String { ToString } config.api_key hash_password(password) Option<u8> postgresql://db.example.com [PASSWORD_2] letmein_old [PASSWORD_3] [API_KEY_3]x"
+}

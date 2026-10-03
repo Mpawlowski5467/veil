@@ -1,29 +1,29 @@
 # Veil roadmap
 
-Veil is an alpha with working text masking/restoration, a Python API, Claude Code
-and Codex gateways, and explicit clipboard workflows. The next goal is a beta
-that a new user can install, verify, troubleshoot, and remove without help.
+Veil is a beta with working text masking/restoration, a Python API, Claude Code
+and Codex gateways, and explicit clipboard workflows. The next goal is evidence
+that a new user can install, verify, troubleshoot, and remove it without help.
 
 This is an ordered plan, not a release-date commitment. Checked items are
 implemented in this branch; they do not imply a published package or validation
-of every supported client feature. The current package version is 0.6.0b1; this is not a 1.0 release.
+of every supported client feature. The current package version is 0.6.0b2; this is not a 1.0 release.
 
 ## Where we are now
 
-**Stage: late alpha, preparing for a small external beta.** The core workflow is
+**Stage: beta, with external validation still required.** The core workflow is
 implemented; the remaining 1.0 work centers on evidence from real use, privacy
 review, and a dependable release process.
 
 | Area | Implemented in this checkout | Still needed for 1.0 |
 | --- | --- | --- |
-| Mask and restore | Python API, persistent mappings, streaming, built-in patterns including US SSNs, and private entity registration. | Expand the published 30-document fictional baseline with independently reviewed, representative samples. |
+| Mask and restore | Python API, persistent mappings, streaming, built-in patterns including US SSNs, and private entity registration. | Expand the authored 52-document workflow evaluation with independently reviewed, representative samples. |
 | Setup and daily use | Codex setup/undo, CLI launchers, assistant skills, background controls, diagnostics, and request verification. | New users completing install, verification, recovery, and removal on each advertised platform. |
 | Client compatibility | Claude Code and experimental Codex adapters, scripted regression tests, and selected live round trips. | Broader desktop UI and long-session coverage, live API-key checks, and real client journeys on every target OS. |
 | Privacy and storage | Local masking, owner-only storage, bounded activity metadata, retention, and explicit deletion commands. | Independent review and resolved findings; the threat model and plaintext-storage decision are now documented. |
-| Release readiness | Cross-platform CI, package artifacts, wheel smoke checks, and 0.4.1/0.5.0 upgrade/rollback checks. | Complete the external beta and resolve release-blocking findings. |
+| Release readiness | Cross-platform CI, package artifacts, wheel smoke checks, and 0.4.1/0.5.0/0.6.0b1 upgrade/rollback checks. | Complete the external beta and resolve release-blocking findings. |
 
-The pending compatibility, verification, and detection branches are integrated
-and tested together in the readiness candidate. Passing unit tests or one echo demonstration is not
+The compatibility, verification, and detection work is integrated
+and tested together in the beta. Passing unit tests or one echo demonstration is not
 enough to call the advertised workflows stable.
 
 The next sequence is:
