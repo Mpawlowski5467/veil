@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import errno
 import importlib.metadata
 import json
 import os
@@ -298,12 +299,75 @@ PRIVATE_FILES = (
 )
 
 
-def denied(action) -> None:
-    """Require OS access denial, not missing paths or unrelated I/O failures."""
+def native_open_probe(
+    path: Path,
+    access: int,
+    *,
+    directory: bool = False,
+    denied: bool,
+    code: str,
+    report: dict,
+) -> None:
+    """Verify exact Win32 access results without CRT errno translation.
+
+    OPEN_EXISTING never creates or truncates files. Directory rights are
+    checked with BACKUP_SEMANTICS; these ordinary tokens have no backup bypass.
+    Public-path positive controls exercise the same API before private probes.
+    """
+    probe = {"code": code, "state": "fail", "winerror": None}
+    report["access_probes"].append(probe)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [
+        w.LPCWSTR,
+        w.DWORD,
+        w.DWORD,
+        w.LPVOID,
+        w.DWORD,
+        w.DWORD,
+        w.HANDLE,
+    ]
+    kernel.CreateFileW.restype = w.HANDLE
+    kernel.CloseHandle.argtypes = [w.HANDLE]
+    kernel.CloseHandle.restype = w.BOOL
+    ctypes.set_last_error(0)
+    handle = kernel.CreateFileW(
+        str(path), access, 7, None, 3, 0x02000000 if directory else 0x80, None
+    )
+    if handle != w.HANDLE(-1).value:
+        probe["winerror"] = 0
+        require(bool(kernel.CloseHandle(handle)))
+        require(not denied)
+    else:
+        probe["winerror"] = ctypes.get_last_error()
+        require(denied and probe["winerror"] == 5)  # ERROR_ACCESS_DENIED only.
+    probe["state"] = "pass"
+
+
+def python_denial_probe(action, *, code: str, report: dict) -> None:
+    """Record CRT/native Python denial differences using only fixed fields."""
+    probe = {
+        "code": code,
+        "state": "fail",
+        "error_type": "none",
+        "errno": None,
+        "winerror": None,
+    }
+    report["access_probes"].append(probe)
     try:
         action()
-    except PermissionError as error:
-        require(error.winerror == 5)
+    except OSError as error:
+        permission = isinstance(error, PermissionError)
+        probe["error_type"] = "PermissionError" if permission else "OSError"
+        probe["errno"] = error.errno
+        probe["winerror"] = getattr(error, "winerror", None)
+        # Python's _wopen-based file I/O reports EACCES without winerror.
+        # Native probes above independently require ERROR_ACCESS_DENIED.
+        require(
+            permission
+            and probe["errno"] == errno.EACCES
+            and probe["winerror"] in {None, 5}
+        )
+        probe["state"] = "pass"
         return
     raise CheckError
 
@@ -317,26 +381,81 @@ def outsider(args: argparse.Namespace, report: dict) -> None:
         == "fictional-public-marker"
     )
     require("data" in {path.name for path in parent.iterdir()})
+    native_open_probe(
+        parent,
+        1,  # FILE_LIST_DIRECTORY
+        directory=True,
+        denied=False,
+        code="public_parent_list",
+        report=report,
+    )
+    native_open_probe(
+        parent / "traverse.txt",
+        0x80000000,  # GENERIC_READ
+        denied=False,
+        code="public_marker_read",
+        report=report,
+    )
+    own_temp = args.root / "temp"
+    write_control = own_temp / "write-control.txt"
+    write_control.write_text("fictional-write-control", encoding="utf-8")
+    native_open_probe(
+        own_temp,
+        2,  # FILE_ADD_FILE
+        directory=True,
+        denied=False,
+        code="own_directory_add",
+        report=report,
+    )
+    native_open_probe(
+        write_control,
+        0x40000000,  # GENERIC_WRITE, still OPEN_EXISTING without truncation.
+        denied=False,
+        code="own_file_write",
+        report=report,
+    )
+    require(write_control.read_text(encoding="utf-8") == "fictional-write-control")
     report["checks"][-1]["state"] = "pass"
     report["checks"].append({"code": "private_directory_denied", "state": "fail"})
     data = parent / "data"
-    denied(lambda: list(data.iterdir()))
-    denied(lambda: (data / "outsider.txt").write_bytes(b"fictional"))
+    for code, access in [("private_directory_list", 1), ("private_directory_add", 2)]:
+        native_open_probe(
+            data,
+            access,  # FILE_LIST_DIRECTORY / FILE_ADD_FILE
+            directory=True,
+            denied=True,
+            code=code,
+            report=report,
+        )
+    python_denial_probe(
+        lambda: list(data.iterdir()), code="python_directory_list", report=report
+    )
+    python_denial_probe(
+        lambda: (data / "outsider.txt").write_bytes(b"fictional"),
+        code="python_file_create",
+        report=report,
+    )
     report["checks"][-1]["state"] = "pass"
     report["checks"].append(
         {"code": "private_files_and_sidecars_denied", "state": "fail"}
     )
-    files = [parent / "standalone.txt", data / "inherited.txt"]
-    files.extend(data / name for name in PRIVATE_FILES)
-
-    def open_for_write(path: Path) -> None:
-        # Do not truncate even if isolation unexpectedly fails.
-        with path.open("r+b"):
-            pass
-
-    for path in files:
-        denied(lambda path=path: path.read_bytes())
-        denied(lambda path=path: open_for_write(path))
+    files = [
+        ("standalone", parent / "standalone.txt"),
+        ("inherited", data / "inherited.txt"),
+    ]
+    files.extend(
+        (name.replace(".", "_").replace("-", "_"), data / name)
+        for name in PRIVATE_FILES
+    )
+    for name, path in files:
+        for operation, access in [("read", 0x80000000), ("write", 0x40000000)]:
+            native_open_probe(
+                path,
+                access,
+                denied=True,
+                code=f"{name}_{operation}",
+                report=report,
+            )
     report["checks"][-1]["state"] = "pass"
 
 
@@ -367,6 +486,7 @@ def main() -> int:
         "client_journey": "not_run",
         "state": "fail",
         "checks": [],
+        "access_probes": [],
     }
     try:
         report["checks"].append({"code": "ordinary_user_token", "state": "fail"})
