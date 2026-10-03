@@ -14,7 +14,7 @@ real client journey. See [beta gates](release-checklist.md).
 | Surface | macOS | Linux | Native Windows |
 | --- | --- | --- | --- |
 | Python masking/restoration and request/response regressions | Native CI, Python 3.10/3.14 | Full CI, Python 3.10–3.14; native journeys 3.10/3.14 | Native CI, Python 3.10/3.14 |
-| Private data folder, persistent mappings, registration, forget | Tested | Tested | Native ACL and Unicode checks tested; hosted Windows runner uses an administrative account |
+| Private data folder, persistent mappings, registration, forget | Tested | Tested | Native ACL/Unicode checks plus installed-wheel storage and cross-account isolation under two ordinary accounts, Python 3.10/3.14 |
 | `veil claude` / `veil codex` launchers and `--forget-after-run` | Native CI with a stub client | Native CI with a stub client | Native CI with a stub `.cmd` client; a real installed client journey is still required |
 | Wheel + desktop extra, skill install/remove, setup/undo | Tested | Tested | Tested |
 | Clipboard text, Unicode, empty text | Native `pbcopy`/`pbpaste` tested | Native X11 `xclip` tested; Wayland not yet validated | Native Windows PowerShell tested |
@@ -26,6 +26,36 @@ Native Windows tests cover over 5,000 selected protocol/core cases plus public
 CLI/storage/wheel journeys. The launchers' SIGTERM handling is tested natively
 on all three; SIGHUP and other Unix process-management tests remain in the full
 Linux suite. Skipped cases are reported; a skip is never evidence of support.
+
+### Unreleased: ordinary Windows accounts, 2026-10-03
+
+The separate Windows isolation jobs passed on Python 3.10.11 and 3.14.7 at
+commit `3d15330e648faceef8cf1a2015f6be12ad352351` in
+[this CI run](https://github.com/Mpawlowski5467/veil/actions/runs/37151977835).
+Each installed the wheel and desktop extra outside the checkout and launched
+two temporary local accounts. Each child independently verified its actual SID,
+absence of the Administrators group even as a deny-only group, and a
+non-elevated ordinary-user token. The standard native CI jobs still run under
+the hosted runner's administrative account.
+
+The owner passed all five packaged beta CLI checks, byte-preserving setup/undo,
+unsafe shared-ACL refusal, private storage, and vault/ledger session separation.
+The other account could traverse the public parent and read its public marker,
+but received native access-denied error 5 on all 18 private directory/file probes,
+including live SQLite WAL/SHM sidecars and a standalone file with an accessible
+parent. Four allowed-access controls exercised the same native read, write,
+list, and add-file rights. Both runs completed account/profile/staging cleanup.
+Fixed-code reports are CI artifacts `windows-standard-user-py3.10` and
+`windows-standard-user-py3.14`; they contain no account IDs, paths, or raw errors.
+
+The [first run](https://github.com/Mpawlowski5467/veil/actions/runs/37151677387)
+failed because the harness required a Win32 error field from Python's file-open
+wrapper. The corrected run retained the original operations and confirmed that
+directory listing reported `errno=13, winerror=5`, while file creation reported
+`errno=13` with no `winerror`. Independent native probes now require exact error
+5, and every unexpectedly successful access still fails the check. No product
+ACL was changed. This evidence covers scripted installed-wheel CLI/storage
+behavior, not real installed clients, desktop UI, or external beta participants.
 
 ## Clients and authentication
 
