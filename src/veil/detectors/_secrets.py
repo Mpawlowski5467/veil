@@ -83,6 +83,14 @@ _URL = re.compile(
 )
 _WEB_URL = re.compile(r"(?i:\b(?:https?|otpauth)://)[^\s<>\"'`]+")
 _QUERY_PARAMETER = re.compile(r"(?:\?|&)(?P<name>[^?&#=\s]+)=(?P<value>[^&#]*)")
+_FORM_HEADER = re.compile(
+    r"(?im)^[ \t]*content-type:[ \t]*application/x-www-form-urlencoded"
+    r"(?:[ \t]*;[^\r\n]*|[ \t]*)\r?\n"
+)
+_HTTP_HEADER_LINE = re.compile(
+    r"[ \t]*[A-Za-z0-9!#$%&'*+.^_`|~-]+:[^\r\n]*(?:\r?\n|\Z)"
+)
+_FORM_PARAMETER = re.compile(r"(?:^|&)(?P<name>[^&=\s]+)=(?P<value>[^&]*)")
 _COOKIE_HEADER = re.compile(
     r"(?im)^[ \t]*(?:set-cookie|cookie):[ \t]*(?P<pairs>[^\r\n]+)"
 )
@@ -106,6 +114,15 @@ _COOKIE_NAMES = frozenset(
         "csrf_token",
     }
 )
+# Namespaced auth/session cookies have explicit semantics. A bare "access"
+# suffix does not: feature_access and tenant_access both remain outside this rule.
+_SESSION_COOKIE = re.compile(
+    r"(?:[a-z0-9]+[_.-])+(?:auth|session|sessionid|session_id)\Z"
+)
+_BASE64_ENCODING = re.compile(r'(?i:"encoding"[ \t\r\n]*:[ \t\r\n]*"base64(?:url)?")')
+_BASE64_TEXT = re.compile(r"[A-Za-z0-9_+/-]+={0,2}\Z")
+_PAYLOAD_SUFFIX = re.compile(r"(?:[_.-](?i:payload)|Payload)\Z")
+_JSON_VALUE_START = re.compile(r'[ \t\r\n]*"')
 _JSON_KEY = re.compile(r'"(?P<name>(?:[^"\\\r\n]|\\[^\r\n]){1,512})"[ \t]*:[ \t]*')
 # A key and string value inside stringified JSON: the same backslash run escapes
 # each quote, e.g. {\"password\": \"...\"} in a Lambda event or HAR body. The
@@ -539,6 +556,84 @@ def _url_parameters(text: str) -> tuple[list[Span], set[int]]:
     return found, handled
 
 
+def _form_values(text: str) -> tuple[list[Span], set[int]]:
+    """Read a single form-encoded body line after explicit pasted HTTP headers.
+
+    Only field names are percent-decoded, once. Values keep their source bytes;
+    an ampersand ends a field, while %26 and '+' remain inside its value.
+    """
+    found, handled = [], set()
+    cursor = 0
+    while header := _FORM_HEADER.search(text, cursor):
+        cursor = header.end()
+        # Consume each header block only once, including when its separator is
+        # missing. Repeated Content-Type lines must not cause quadratic rescans.
+        while extra := _HTTP_HEADER_LINE.match(text, cursor):
+            cursor = extra.end()
+        if text.startswith("\r\n", cursor):
+            cursor += 2
+        elif text.startswith("\n", cursor):
+            cursor += 1
+        else:
+            continue
+        end = text.find("\n", cursor)
+        end = len(text) if end < 0 else end
+        body = text[cursor:end].rstrip("\r")
+        for parameter in _FORM_PARAMETER.finditer(body):
+            name = urllib.parse.unquote_plus(parameter["name"])
+            kind = credential_type(name) or credential_type(name.lower())
+            if kind is None:
+                continue
+            start = cursor + parameter.start("value")
+            value_end = cursor + parameter.end("value")
+            handled.add(start)
+            if value_end > start and _literal(text[start:value_end]):
+                found.append(_span(text, start, value_end, kind))
+        cursor = end
+    return found, handled
+
+
+def _encoded_credential_values(text: str) -> Iterator[Span]:
+    """Mask base64-shaped JSON credential payloads only with an encoding marker.
+
+    This is explicit naming/context, not recursive decoding or entropy guessing.
+    JSON escapes are decoded to check the spelling; the entire original escaped
+    value is protected and later restored exactly.
+    """
+    if _BASE64_ENCODING.search(text) is None:
+        return
+    for field in _JSON_KEY.finditer(text):
+        try:
+            name = json.loads('"' + field["name"] + '"')
+        except ValueError:
+            continue
+        suffix = _PAYLOAD_SUFFIX.search(name)
+        if suffix is None or not (kind := credential_type(name[: suffix.start()])):
+            continue
+        opening = _JSON_VALUE_START.match(text, field.end())
+        if opening is None:
+            continue
+        offsets = _assignment_value(text, opening.end() - 1)
+        if offsets is None:
+            continue
+        start, end = offsets
+        if end == len(text):  # An unfinished JSON string is not validated here.
+            continue
+        try:
+            value = json.loads('"' + text[start:end] + '"')
+        except ValueError:
+            continue
+        # Accept padded and unpadded base64/base64url spellings without decoding
+        # the payload. Bounds/padding reject short examples and malformed shapes.
+        if (
+            len(value) >= 8
+            and _BASE64_TEXT.fullmatch(value)
+            and len(value.rstrip("=")) % 4 != 1
+            and ("=" not in value or len(value) % 4 == 0)
+        ):
+            yield _span(text, start, end, kind)
+
+
 def _cookies(text: str) -> tuple[list[Span], set[int]]:
     """Recognize session/auth cookies in pasted HTTP headers, not theme cookies."""
     found, handled = [], set()
@@ -548,7 +643,10 @@ def _cookies(text: str) -> tuple[list[Span], set[int]]:
             for prefix in ("__host-", "__secure-"):
                 if name.startswith(prefix):
                     name = name[len(prefix) :]
-            if name not in _COOKIE_NAMES:
+            kind = credential_type(name)
+            if name in _COOKIE_NAMES or _SESSION_COOKIE.fullmatch(name):
+                kind = "TOKEN"
+            if kind is None:
                 continue
             start = header.start("pairs") + pair.start("value")
             end = header.start("pairs") + pair.end("value")
@@ -560,7 +658,7 @@ def _cookies(text: str) -> tuple[list[Span], set[int]]:
             if end - start >= 2 and text[start] == text[end - 1] == '"':
                 start, end = start + 1, end - 1
             if end > start and _literal(text[start:end]):
-                found.append(_span(text, start, end, "TOKEN"))
+                found.append(_span(text, start, end, kind))
     return found, handled
 
 
@@ -705,6 +803,9 @@ def detect(text: str) -> list[Span]:
     found = list(_private_keys(text))
     query_spans, query_starts = _url_parameters(text)
     found.extend(query_spans)
+    form_spans, form_starts = _form_values(text)
+    found.extend(form_spans)
+    query_starts.update(form_starts)
     cookie_spans, cookie_starts = _cookies(text)
     found.extend(cookie_spans)
     query_starts.update(cookie_starts)
@@ -714,6 +815,7 @@ def detect(text: str) -> list[Span]:
     found.extend(_labelled_values(text))
     found.extend(_flag_values(text))
     found.extend(_escaped_fields(text))
+    found.extend(_encoded_credential_values(text))
     found.extend(_hash_rocket_values(text))
     for match in _PREFIXED.finditer(text):
         kind = "API_KEY" if match["api"] is not None else "TOKEN"

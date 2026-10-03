@@ -7,8 +7,8 @@ recognized. Read the [threat model](docs/threat-model.md) before relying on it.
 
 ## Reporting a vulnerability
 
-Use [GitHub private vulnerability reporting](https://github.com/Mpawlowski5467/veil/security/advisories/new)
-if it is available. If the repository does not offer private reporting, open an
+Use [GitHub private vulnerability reporting](https://github.com/Mpawlowski5467/veil/security/advisories/new),
+enabled for this repository on 2026-10-03. If private reporting is unavailable, open an
 issue requesting a private contact channel without including exploit details or
 sensitive data. There is no published response-time commitment yet.
 
@@ -29,3 +29,5 @@ boundary even if another detector happens to catch your sample.
 The repository contains regression tests and a maintainer-led privacy review.
 Neither substitutes for an independent security assessment. Independent review
 and resolution of release-blocking findings remain required before 1.0.
+The [review handoff](docs/security-review.md) provides the pinned baseline,
+reproduction commands, review map, known gaps, and finding/retest requirements.

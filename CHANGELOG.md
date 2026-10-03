@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- Credential fields in explicitly framed form-urlencoded HTTP text stop at the next parameter, preserving neighboring fields and exact restoration. Explicit base64 credential payload fields and namespaced auth/session cookies gain bounded detection rules; arbitrary encodings, cookie names, and code-looking defaults remain outside those rules. The unchanged challenge set now masks 21/36 private occurrences automatically and records 12 exposed occurrences with review enabled, with no inexact mask spans or harmless characters masked.
+- Model request targets cannot carry uninspected fragments or absolute URLs upstream. Anthropic model routes accept only an empty query or the client's exact `beta=true` query; other queries receive a fixed, final refusal before the body is read or forwarded.
+
+### Validation
+
+- Opt-in live continuity checks exercise six Codex turns across client compaction and a gateway restart, plus five Claude launches of one conversation with four resumes and contact replacement. Codex passed; Claude/Haiku results remain mixed because some first replies refuse to echo the fictional contact placeholders despite correct outbound masking. The tests retain their privacy/restoration assertions and document the failures. These scripted checks do not replace desktop UI, natural long-session, or external-user evidence.
+- Private GitHub vulnerability reporting is enabled. An independent-review handoff now pins the published baseline, maps sensitive boundaries to implementation and tests, and defines finding/retest requirements. Independent human review remains pending.
+
 ## 0.6.0b2 — Beta
 
 ### Added

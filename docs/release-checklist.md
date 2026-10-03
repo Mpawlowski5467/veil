@@ -103,7 +103,7 @@ is not enabled by this preparation.
 - [ ] Desktop UI journeys and long-session/client-update behavior checked beyond
   the scripted app-server and request-corpus tests.
 - [ ] Independent security review completed, with findings resolved or scope
-  explicitly reduced. See the [review brief](threat-model.md#independent-review-brief).
+  explicitly reduced. See the [review handoff](security-review.md).
 - [ ] No known leak within the supported boundary or unresolved data-loss defect.
 - [ ] Maintainer signs off on the documented scope and release artifacts.
 

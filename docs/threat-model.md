@@ -71,6 +71,10 @@ restore replies later or resume an earlier masked conversation.
 
 ## Independent review brief
 
+Use the [review handoff](security-review.md) for the pinned release baseline,
+reproduction commands, test map, private reporting channel, and completion
+criteria. Independent review is still pending.
+
 Review request traversal and unknown/opaque fields; JSON escaping and replay;
 stream completion and tool delivery; session/cache isolation; local route/auth
 checks; Windows ACL parsing/inheritance and Unix link handling; setup/undo

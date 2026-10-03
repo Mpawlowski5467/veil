@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": "0.6.0b2",
-  "implementation_sha256": "1918eeaf19c9c7c30e73e73531c38068fae20c113afd1b78760af13436a2873e",
+  "implementation_sha256": "a17cb45e4a5e649fcd61f05641bcebd3b8b237612db3ae2489acaf38c4444b21",
   "corpus_sha256": "f1e5bd7d8b4cc1b82e354f12cf02bdfee054514db404698ae0762d538a0a1e90",
   "platform": "Darwin",
   "python": "3.14.6",
@@ -550,8 +550,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.2281,
-        "p95": 0.3915
+        "median": 0.2431,
+        "p95": 0.5045
       },
       "cases": [
         {
@@ -2146,8 +2146,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.2228,
-        "p95": 0.3977
+        "median": 0.2355,
+        "p95": 0.445
       },
       "cases": [
         {
@@ -3742,8 +3742,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1166,
-        "p95": 0.1958
+        "median": 0.1231,
+        "p95": 0.2144
       },
       "cases": [
         {
@@ -5338,8 +5338,8 @@
       },
       "latency_ms": {
         "samples": 52,
-        "median": 0.1554,
-        "p95": 0.2654
+        "median": 0.1666,
+        "p95": 0.2792
       },
       "cases": [
         {

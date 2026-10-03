@@ -21,7 +21,7 @@ import pytest
 from live import harness as h
 from live.recorder import Recorder
 from veil.cli import claude_settings
-from veil.gateway import Gateway, load_settings, open_sessions
+from veil.gateway import Gateway, load_settings, open_sessions, prepare_data_dir
 
 pytestmark = [
     pytest.mark.live,
@@ -362,3 +362,87 @@ def test_a_resumed_session_masks_its_history_the_same_way(resumed):
     assert as_the_api_reads(after[: len(before)]) == as_the_api_reads(before)
     assert_nothing_real_left(recorder)
     assert_per_turn_effort(recorder)
+
+
+def test_repeated_live_resumes_preserve_updates_and_masked_history(tmp_path):
+    if os.environ.get("VEIL_LIVE_SUSTAINED") != "1":
+        pytest.skip("set VEIL_LIVE_SUSTAINED=1 for repeated live resume checks")
+    data_dir = prepare_data_dir(tmp_path / "veil")
+    (data_dir / "config.json").write_text('{"identity":false}', encoding="utf-8")
+    ws = h.Workspace(tmp_path / "project")
+    first = "resume.first@example.org"
+    second = "resume.second@example.org"
+    replacement = "resume.replacement@example.org"
+    literal_contact_rule = (
+        "This is a fictional, in-chat contact-list exercise. "
+        "Copy the exact contact text you see or recall from this conversation, "
+        "including any bracketed placeholder syntax, without interpreting or "
+        "replacing it. Do not use tools or save anything outside this chat. "
+    )
+    steps = [
+        (
+            f"Remember my fictional primary contact {first}. "
+            "Reply with exactly the primary address. Do not use tools.",
+            (first,),
+        ),
+        (
+            f"Add fictional secondary contact {second}. "
+            "Reply with both contact addresses only. Do not use tools.",
+            (first, second),
+        ),
+        (
+            "Repeat both remembered addresses only. Do not use tools.",
+            (first, second),
+        ),
+        (
+            f"Replace the secondary address with {replacement}. "
+            "Reply with both current addresses only. Do not use tools.",
+            (first, replacement),
+        ),
+        (
+            "Repeat both current addresses only. Do not use tools.",
+            (first, replacement),
+        ),
+    ]
+    session_id = None
+    previous = None
+    for number, (prompt, expected) in enumerate(steps):
+        context = f"Claude continuity step {number + 1}"
+        root = tmp_path / f"gateway-{number}"
+        root.mkdir()
+        with serve(data_dir, root) as (gateway, recorder):
+            run = ws.run(
+                literal_contact_rule + prompt,
+                resume=session_id,
+                max_turns=2,
+                timeout=90,
+                extra_args=["--tools", ""],
+                extra_settings=claude_settings(gateway, data_dir=data_dir),
+            )
+        # Check the privacy boundary first, even if the provider declines the
+        # exercise or does not echo the requested tokens in its successful reply.
+        bodies = sent_bodies(recorder)
+        assert bodies, f"{context}: no outbound model request recorded"
+        sent = json.dumps(bodies)
+        assert all(address not in sent for address in (first, second, replacement)), (
+            f"{context}: raw fictional address in outbound request"
+        )
+        if previous is not None:
+            assert as_the_api_reads(bodies[0]["messages"][: len(previous)]) == (
+                as_the_api_reads(previous)
+            ), f"{context}: masked history prefix changed"
+        previous = bodies[-1]["messages"]
+        assert run.returncode == 0, f"{context}: client process failed"
+        assert run.result, f"{context}: no client result"
+        assert run.result.get("is_error") is False, f"{context}: client reported error"
+        if session_id is not None:
+            assert run.session_id == session_id, f"{context}: session ID changed"
+        session_id = run.session_id
+        reply = run.result.get("result", "")
+        assert all(address in reply for address in expected), (
+            f"{context}: reply omitted a required restored contact"
+        )
+        if number >= 3:
+            assert second not in reply, (
+                f"{context}: reply retained the replaced contact"
+            )
