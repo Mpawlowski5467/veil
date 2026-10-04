@@ -33,6 +33,8 @@ successful run. Never include personal logs, credentials, vaults, or transcripts
 Give participants the versioned **self-serve beta pack ZIP** on the release page.
 Its [instructions](../beta/README.md), fictional workspace, local check script,
 and [feedback worksheet](../beta/feedback.md) are also available in this repository.
+The short first test is separate from [optional deeper exercises](../beta/extra-tests.md).
+Use the [invitation copy](beta-launch.md) when sending it to participants.
 The script records only software versions and fixed local-check outcomes and
 makes no model calls. Client exercises are manual and reports are sent only by
 the participant. Track aggregate outcomes in [beta results](beta-results.md).

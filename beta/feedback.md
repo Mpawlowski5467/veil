@@ -1,49 +1,68 @@
-# Veil 0.6.0b2 beta feedback
+# Veil beta feedback
 
-Use fictional reproductions. Do not include account details, real credentials,
-vaults, configuration files, private paths, or whole client transcripts.
+**About 3 minutes · Veil 0.6.0b2 · “Not tried” is a useful answer.**
 
-- Veil version / release tag:
-- OS version; native Windows or WSL if relevant:
-- Python version:
-- Client and version:
-- Authentication: ChatGPT sign-in / OpenAI API key / Claude sign-in / other:
-- Ordinary user account or administrator:
-- Previous Veil version, if upgrading:
-- Minutes to first local success:
-- Minutes to first verified client request:
-- Maintainer help needed, and at which step:
+Send this to the person who invited you, or copy it into the
+[public feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml).
+Use fictional examples. Do not include account details, passwords, private file
+paths, configurations, or full chat transcripts.
 
-Mark each row **pass / fail / not tried**, and explain failures below.
+## Your setup
 
-| Exercise | Result |
+- Veil version (from `beta-check.json`):
+- OS and version (say native Windows or WSL where relevant):
+- Python version (from `beta-check.json`):
+- Client and version, or “local check only”:
+- Sign-in method: ChatGPT / Claude account / API key / local only / unsure:
+- Account permissions: ordinary user / administrator / unsure:
+
+## What happened?
+
+Mark each row **Pass**, **Fail**, or **Not tried**.
+
+| Test | Result |
 | --- | --- |
-| Clean installation and local check | |
-| Registered name and verified client request | |
-| Read/edit a fictional file; real values restored locally | |
-| Code references remain useful | |
-| Review a held request, then retry | |
-| Understand unquoted `ADMIN_PASSWORD=admin` limitation | |
-| Resume a conversation | |
-| Two concurrent conversations remain separate | |
-| Cancel a turn and continue | |
-| Gateway stop/restart and fresh verification | |
-| Long-session/compaction recovery | |
-| Client update and fresh verification | |
-| Veil upgrade and restoration | |
-| Rollback using a private backup | |
-| Remove routing/skill settings; unrelated settings preserved | |
-| Forget mappings; understand client history remains | |
+| Installed Veil and passed all five local checks | |
+| Registered Mira Quill and got a `verified` client exchange | |
+| Edited contact.txt correctly; name and email appeared in the reply | |
+| Explained example.py with readable code references | |
+| Removed the test mappings and registration | |
 
-## Findings
+- Roughly how long did the local check take?
+- If tried, how long until the first `verified` exchange?
+- Did you need help? Which step?
 
-For each finding, give the exercise, expected result, actual result, a minimal
-fictional reproduction, and any redacted error code. Include successes too.
+## What should we fix first?
 
-## Scope and usability
+A sentence is enough. If everything worked, tell us that too.
 
-What did you expect Veil to protect? Was any limitation surprising? Which review
-prompts were unnecessary? What would stop you from using Veil again?
+- Guide step or task:
+- What you expected:
+- What actually happened (include a safe error code if useful):
+- Small reproduction using invented values:
 
-Optionally attach `beta-check.json` and the allowlisted `veil report` output
-after reading them. Submit manually through the repository's beta feedback form.
+What was confusing? Was any masking limitation surprising? What would stop you
+from using Veil again?
+
+## Optional: extra tests
+
+Leave these as **Not tried** unless you attempted them. Add the result and any
+brief notes; completing the whole list is not required.
+
+| Test | Result / notes |
+| --- | --- |
+| Understood the unquoted `ADMIN_PASSWORD=admin` limitation | Not tried |
+| Reviewed a held request and retried it | Not tried |
+| Resumed a conversation | Not tried |
+| Ran two separate conversations | Not tried |
+| Cancelled a turn and continued | Not tried |
+| Restarted the launcher and verified again | Not tried |
+| Worked through a long session or compaction | Not tried |
+| Updated the AI client and verified again | Not tried |
+| Upgraded Veil or tested rollback (include versions) | Not tried |
+| Tested desktop routing or skill installation, then undid it | Not tried |
+
+**Before sending:** read this feedback and optional `beta-check.json`. Send only
+those files. Never send `beta-data/`, `.venv/`, configurations, transcripts, or a
+ZIP of the folder after testing. A security issue belongs in the
+[private security form](https://github.com/Mpawlowski5467/veil/security/advisories/new).

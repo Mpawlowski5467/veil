@@ -1,27 +1,44 @@
-# Veil 0.6.0b2 self-serve beta
+# Try Veil: beta tester guide
 
-This pack uses invented contacts and nonfunctional credentials. Start with a
-10-minute local check, then allow 20–40 minutes for your normal AI client. Longer
-sessions, upgrades, and rollback can be reported later. No report is sent
-automatically. A local check does not establish that a client request used Veil.
+**For Veil 0.6.0b2 · Guide updated October 4, 2026**
 
-## 1. Install in a new environment
+Help us find confusing steps, broken workflows, and gaps in masking. You do not
+need to finish every exercise. A report that says where you got stuck is useful.
 
-Download the wheel and beta pack from the
-[0.6.0b2 release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2).
-Extract the pack into a new folder. You need Python 3.10 or newer and, for the
-client exercises, an installed and signed-in Claude Code or Codex client.
+| Choose your test | Time | What you need |
+| --- | --- | --- |
+| **Start here: local check** | About 10 minutes | Python 3.10 or newer |
+| **Then try an AI client** | Another 20–30 minutes | Claude Code or Codex CLI, installed and signed in |
+| **Optional deeper tests** | At your own pace | [Extra exercises](extra-tests.md) |
 
-On macOS/Linux, in the extracted folder:
+Use only the fictional files in this pack. The local check makes no AI calls.
+Client exercises use your normal account and may consume usage or credits.
+Veil is a beta: it masks supported text, not every private value. Names need
+registration. Claude image/PDF contents pass through unmasked; OpenAI media is
+refused. Direct tool/network traffic is outside the gateway's masking. Normal
+user accounts are welcome; administrator access is not
+required for this test.
+
+## 1. Install and run the local check
+
+Download the beta ZIP from the
+[0.6.0b2 release page](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2),
+or use the revised ZIP sent with this guide. Extract it, then open a terminal
+**inside the folder containing `check.py`, `feedback.md`, and `workspace/`**.
+Do not run commands inside the ZIP viewer.
+
+Run the commands for your system. They create a separate Python environment
+inside this folder and install the published 0.6.0b2 wheel.
+
+**macOS or Linux**
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.6.0b2/veil-0.6.0b2-py3-none-any.whl'
-python check.py
+.venv/bin/python -m pip install 'veil[desktop] @ https://github.com/Mpawlowski5467/veil/releases/download/v0.6.0b2/veil-0.6.0b2-py3-none-any.whl'
+.venv/bin/python check.py
 ```
 
-On native Windows PowerShell:
+**Windows PowerShell**
 
 ```powershell
 py -m venv .venv
@@ -29,124 +46,171 @@ py -m venv .venv
 .\.venv\Scripts\python.exe check.py
 ```
 
-You can activate the environment with `.\.venv\Scripts\Activate.ps1` for the
-remaining commands. If PowerShell does not permit activation, use the environment's
-Python directly instead of `python`: `.\.venv\Scripts\python.exe` from this folder,
-or `..\.venv\Scripts\python.exe` after entering `workspace/`. No execution-policy
-change is needed. Keep using the same interpreter throughout the exercise.
+No environment activation or PowerShell execution-policy change is needed.
+If Python is missing or older than 3.10, install a supported version first.
 
-`check.py` exercises registration, masking, restoration, forgetting, and removal
-in a temporary folder. All five steps should pass. It writes only software
-versions and fixed outcome codes to `beta-check.json`; it does not read your
-client configuration, contact a provider, or touch the clipboard. On a repeat
-run choose another filename: `python check.py --output beta-check-2.json`.
+**Success:** all five checks say `PASS` (or `pass` in the original release pack).
+They test registration, masking, restoration, forgetting, and registration
+removal. The script saves `beta-check.json`; it sends nothing automatically,
+changes no client settings, and does not touch your clipboard.
 
-## 2. Launch a fictional workspace
+**If any check fails, stop here and report it.** Do not troubleshoot by using
+real data or changing permissions. To repeat the check, choose a new report name:
+append `--output beta-check-2.json` to the last command.
 
-Open `workspace/` in your terminal. Use a dedicated data directory throughout:
+You can finish here: fill in [feedback.md](feedback.md). The rest is optional.
 
-```text
-python -m veil --data-dir ../beta-data entities add PERSON
+## 2. Register the fictional name
+
+In the same terminal, enter the supplied workspace and register its contact.
+Keep all remaining terminal commands in `workspace/` unless a step says otherwise.
+
+**macOS or Linux**
+
+```bash
+cd workspace
+../.venv/bin/python -m veil --data-dir ../beta-data entities add PERSON
 ```
 
-At the hidden prompt, enter **Mira Quill**. Launch one client:
+**Windows PowerShell**
 
-```text
-python -m veil --data-dir ../beta-data claude
-python -m veil --data-dir ../beta-data codex
+```powershell
+cd workspace
+..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data entities add PERSON
 ```
 
-Choose one command, not both in the same terminal. Codex uses ChatGPT sign-in
-by default; append `--auth api-key` only when `OPENAI_API_KEY` is already available
-in your own environment. Never paste an API key into a prompt or report.
+At `Private value (hidden):`, type **Mira Quill** and press Enter. It is normal
+for nothing to appear while you type. Expect `Registered one value`.
 
-In a second terminal, activate the same environment, change to `workspace/`,
-and run:
+The `beta-data` folder keeps this exercise separate from your usual Veil data.
+Keep it private; never attach it to feedback.
 
-```text
-python -m veil --data-dir ../beta-data verify
+## 3. Launch one client through Veil
+
+Run **one** command below, choosing your client and system. Leave this terminal
+open while testing. These commands launch a new CLI session; they do not change
+an already-open desktop chat's routing.
+
+| Client | macOS / Linux command |
+| --- | --- |
+| Claude Code | `../.venv/bin/python -m veil --data-dir ../beta-data claude` |
+| Codex CLI | `../.venv/bin/python -m veil --data-dir ../beta-data codex` |
+
+| Client | Windows PowerShell command |
+| --- | --- |
+| Claude Code | `..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data claude` |
+| Codex CLI | `..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data codex` |
+
+Codex uses ChatGPT sign-in by default. API-key and desktop setup are separate
+[optional tests](extra-tests.md); do not paste an API key into a chat or report.
+
+## 4. Verify one exchange
+
+Open a **second terminal** and navigate to the same `workspace/` folder. Keep
+the client running in the first terminal.
+
+**macOS or Linux**
+
+```bash
+../.venv/bin/python -m veil --data-dir ../beta-data verify
 ```
 
-Send the exact generated prompt as a new message in the launched client. Then
-run the printed `verify --check` command with the same `--data-dir`. Require
-**verified**, not just an echoed email. If several gateways are running, use
-the explicit `--gateway-url` shown by Veil to choose the intended one.
+**Windows PowerShell**
 
-This proves that one exchange was masked and restored. Images/PDFs, direct
-tool network traffic, and unknown secret formats are not covered by that proof.
-
-## 3. Try normal work and detection boundaries
-
-Ask the client to read `contact.txt`, change `Project: Orchard demo` to
-`Project: Orchard follow-up`, and quote the contact email in its reply. Check
-the file locally and confirm the real fictional email appears in the reply.
-Ask it to explain `example.py`; its configuration references should be readable.
-
-Inspect `example.env` locally. The quoted database password is supported, but
-the bare `ADMIN_PASSWORD=admin` is deliberately treated as ambiguous code and
-can go out unchanged, even with review enabled. Quote it or register `admin`
-as `PASSWORD` if it must be private. Report whether this rule was understandable.
-Do not interpret a successful example as protection of every credential.
-
-To try review, exit the client and place this in `../beta-data/config.json` (the
-folder created by this pack's commands), preserving the existing `entities`
-registration if present:
-
-```json
-"secret_review": true
+```powershell
+..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data verify
 ```
 
-That is a property to add to the existing JSON object, not the whole file.
-Relaunch through Veil and send: `Use 'fictional orchard meadow phrase' to sign in.`
-When Veil holds the request, run the exact `veil review` command it prints,
-using `python -m veil` if `veil` is not on your PATH. Classify the phrase as a
-password in the local page, then retry the original request. Record unnecessary
-holds too. Review is off by default and does not identify every private value.
+1. Copy the exact fictional prompt printed by Veil into the client in the first
+   terminal. Send it as a new message and wait for the reply to finish.
+2. Back in the second terminal, run the command below. Replace
+   `VERIFICATION_ID` with the ID printed by `verify`.
 
-## 4. Exercise recovery
+**macOS or Linux**
 
-- Cancel a turn and send another; check that it completes and verifies.
-- Exit Claude and relaunch with `claude --resume` after `python -m veil --data-dir
-  ../beta-data`. For Codex, relaunch with `codex resume` after that same prefix.
-  API-key users must use `codex --auth api-key resume` and preserve `--auth api-key`
-  on every relaunch; otherwise the launcher selects ChatGPT sign-in. Choose the
-  fictional session and verify again.
-- Launch a second client from another terminal using the same dedicated data
-  directory; use a different fictional contact and check session separation.
-- Exit a launcher and confirm it has stopped its gateway. Relaunch and verify.
-  Desktop testers can exercise `stop`, `start`, and setup/undo using the
-  [desktop guide](https://github.com/Mpawlowski5467/veil/blob/v0.6.0b2/docs/openai-integration.md).
-- In Codex, `/compact` may be refused: remote compaction is unsupported. Use
-  `/new` (or a new local desktop chat still routed through Veil), carry over a
-  brief locally reviewed handoff, and verify the new exchange. Do not switch
-  away from Veil to continue the old session. Record whether the message made
-  recovery clear.
-- After a normal client update, repeat verification and the file exercise.
-  For Veil upgrades and rollback, follow the
-  [installed-wheel guide](https://github.com/Mpawlowski5467/veil/blob/v0.6.0b2/docs/upgrading.md)
-  with a private backup. Do not resume a temporary `--forget-after-run` session.
+```bash
+../.venv/bin/python -m veil --data-dir ../beta-data verify --check VERIFICATION_ID
+```
 
-Desktop testing changes actual client routing, so follow setup/undo exactly
-and report any unrelated settings that change. Do not count the app-server
-tests in CI as a desktop UI journey.
+**Windows PowerShell**
 
-## 5. Clean up and report
+```powershell
+..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data verify --check VERIFICATION_ID
+```
 
-Exit the launched clients, then from `workspace/`:
+**Success means `verified`.** An echoed email alone is not enough. Verification
+confirms that this one exchange was masked before forwarding and restored on
+return; it does not prove that every future request or private value is covered.
+If Veil asks you to select a gateway, add its displayed `--gateway-url` to both
+verification commands. See [help with common problems](#if-you-get-stuck).
 
-```text
-python -m veil --data-dir ../beta-data forget --all
-python -m veil --data-dir ../beta-data entities remove PERSON
+## 5. Try a small file edit
+
+Send this prompt in the same client:
+
+> Read contact.txt. Change only “Project: Orchard demo” to “Project: Orchard
+> follow-up”. Save the file, then tell me the contact's name and email address.
+
+Approve only the file access needed for this exercise. Open `contact.txt`
+locally afterward. Check that the project line changed and the name/email stayed
+intact. The reply should contain **Mira Quill** and **mira.quill@example.org**.
+Record a refusal, an incorrect edit, or a missing value as a failure; you do not
+need to make it pass before reporting.
+
+Then ask:
+
+> Explain example.py without changing it.
+
+Check that references such as `settings.database_password` and `settings.api_key`
+remain useful code. If you have time, try [review, resume, and recovery](extra-tests.md).
+
+## 6. Finish and send feedback
+
+Exit **all** clients you launched for this test. If you tried desktop setup,
+stop its separately started gateway and undo the test routing first, following
+that guide. Then, from `workspace/`, remove this exercise's mappings and registration:
+
+**macOS or Linux**
+
+```bash
+../.venv/bin/python -m veil --data-dir ../beta-data forget --all
+../.venv/bin/python -m veil --data-dir ../beta-data entities remove PERSON
+```
+
+**Windows PowerShell**
+
+```powershell
+..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data forget --all
+..\.venv\Scripts\python.exe -m veil --data-dir ../beta-data entities remove PERSON
 ```
 
 Enter **Mira Quill** at the removal prompt. Remove any extra fictional
-registrations you added. `forget` removes Veil mappings, not client history,
-backups, or screenshots. If you installed a skill or desktop routing separately,
-also use the documented `skill uninstall` and `undo codex` commands.
+registrations you added. Forgetting removes Veil mappings; it does not delete
+client chat history, backups, or screenshots. If you tried desktop setup or skill
+installation separately, follow that guide's undo/uninstall steps too.
 
-Fill out `feedback.md`, including steps you did not try and any maintainer help
-needed. Submit manually using the
-[beta feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml).
-Optionally attach `beta-check.json`. Successful journeys are useful evidence too.
-For security findings, use the repository's
-[security policy](https://github.com/Mpawlowski5467/veil/blob/v0.6.0b2/SECURITY.md).
+Fill in [feedback.md](feedback.md) and send it back to the person who invited you,
+or use the [public beta feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml).
+You may attach `beta-check.json` after reading it. Successful tests matter too.
+
+**Share only your reviewed feedback and optional `beta-check.json`. Do not send
+`beta-data/`, `.venv/`, configuration files, transcripts, or a ZIP of your used
+exercise folder.** Report a security issue through the
+[private security form](https://github.com/Mpawlowski5467/veil/security/advisories/new),
+not a public issue.
+
+## If you get stuck
+
+| What you see | What to do |
+| --- | --- |
+| `check.py` or the Python path cannot be found | For step 1, use the folder containing `check.py`. For steps 2–6, use its `workspace/` subfolder. |
+| Python or `py` is not found | Install Python 3.10 or newer, reopen the terminal, and retry step 1. |
+| The report already exists | Add `--output beta-check-2.json`; the script deliberately keeps the first report. |
+| Claude or Codex is not found, or sign-in is needed | Install/sign in to your chosen client first, or submit the local-only result. |
+| `pending` verification | Confirm you sent the generated prompt in the Veil-launched client and waited for its reply. |
+| `incomplete`, `expired`, an error, or a model refusal | Record the state and the step. An expired probe needs a new `verify` prompt. Repeated failures are useful feedback. |
+| Multiple gateways | Use the address Veil displays for this client with `--gateway-url` on both verification commands. |
+
+This guide targets the published **0.6.0b2** wheel. Fixes described as unreleased
+in the repository are not included in that wheel. Editing this guide does not
+change the published release assets.

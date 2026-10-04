@@ -1,81 +1,68 @@
-# Veil beta invitation kit
+# Invite someone to try Veil
 
-These are drafts to post from your own account. Choose communities where you
-participate, read their current self-promotion rules, and adapt the post to the
-audience. No posts or direct messages have been sent as part of this kit.
+Copy the invitation below and send it yourself. No invitations have been sent
+as part of preparing these materials.
 
-## Community post
+## Ready-to-send invitation
 
-**Title:** I built Veil to mask detected personal data before AI calls — looking for beta testers
+Hi — would you try **Veil**, a tool I'm building to mask detected private text
+before AI calls and restore it locally in the reply?
 
-I'm building **Veil**, an open-source Python tool that replaces detected private
-values with placeholders before an AI model call and restores the originals in
-the reply locally.
+Start with a **10-minute local check** using fictional data. It needs Python
+3.10 or newer, makes no model calls, and needs no API key. macOS, Linux, and
+Windows are welcome.
 
-For example, `jane.doe@example.com` becomes `[EMAIL_1]`. Names can be registered
-explicitly. It includes a Claude Code gateway, an experimental Codex integration,
-and Python/clipboard workflows for other providers.
+If you have time, try the optional Claude Code or Codex exercise afterward.
+That uses your signed-in client and its normal quota or API charges. Allow
+another 20–30 minutes; the local check alone is useful feedback.
 
-Version **0.6.0b2 is a prerelease**, and I'm looking for **5–10 people** to try it on
-macOS, Linux, or native Windows. The first exercise needs no API key and uses
-fictional data. Its demo reply is simulated; there's a separate verification
-step for a real client request.
+**[Start with the beta guide](https://github.com/Mpawlowski5467/veil/blob/main/beta/README.md)**
+— it walks you through the
+[0.6.0b2 release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2).
+This is a prerelease with detection limits; please use fictional data only.
+Independent security review is still pending.
 
-I'd like to know: did installation work, was the protection scope clear, and
-what would stop you from using it again? Happy to help troubleshoot setup here.
+Tell me what passed, what failed, what you didn't try, and whether you needed
+help. You can use the
+[short feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml)
+or send back your completed `feedback.md`. Setup problems and successful checks
+are both useful.
 
-Detection has limits, persistent mappings are stored locally in plaintext with
-private permissions, and the project still needs an independent security review.
-Please use fictional data while testing.
+Share only your feedback and, optionally, **`beta-check.json`**. Don't send the
+used pack or workspace, `beta-data`, configuration files, vaults, credentials,
+or transcripts. Report a possible security problem through the
+[private security form](https://github.com/Mpawlowski5467/veil/security/advisories/new),
+not a public issue.
 
-- [First five minutes](https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md)
-- [Self-serve beta pack](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2), with fictional files, local checks, recovery exercises, and a feedback worksheet
-- [36-second demo video](https://github.com/Mpawlowski5467/veil/blob/main/docs/assets/veil-demo.mp4)
-- [Repository and source](https://github.com/Mpawlowski5467/veil)
-- [Feedback form](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml)
+## Short version
 
-## Short post for LinkedIn or a developer feed
+I'm looking for a few people to try **Veil 0.6.0b2**, a prerelease tool that
+masks detected private text before AI calls and restores it locally afterward.
 
-I'm looking for a few beta testers for **Veil**, my open-source tool for masking
-detected personal information before AI calls and restoring it locally afterward.
+The first check takes about 10 minutes, uses fictional data, and makes no model
+calls. An optional Claude Code or Codex exercise uses your normal client quota
+or API charges. I'd like to hear what worked and where you got stuck.
 
-It works with Python and Claude Code, with experimental Codex support. Try a
-local round trip in about five minutes, then optionally verify a real client
-request. macOS, Linux, and Windows testers welcome.
+[Beta guide](https://github.com/Mpawlowski5467/veil/blob/main/beta/README.md)
+· [Pinned release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2)
+· [Feedback](https://github.com/Mpawlowski5467/veil/issues/new?template=beta-feedback.yml)
 
-0.6.0b2 is a prerelease: use fictional data, expect detection limits, and send me
-the confusing parts of setup.
+Share only feedback and optional `beta-check.json`, never your used pack,
+`beta-data`, configuration, vaults, credentials, or transcripts. Use the
+[private form](https://github.com/Mpawlowski5467/veil/security/advisories/new)
+for security findings.
 
-Start here: https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md
+## For the maintainer
 
-Attach `docs/assets/veil-demo.mp4`. Its captions identify the reply as simulated.
-
-## Personal invitation
-
-Hey — I'm testing Veil, a tool I built to mask detected private text before AI
-calls. Since you use Claude Code/Codex, would you be willing to try a five-minute
-local demo with fictional data and tell me where setup is confusing? No API key
-is needed for the first exercise. It's an early prerelease, and honest feedback
-would help shape the next version.
-
-https://github.com/Mpawlowski5467/veil/blob/main/docs/first-five-minutes.md
-
-## A small first round
-
-1. Invite 3–5 people individually, then share one relevant community post.
-2. Aim for at least one macOS, Linux, and native Windows participant, with both
-   Claude Code and Codex represented. CI results are not participant reports.
-3. Ask participants to use the feedback form. A successful install and a real
-   `verified` request are separate milestones.
-4. Fix the most common setup friction before widening the invitation.
-5. Record aggregate counts and anonymized findings in the beta checklist. Get
-   permission before quoting a person or sharing their report elsewhere.
-
-Good initial measures: invitations accepted, installs completed, local round
-trips completed, real requests verified, time to first success, and blockers.
-Stars and impressions are secondary. Use the [full beta protocol](release-checklist.md)
-for deeper journeys after this first exercise.
-
-The [beta results log](beta-results.md) starts with zero external participants.
-The pack is ready for volunteers; preparing it and running it automatically are
-not completed participant journeys. No invitations have been sent by this work.
+- Send the revised guide pack if you have it, or link the current guide above.
+  The original ZIP on the 0.6.0b2 release page still contains the original guide;
+  updated instructions do not replace published release assets.
+- Start with a few volunteers across macOS, Linux, and native Windows. Ask each
+  person to try one client, if they choose the optional exercise.
+- Record installation, local-check, and verified-client results separately in
+  the [beta results log](beta-results.md). Automated checks are not participant
+  reports; count only feedback actually received.
+- Record time and help needed. Fix repeated setup problems before inviting more
+  people. Get permission before quoting a tester or sharing their feedback.
+- Keep longer recovery, upgrade, and removal exercises optional. Use the
+  [release checklist](release-checklist.md) to track evidence still needed.
