@@ -21,6 +21,15 @@ ORIGINAL = (
     'Contact Mira Quill at mira.quill@example.org.\nPASSWORD="orchard-demo-724"\n'
 )
 MASKED = 'Contact [PERSON_1] at [EMAIL_1].\nPASSWORD="[PASSWORD_1]"\n'
+STEP_LABELS = {
+    "installation": "Load the installed Veil package",
+    "storage": "Create private temporary storage",
+    "registration": "Register a fictional name",
+    "mask": "Mask the fictional name, email, and password",
+    "restore": "Restore the original fictional text",
+    "forget": "Forget the test conversation mappings",
+    "registration_removal": "Remove the fictional name registration",
+}
 
 
 class CheckError(Exception):
@@ -132,11 +141,22 @@ def main() -> int:
         print("Cannot create report. Choose a writable, unused --output filename.")
         return 2
     for step in report["checks"]:
-        print(f"{step['code']}: {step['state']}")
-    print(
-        "Report saved. No report was sent. Continue with the manual client exercises."
-    )
-    return 0 if all(step["state"] == "pass" for step in report["checks"]) else 1
+        state = step["state"].upper().replace("_", " ")
+        print(f"{state}: {STEP_LABELS[step['code']]}")
+    print("Report saved. No report was sent.")
+    passed = all(step["state"] == "pass" for step in report["checks"])
+    if passed:
+        print(
+            "All five local checks passed. Continue with the optional client "
+            "exercises in README.md."
+        )
+    else:
+        print(
+            "Stop here: a local check failed. Report the failed step before "
+            "continuing to the client exercises. You can attach the saved "
+            "report after reviewing it."
+        )
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from veil import __version__
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     ("beta/README.md", "README.md"),
+    ("beta/extra-tests.md", "extra-tests.md"),
     ("beta/check.py", "check.py"),
     ("beta/feedback.md", "feedback.md"),
     ("beta/workspace/contact.txt", "workspace/contact.txt"),

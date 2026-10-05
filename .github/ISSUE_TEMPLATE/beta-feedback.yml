@@ -1,13 +1,15 @@
 name: Beta feedback
-description: Tell us how your first Veil round trip or client setup went.
+description: A short report about your Veil setup and local check. Client testing is optional.
 title: "[Beta] "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for trying Veil. Success reports and confusing steps are both useful.
-        Use fictional examples only. Do not upload private text, credentials, configuration secrets, vaults, or full transcripts.
-        For a security vulnerability, follow [SECURITY.md](https://github.com/Mpawlowski5467/veil/blob/main/SECURITY.md).
+        Start with the [beta guide](https://github.com/Mpawlowski5467/veil/blob/main/beta/README.md) and [0.6.0b2 release](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2). The local check makes no model calls; optional client exercises use your normal quota or API charges.
+
+        This issue is public. Share only feedback using fictional examples and, optionally, `beta-check.json`. Do not upload the used pack/workspace, `beta-data`, configuration files, vaults, credentials, or transcripts.
+
+        For a possible security problem, use the [private security form](https://github.com/Mpawlowski5467/veil/security/advisories/new).
   - type: dropdown
     id: os
     attributes:
@@ -23,74 +25,69 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Versions
-      description: Veil, Python, OS version, and client version if used. No account details.
-      placeholder: "Veil 0.6.0b2, Python 3.14, macOS 26; Codex CLI version ..."
+      label: Versions, if known
+      description: Veil, Python, OS version, and client version if you used one. Leave unknown versions out.
+      placeholder: "Veil 0.6.0b2; Python 3.14; Windows 11; Claude Code ..."
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation
+      options:
+        - Pass
+        - Fail
+        - Not tried
     validations:
       required: true
   - type: dropdown
-    id: workflow
+    id: local_check
     attributes:
-      label: What did you try?
+      label: Local check (check.py)
+      description: Pass means all five checks passed. You can attach beta-check.json below.
       options:
-        - Local Python demo
+        - Pass
+        - Fail
+        - Not tried
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client, if tried
+      options:
+        - Not tried — local check only
         - Claude Code
         - Codex CLI
         - Codex desktop
-        - Clipboard / another provider
-    validations:
-      required: true
+        - Other
   - type: dropdown
     id: auth
     attributes:
-      label: Authentication route
+      label: Client sign-in, if tried
+      description: Choose the route only. Never include account details or keys.
       options:
-        - Local exercise only
-        - Codex — ChatGPT sign-in
-        - Codex — OpenAI API key
+        - Not tried / unsure
         - Claude — signed-in account
         - Claude — API key
-        - Other / unsure
-    validations:
-      required: true
-  - type: checkboxes
-    id: exercises
-    attributes:
-      label: Exercises attempted
-      description: Check what you attempted, including failed attempts. Explain results below or attach the completed fictional beta worksheet.
-      options:
-        - label: Local check.py round trip
-        - label: Verified a real client request
-        - label: Read and edited fictional files
-        - label: Reviewed a held request and retried it
-        - label: Resume, concurrent conversations, or cancellation
-        - label: Gateway stop/restart and verification
-        - label: Long session or compaction recovery
-        - label: Client update or Veil upgrade/rollback
-        - label: Forgetting and removal of setup/skill settings
+        - Codex — ChatGPT sign-in
+        - Codex — OpenAI API key
+        - Other
   - type: dropdown
-    id: result
+    id: client_result
     attributes:
-      label: How far did you get?
+      label: Client verification, if tried
+      description: Pass means Veil reported verified after you sent its generated prompt and checked the result. An echoed email alone is not verification.
       options:
-        - Installation failed
-        - Installed, but local demo failed
-        - Local demo worked
-        - Client setup or verification did not complete
-        - Client request verified
-        - Daily-work and recovery exercises completed
-        - Upgrade/rollback and removal completed
-    validations:
-      required: true
+        - Pass
+        - Fail
+        - Not tried
   - type: textarea
     id: experience
     attributes:
-      label: What worked, and where did you get stuck?
-      description: Include the guide step, expected result, actual result, and a redacted error if relevant. If everything worked, say so.
-    validations:
-      required: true
-  - type: textarea
-    id: friction
+      label: What worked or got confusing?
+      description: A few sentences are enough. For a failure, include the guide step and what happened, using fictional examples. Optionally attach beta-check.json here.
+      placeholder: "Everything passed, or: I got stuck at step ..."
+  - type: input
+    id: time_help
     attributes:
-      label: What would stop you from using Veil again?
-      description: Was its scope clear? Did you need help? Roughly how long did setup take?
+      label: Time and help needed
+      placeholder: "About 10 minutes; no help needed. Or: needed help with ..."
