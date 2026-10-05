@@ -199,7 +199,7 @@ its raw transcripts stay there, while `summary.json` contains only counts,
 condition labels, model/version, and booleans. It makes at most eight requests;
 the file/resume test makes at most four. Neither retries semantic failures.
 
-For updates, run the request census described in the README, compare its new
+For updates, run the [request census](development.md#claude-code-census-after-a-client-update), compare its new
 fields and privacy failures, and rerun verification and relevant live checks.
 Keep client/version/model/auth/OS details with results. For upgrade/rollback use
 [the installed-wheel procedure](upgrading.md), not a checkout-only import test.
