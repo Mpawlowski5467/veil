@@ -63,7 +63,8 @@ veil --data-dir /absolute/private/veil-folder stop
 The data folder's parent must exist. The folder itself must be owner-only, as
 with the foreground gateway. For Anthropic clients, select `--api anthropic`
 (the default port for a first Anthropic start is 8484). Existing Claude client
-settings/hooks still need to be configured as described in the README;
+settings/hooks still need to be configured as described in the
+[Claude Code guide](claude-code.md);
 `veil claude` continues to manage its own foreground gateway automatically.
 
 Explicit port/API/auth options take precedence. Otherwise, a matching Codex

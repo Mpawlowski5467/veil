@@ -21,6 +21,13 @@ can use real values. See [coverage and limits](../README.md#understand-the-bound
 New text fields and block types are masked generically. Keys, types, numbers,
 unrecognized file-byte fields, and opaque values that cannot safely be masked
 are refused. Known image/PDF attachment contents pass through unmasked.
+
+Tool definitions are not scrubbed, except the output schema supplied through
+`claude -p --json-schema`: its descriptions and example values are masked, while
+a property name or `pattern` holding personal data is refused. Hosted search
+results come from Anthropic and are replayed back to it unchanged, unless they
+contain registered private text. Keep private values out of tool definitions.
+
 Model routes accept no query or exactly `?beta=true`, the query used by the
 recorded client. Other queries, fragments, and absolute-form request targets are
 refused before reading or forwarding the body. A refusal does not echo the

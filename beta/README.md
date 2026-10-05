@@ -21,7 +21,10 @@ required for this test.
 
 ## 1. Install and run the local check
 
-Download the beta ZIP from the
+If you cloned or downloaded this repository, open a terminal in its **`beta/`
+folder** and skip the ZIP download below.
+
+Otherwise, download the beta ZIP from the
 [0.6.0b2 release page](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2),
 or use the revised ZIP sent with this guide. Extract it, then open a terminal
 **inside the folder containing `check.py`, `feedback.md`, and `workspace/`**.

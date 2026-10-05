@@ -5,7 +5,7 @@ It can check readiness, guide setup, and mask or restore a text file. Installing
 the skill does **not** enable gateway routing or protect the prompt invoking it.
 
 For the first run, follow the [five-minute release quickstart](first-five-minutes.md)
-or the [README's install → setup → verify walkthrough](../README.md#start-with-the-veil-skill).
+or the [README's skill overview](../README.md#start-with-the-veil-skill).
 This guide covers installation options and everyday file workflows in more detail.
 
 ## Install

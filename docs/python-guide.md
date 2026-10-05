@@ -177,6 +177,38 @@ When a reply streams in, a placeholder can be split across chunks (`"[EMA"`, `"I
 
 Joined, the pieces are exactly what `restore()` gives for the whole reply, however it was split. Nothing but a possible placeholder is delayed: text from a bracket onward that could still become one, always under 76 characters. A Markdown link or an array index goes straight through. When the chunks come from callbacks rather than an iterable, use `shield.stream_restorer()`: call `feed(chunk)` for each chunk and send on what it returns, then `finish()` at the end, and `result()` for the count, warnings, and repairs.
 
+## Wrap a model call
+
+For a synchronous function that takes a string and returns a string:
+
+```python
+from veil import Shield
+
+shield = Shield(redact_warnings=True)
+shield.add_entity("Jan Nowak", "PERSON")
+
+
+def call_model(prompt: str) -> str:
+    # Replace this stand-in with your provider's SDK call.
+    assert prompt == "Email [PERSON_1] at [EMAIL_1]."
+    return "Hi [PERSON_1], following up on the invoice..."
+
+
+safe_model = shield.wrap(call_model, strict=True)
+assert safe_model("Email Jan Nowak at jan.n@example.com.") == (
+    "Hi Jan Nowak, following up on the invoice..."
+)
+```
+
+With `strict=True`, masking warnings raise `ShieldError` before the model is
+called. Restoration warnings raise after the reply arrives. This catches
+reported problems; it cannot catch sensitive information the detectors never
+recognize.
+
+For async calls, structured messages, or tool workflows, use `mask()` and
+`restore()` at the appropriate boundaries and handle their warnings. `wrap()`
+is a synchronous text-in, text-out helper.
+
 ## Warnings
 
 veil reports problems instead of raising:

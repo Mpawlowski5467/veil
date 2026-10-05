@@ -18,7 +18,8 @@ def python_blocks(document):
 
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: path.name)
 def test_document_has_examples(document):
-    assert len(python_blocks(document)) >= 5
+    minimum = 1 if document == README else 5
+    assert len(python_blocks(document)) >= minimum
 
 
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: path.name)
