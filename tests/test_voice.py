@@ -463,9 +463,14 @@ def test_real_offline_speech_decode_transcribe_mask_restore(tmp_path, monkeypatc
         subprocess.run(
             ["/usr/bin/say", "-o", str(path), phrase], check=True, timeout=30
         )
-    elif shutil.which("espeak-ng"):
+    elif shutil.which("flite"):
+        # espeak-ng's formant voice runs "Jane Example" together for tiny.en.
         path = tmp_path / "fictional.wav"
-        subprocess.run(["espeak-ng", "-w", str(path), phrase], check=True, timeout=30)
+        subprocess.run(
+            ["flite", "-voice", "slt", "-t", phrase, "-o", str(path)],
+            check=True,
+            timeout=30,
+        )
     else:
         pytest.skip("native test speech synthesizer unavailable")
     original = path.read_bytes()
