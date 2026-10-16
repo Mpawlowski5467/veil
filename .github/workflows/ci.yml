@@ -40,6 +40,71 @@ jobs:
       - run: uv run mypy --strict src
       - run: uv run pyright src
 
+  optional-local-features:
+    name: Local names, PDF/OCR, and desktop controllers (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.14"]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --extra tray --extra names --extra pdf --extra ocr --extra voice
+      - name: Local NER integration and lifecycle controllers (no provider or downloads)
+        run: >-
+          uv run --extra tray --extra names --extra pdf --extra ocr --extra voice pytest -q
+          tests/test_local_names.py tests/test_desktop.py tests/test_startup.py
+          tests/test_pdf_text.py tests/test_ocr.py tests/test_text_cli.py tests/test_tray_icon.py
+          tests/test_voice.py tests/test_microphone.py
+          tests/test_entities_cli.py tests/test_gateway_settings.py
+          tests/test_service.py -m "not live"
+      - name: Install local Linux OCR engine and test font
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng fonts-dejavu-core
+      - name: Native offline OCR on fictional images and scanned PDFs
+        if: runner.os != 'Windows'
+        run: uv run --extra ocr pytest -q tests/test_ocr.py
+        env:
+          VEIL_NATIVE_OCR: "1"
+      - name: Install fictional speech synthesizer on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y espeak-ng
+      - name: Set up pinned public speech model and test offline transcription
+        if: runner.os != 'Windows'
+        run: |
+          uv run --extra voice veil --data-dir "$VEIL_VOICE_TEST_DATA" voice setup
+          uv run --extra voice pytest -q tests/test_voice.py tests/test_microphone.py
+        env:
+          VEIL_NATIVE_VOICE: "1"
+          VEIL_VOICE_TEST_DATA: ${{ runner.temp }}/veil-voice-ci
+
+  provider-sdk-contracts:
+    name: Provider SDK contracts (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv pip install openai==3.31.0 anthropic==1.15.0
+      - name: Official SDK clients against fictional loopback providers only
+        run: uv run --no-sync pytest -q tests/test_provider_sdks.py tests/test_chat_gateway.py
+        env:
+          VEIL_PROVIDER_SDKS: "1"
+          PYTHONUTF8: "1"
+
   build:
     name: Build and smoke-test the wheel
     runs-on: ubuntu-latest

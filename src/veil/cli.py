@@ -80,12 +80,9 @@ def hook_command(data_dir: Path) -> list[str]:
     runs; the package's own folder is put on the path explicitly, so the
     hooks find it however it was installed.
     """
-    package_folder = str(Path(__file__).resolve().parent.parent)
-    code = (
-        f"import sys; sys.path.insert(0, {package_folder!r}); "
-        f"from {APP}.cli import main; sys.exit(main())"
-    )
-    return [sys.executable, "-I", "-c", code, "--data-dir", str(data_dir), "hook"]
+    from .runtime import command
+
+    return command("cli", "--data-dir", str(data_dir), "hook")
 
 
 def claude_settings(
@@ -517,6 +514,35 @@ def _parser() -> argparse.ArgumentParser:
         help="use temporary mappings for a fresh Claude/Codex launch; remove on exit",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    for operation in ("desktop", "tray"):
+        controls = commands.add_parser(operation, help="open local desktop controls")
+        controls.add_argument(
+            "--config", type=Path, help="Codex setup configuration path"
+        )
+    startup = commands.add_parser("startup", help="manage opt-in user login startup")
+    startup.add_argument("operation", choices=("enable", "disable", "status"))
+    startup.add_argument("--config", type=Path, help="Codex setup configuration path")
+    startup.add_argument("--json", action="store_true")
+    supervisor = commands.add_parser("supervise", help="supervise a local gateway")
+    supervisor.add_argument("--port", type=int, required=True)
+    supervisor.add_argument("--api", choices=("openai", "anthropic"), required=True)
+    supervisor.add_argument("--auth", choices=("chatgpt", "api-key"), required=True)
+    supervisor.add_argument("--cwd", type=Path, required=True)
+    names = commands.add_parser(
+        "names", help="configure optional local name recognition"
+    )
+    names_commands = names.add_subparsers(dest="operation", required=True)
+    enable_names = names_commands.add_parser("enable")
+    enable_names.add_argument("--model", type=Path, required=True)
+    names_commands.add_parser("disable")
+    names_status = names_commands.add_parser("status")
+    names_status.add_argument("--json", action="store_true")
+    voice = commands.add_parser("voice", help="set up offline voice transcription")
+    voice_commands = voice.add_subparsers(dest="operation", required=True)
+    voice_commands.add_parser(
+        "setup", help="download the local English model (about 75 MB)"
+    )
+    voice_commands.add_parser("status", help="check local model installation")
     entities = commands.add_parser("entities", help="manage exact private values")
     entity_commands = entities.add_subparsers(dest="operation", required=True)
     for operation in ("add", "remove"):
@@ -653,7 +679,8 @@ def _parser() -> argparse.ArgumentParser:
         text_command.add_argument(
             "--session", required=True, help="one label per conversation"
         )
-        text_command.add_argument(
+        source = text_command.add_mutually_exclusive_group()
+        source.add_argument(
             "--clipboard", action="store_true", help="read and replace clipboard text"
         )
         if operation == "restore":
@@ -661,6 +688,23 @@ def _parser() -> argparse.ArgumentParser:
                 "--exact", action="store_true", help="restore exact placeholders only"
             )
         else:
+            source.add_argument(
+                "--pdf", type=Path, help="extract and mask a local PDF's text layer"
+            )
+            source.add_argument(
+                "--ocr",
+                type=Path,
+                help="scan and mask a local PDF or image (English OCR)",
+            )
+            source.add_argument(
+                "--audio", type=Path, help="transcribe and mask local audio"
+            )
+            source.add_argument(
+                "--record",
+                type=float,
+                metavar="SECONDS",
+                help="record microphone for 1 to 300 seconds and mask its transcript",
+            )
             text_command.add_argument(
                 "--review",
                 action="store_true",
@@ -743,6 +787,52 @@ def main(argv: Sequence[str] | None = None) -> int:
                 entity_type=options.entity_type,
                 stdin=getattr(options, "stdin", False),
                 json_output=getattr(options, "json", False),
+            )
+        if options.command in {"desktop", "tray"}:
+            from .desktop import run_desktop, run_tray
+
+            run_controls = run_tray if options.command == "tray" else run_desktop
+            return run_controls(options.data_dir, options.config)
+        if options.command == "voice":
+            from .voice_model import model_ready, setup_model
+
+            if options.operation == "setup":
+                print(setup_model(data_dir))
+            else:
+                print(
+                    "Local voice model: "
+                    + ("installed" if model_ready(data_dir) else "not installed")
+                )
+            return 0
+        if options.command == "names":
+            from .names_cli import run_names
+
+            return run_names(
+                options.operation,
+                data_dir=data_dir,
+                model=getattr(options, "model", None),
+                json_output=getattr(options, "json", False),
+            )
+        if options.command == "startup":
+            from .startup import run_startup
+
+            return run_startup(
+                options.operation,
+                data_dir=options.data_dir,
+                config=options.config,
+                json_output=options.json,
+            )
+        if options.command == "supervise":
+            from .startup import supervise
+
+            return supervise(
+                data_dir,
+                {
+                    "port": options.port,
+                    "api": options.api,
+                    "auth": options.auth,
+                    "cwd": str(options.cwd.absolute()),
+                },
             )
         if options.command == "verify":
             from .verification import run_verify
@@ -857,6 +947,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 clipboard=options.clipboard,
                 exact=getattr(options, "exact", False),
                 review=getattr(options, "review", False),
+                pdf=getattr(options, "pdf", None),
+                ocr=getattr(options, "ocr", None),
+                audio=getattr(options, "audio", None),
+                record=getattr(options, "record", None),
             )
         if options.command == "hook":
             return _hook(options.event, data_dir, options.expect_url)
@@ -867,8 +961,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SettingsError as error:
         print(f"{APP}: {error}", file=sys.stderr)
         return 2
+    except ValueError:
+        if options.command not in {"mask", "restore", "supervise"}:
+            raise
+        print(f"{APP}: local detection failed; no output written", file=sys.stderr)
+        return 2
     except OSError:
-        if options.command == "entities":
+        if options.command in {"entities", "names", "voice"}:
             print(
                 f"{APP}: could not access private input or configuration; "
                 "check permissions and available disk space",
@@ -891,6 +990,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "stop",
             "restart",
             "verify",
+            "desktop",
+            "tray",
+            "startup",
+            "supervise",
         }:
             raise
         print(

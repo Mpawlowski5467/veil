@@ -339,6 +339,27 @@ def test_startup_timeout_cleans_up_only_its_new_child(worker, monkeypatch):
     assert "timed out" in service.service_status(directory)["detail"]
 
 
+def test_bundle_startup_allows_first_launch_delay(worker, monkeypatch):
+    from veil import runtime
+
+    directory, _ = worker
+    prefix = runtime.command("gateway")
+    answers = service._gateway_answers
+    ready_after = time.monotonic() + 0.3
+    monkeypatch.setattr(runtime, "bundled", lambda: True)
+    monkeypatch.setattr(runtime, "command", lambda _, *args: [*prefix, *args])
+    monkeypatch.setattr(service, "_TIMEOUT", 0.05)
+    monkeypatch.setattr(
+        service,
+        "_gateway_answers",
+        lambda *args: time.monotonic() >= ready_after and answers(*args),
+    )
+    start(directory)
+    assert service.service_status(directory)["state"] == "running"
+    monkeypatch.setattr(service, "_TIMEOUT", 5)
+    assert service.run_service("stop", data_dir=directory) == 0
+
+
 def test_stop_timeout_preserves_pending_request_without_signals(worker, monkeypatch):
     directory, processes = worker
     start(directory)
@@ -364,6 +385,27 @@ def test_anthropic_background_gateway_uses_api_key_mode(worker):
     assert service.service_status(directory)["state"] == "running"
 
 
+def test_anthropic_selection_survives_restart_with_saved_codex_setup(worker, tmp_path):
+    directory, _ = worker
+    config = tmp_path / "codex" / "config.toml"
+    port = free_port()
+    setup_codex(directory, config, port, "chatgpt")
+    before = config.read_bytes()
+    service.run_service(
+        "start", data_dir=directory, config=config, api="anthropic", port=port
+    )
+    service.run_service("restart", data_dir=directory, config=config)
+    assert service._state(directory)["api"] == "anthropic"
+    assert service._state(directory)["auth"] == "api-key"
+    assert config.read_bytes() == before
+    service.run_service(
+        "restart", data_dir=directory, config=config, api="openai", auth="api-key"
+    )
+    assert service._state(directory)["api"] == "openai"
+    assert service._state(directory)["auth"] == "api-key"
+    assert config.read_bytes() == before
+
+
 def test_status_does_not_modify_service_files(worker):
     directory, _ = worker
     start(directory)
@@ -371,3 +413,20 @@ def test_status_does_not_modify_service_files(worker):
     assert service.service_status(directory)["state"] == "running"
     after = {p.name: p.read_bytes() for p in directory.iterdir() if p.is_file()}
     assert before == after
+
+
+def test_missing_local_name_model_preserves_running_worker(worker):
+    directory, _ = worker
+    initial = start(directory)
+    (directory / "config.json").write_text(
+        json.dumps(
+            {
+                "identity": False,
+                "local_names_model": str(directory / "missing-model"),
+            }
+        )
+    )
+    with pytest.raises(SettingsError, match="local spaCy model"):
+        service.run_service("restart", data_dir=directory)
+    assert service.service_status(directory)["state"] == "running"
+    assert service._state(directory)["instance"] == initial["instance"]

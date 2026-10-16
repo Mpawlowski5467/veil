@@ -295,7 +295,13 @@ def _doctor_checks(
         )
     try:
         settings = load_settings(directory / "config.json")
-        shield = Shield(custom_patterns=settings.patterns, redact_warnings=True)
+        from .detectors.regex import RegexDetector
+        from .gateway.config import name_detector
+
+        shield = Shield(
+            detectors=[RegexDetector(settings.patterns), *name_detector(settings)],
+            redact_warnings=True,
+        )
         for kind, values in settings.entities.items():
             for value in values:
                 shield.add_entity(value, kind)

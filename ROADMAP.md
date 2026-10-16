@@ -6,11 +6,15 @@ that a new user can install, verify, troubleshoot, and remove it without help.
 
 This is an ordered plan, not a release-date commitment. Checked items are
 implemented in this branch; they do not imply a published package or validation
-of every supported client feature. The current package version is 0.6.0b2; this is not a 1.0 release.
+of every supported client feature. The current package version is **1.0.0rc1**, a local candidate; stable 1.0 has not been released.
+
+**Feature freeze:** accept fixes, packaging, documentation, and validation only.
+New providers and other feature additions move past 1.0. Track candidate evidence
+and remaining gates in the [RC checklist](docs/release-candidate.md).
 
 ## Where we are now
 
-**Stage: beta, with external validation still required.** The core workflow is
+**Stage: release-candidate preparation, with external validation still required.** The core workflow is
 implemented; the remaining 1.0 work centers on evidence from real use, privacy
 review, and a dependable release process.
 
@@ -36,10 +40,15 @@ The next sequence is:
    review, and fix release-blocking findings.
 4. Ship 1.0 only when the [release gate](#10-release-gate) is met.
 
-Automatic login startup, local name recognition, and
-additional media/providers are useful extensions. They can remain outside 1.0
-when the supported scope and exclusions are clear. The storage/security decisions
-and validation for the features we do advertise still need to be completed.
+Desktop controls, automatic login startup/recovery, and optional local name
+recognition are now in the 1.0 plan. Their initial implementations are in this
+checkout; platform validation, usable distribution, and independent recognition
+measurements remain release work. Explicit local PDF text import and English OCR
+for scanned PDFs/images and local English voice input are also in the 1.0 plan;
+OpenAI/Anthropic desktop modes and text Chat Completions are also in the 1.0
+checkout. PDF redaction and other provider adapters remain later work.
+The storage/security decisions and validation for advertised features still
+need to be completed.
 
 ## The 1.0 promise
 
@@ -85,8 +94,15 @@ and undoes setup without manually editing TOML or losing unrelated settings.
   and `stop --remove`. Check startup, preserve client settings/mappings, refuse
   occupied ports, and recover from stale state without signalling saved PIDs.
   See [operation, crash recovery, and upgrades](docs/background-gateway.md).
-- [ ] Add automatic login/reboot startup and supervised crash recovery after
-  defining installation/removal behavior for each OS. Windows background
+- [x] Add opt-in user login startup on macOS (launchd) and Linux (systemd), with
+  supervised crash recovery, bounded retries, explicit-stop persistence, and
+  receipt-checked removal. A temporary native macOS launchd check passed; real
+  logout/reboot and native Linux manager journeys remain unvalidated.
+- [x] Add a native `veil desktop` control window and optional `veil tray` menu,
+  sharing existing gateway operations, diagnostics, private registration, model
+  selection, and an in-memory masking preview. See [desktop controls](docs/desktop.md).
+- [ ] Complete keyboard/accessibility, distribution, install/remove, login/reboot,
+  and desktop journeys for each advertised OS. Windows background/startup
   management remains unsupported; the foreground gateway remains available.
 - [x] Provide an opt-in, one-use verification prompt that proves a particular
   client request reached Veil, was masked, and had its reply restored. Evidence
@@ -134,13 +150,43 @@ restart, and troubleshoot without keeping a terminal open or sharing raw request
 - [x] Maintain labeled, fictional test corpora; measure missed values and false
   positives by entity type, format, and language, plus masking latency.
   [Initial 30-document baseline](docs/detection-results.md); broader sampling remains.
-- [ ] Investigate optional local name recognition. Keep it optional and publish
-  its limitations; don't silently send unmasked text to a remote detector.
+- [x] Add optional local name recognition using an explicitly selected local
+  spaCy NER pipeline. No automatic model download or remote classifier; configured
+  load/inference failures refuse processing. See [local names](docs/local-names.md).
+- [ ] Select distributable model/language combinations and independently measure
+  name misses, false positives, code/prose behavior, memory use, and latency.
+  Model-loading and fictional regression tests do not establish detection quality.
+- [x] Add explicit local PDF text import to the desktop preview and saved-session
+  CLI masking, with optional parser dependencies, bounded extraction, and clear
+  scanned-page, encrypted-file, and text-only output limits. See [PDF text import](docs/pdf-text.md).
+- [ ] Validate PDF extraction and review on representative documents, layouts,
+  and supported desktops. Text import does not redact or protect PDF attachments.
+- [x] Add explicit local English OCR for scanned PDFs and images, with optional
+  dependencies, all-page rendering, input/time limits, desktop text review, and
+  saved-session CLI masking. See [local OCR](docs/ocr.md).
+- [ ] Independently measure OCR omissions and transcription errors on representative
+  scans, mixed PDFs, layouts, and advertised platforms. Native Windows OCR remains
+  unvalidated. OCR output does not make the original attachment safe to upload.
+- [x] Add explicit local English voice transcription for audio files and
+  microphone capture, with pinned model setup, offline inference, editable
+  desktop review, timed stop/discard, and saved-session CLI masking. See
+  [local voice](docs/voice.md).
+- [ ] Validate microphone permissions/devices on advertised platforms and
+  independently measure speech omissions, hallucinations, casing, and spoken
+  identifiers. Masking applies to recognized text, not the original audio.
 
 **Exit:** published coverage matches measured behavior. Users understand which
 values need registration and can preview a representative document locally.
 
 ## 4. Real workflow compatibility
+
+- [x] Make OpenAI and Anthropic selectable in desktop controls and add explicit
+  text-only OpenAI Chat Completions alongside Responses/Messages. Local JSON/SSE,
+  session replay, refusal, review, verification, and official SDK contracts are
+  covered. See [provider setup](docs/providers.md).
+- [ ] Complete live API-key validation and representative installed-client
+  journeys for both provider modes; local SDK contracts do not establish account
+  access or model-specific behavior.
 
 - [ ] Test multi-turn conversations, resume, concurrent sessions, file edits,
   restored tool arguments, cancellations, retries, and provider failures.
@@ -191,8 +237,7 @@ refuses them clearly and does not promise their coverage.
 
 ## Later, after the supported text workflows are dependable
 
-Consider a small desktop/menu-bar interface, optional local name recognition,
-document/PDF processing, image/OCR and voice workflows, more provider adapters,
+Consider PDF redaction and broader document processing, expanded OCR/voice languages and voice replies, more provider adapters,
 and team policies. Each expands the privacy boundary and needs its own design
 and validation. A broad browser extension or automatic protection across every
 chat application is a separate project, not a prerequisite for this 1.0.

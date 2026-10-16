@@ -2,8 +2,9 @@
 
 On macOS and Linux, Veil can run its local gateway independently of a terminal.
 This is useful for local Codex desktop tasks. The worker stays running when the
-launching terminal closes. It does **not** start automatically after login or
-reboot, or restart itself after a crash. Windows users can continue using
+launching terminal closes. In the published 0.6.0b2 it does **not** start after
+login or restart itself after a crash. The unreleased checkout adds opt-in
+[login startup and recovery](#automatic-login-startup-unreleased). Windows users can continue using
 `veil gateway` in a terminal; background controls are not supported there yet.
 
 ## Start from Codex setup
@@ -82,7 +83,7 @@ private `codex-provider.toml` fragment, as the foreground gateway does.
   Stop your existing foreground gateway yourself, or choose another port and
   update the client configuration to match. Veil never chooses a different port
   silently.
-- **Crash or reboot:** `status --service` reports the stale running record as
+- **Crash or reboot without login startup:** `status --service` reports the stale running record as
   crashed. Run `veil start` or `veil restart`. A kernel lock, not a saved process
   ID, determines whether the old worker is still alive.
 - **Unresponsive worker:** `stop` places a request for that specific worker. If it
@@ -92,8 +93,9 @@ private `codex-provider.toml` fragment, as the foreground gateway does.
   then run `veil restart` from that environment. The existing worker keeps its
   loaded code until restarted. Keep an editable checkout and its virtual
   environment available while using it as the installed gateway.
-- **Removal:** `veil stop --remove` stops the worker and removes saved lifecycle
-  state. No login/reboot service was installed. Inert lock files remain to keep
+- **Removal:** if enabled, run `veil startup disable` first. `veil stop --remove`
+  stops the worker and removes saved lifecycle state. It does not unregister a
+  login service. Inert lock files remain to keep
   concurrent commands safe. Mappings, secrets, and client configuration are kept.
   Use `veil undo codex` separately to reverse setup and `veil forget` separately
   to remove mappings; stopping the gateway alone leaves Codex pointing at it.
@@ -107,6 +109,54 @@ transcripts have the storage limits documented in the integration guide.
 These controls are covered by real subprocess tests on macOS and Linux CI,
 including detached launch, repeated/concurrent starts, stop/restart, crashes,
 port conflicts, invalid state, and interrupted startup. No model calls are
-needed for these checks. Automatic login startup and supervised crash restart
-remain roadmap work. [Request verification and activity
+needed for these checks. [Request verification and activity
 counts](verification.md) now provide bounded evidence for individual client tests.
+
+## Automatic login startup (unreleased)
+
+Install this checkout into a persistent Python environment, complete setup or
+start a gateway with your intended options, then opt in:
+
+```bash
+veil startup enable
+veil startup status --json
+veil status --service
+veil stop                  # stays stopped, even while the supervisor runs
+veil start                 # resumes; crash recovery is active again
+veil startup disable       # unregisters startup and stops the gateway
+```
+
+Use the same global `--data-dir` and/or `--config PATH` as your gateway. One user
+service is registered per data folder, under a name derived from that folder.
+macOS uses `~/Library/LaunchAgents/org.veil.gateway.<id>.plist`; Linux uses
+`~/.config/systemd/user/org.veil.gateway.<id>.service` and needs a running systemd
+user manager. These start at user login, not before login; no administrator
+service or Linux lingering is installed. Windows startup remains unsupported.
+
+The OS keeps the supervisor running. It checks the existing kernel worker lease,
+starts missing workers with saved port/API/auth/working-folder options, and
+backs off up to 60 seconds after failures or short-lived crashes. It never kills
+a process using a saved PID, silently changes a port, or bypasses masking.
+The supervisor does not currently restart an unresponsive but still alive worker;
+inspect diagnostics and use an explicit restart for that case.
+
+An explicit Stop is remembered in the private `service-desired.json` file,
+including across logins and supervisor restarts. `start`, `restart`, or explicitly
+enabling startup requests running again. `stop --remove` keeps this stop intent;
+only `startup disable` removes the login registration. Disabling startup also
+stops the gateway; client settings, mappings, and registrations remain.
+
+The private `startup.json` receipt records the exact registration hash. Removal
+refuses changed files rather than deleting later user edits. Registration errors
+retain recovery files; fix the user service manager and retry `startup disable`.
+The pinned interpreter and checkout must remain available. Before moving or
+removing an environment, disable startup there, install the replacement, and
+enable it from the replacement. No credentials are copied into service files,
+and worker output is discarded. Login services do not inherit your interactive
+shell environment.
+
+Real subprocess tests cover crash recovery and explicit stop/resume. A temporary
+native macOS launchd bootstrap, ready gateway, intentional stop, and unload passed
+locally. Actual logout/reboot, native Linux manager, and new-user journeys remain
+release validation work. Enabling startup is separate from starting the menu icon;
+run `veil tray` explicitly for menu-bar controls.

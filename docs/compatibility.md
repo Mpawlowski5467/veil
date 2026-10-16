@@ -19,6 +19,9 @@ real client journey. See [beta gates](release-checklist.md).
 | Wheel + desktop extra, skill install/remove, setup/undo | Tested | Tested | Tested |
 | Clipboard text, Unicode, empty text | Native `pbcopy`/`pbpaste` tested | Native X11 `xclip` tested; Wayland not yet validated | Native Windows PowerShell tested |
 | Detached gateway `start`/`stop`/`restart` | Supported and tested | Supported and tested | Unsupported; use foreground `veil gateway` |
+| Unreleased desktop controls / tray | Window and fictional preview checked locally; full menu/accessibility journey pending | Implemented; native UI journey pending | Local controls implemented; gateway lifecycle remains unsupported; native UI pending |
+| Unreleased login startup / supervision | Temporary native launchd startup/stop/unload checked; actual login/reboot pending | systemd descriptor/control tests; native manager/login pending | Unsupported |
+| Unreleased local name recognition | Fictional integration and real spaCy pipeline round trip checked locally | Cross-platform tests added; native optional-runtime validation pending | Cross-platform tests added; native optional-runtime validation pending |
 | Full installed-client/UI beta journey | Still required | Still required | Still required, including an ordinary non-administrative account |
 
 The workflow source is [.github/workflows/ci.yml](../.github/workflows/ci.yml).
@@ -65,6 +68,7 @@ behavior, not real installed clients, desktop UI, or external beta participants.
 | Codex CLI, ChatGPT sign-in | 0.160.0; live fictional email round trip with an outbound-body assertion passed on 2026-10-03 using `gpt-6-luna` | Experimental Responses adapter; text and supported local tools. |
 | Codex app-server runtime | 0.160.0 executable; local scripted fixture, three live `gpt-6-luna` verification turns, and the six-turn continuity exercise below passed on 2026-10-03 | Exercises the runtime used by rich clients. This is not a manual desktop UI test or proof that every installed app build matches this executable. |
 | OpenAI API-key route | Local request/response, header, error, and streaming regressions | **Live validation pending**; no API key was available for the readiness run. |
+| Unreleased OpenAI text Chat Completions / Anthropic SDK clients | OpenAI SDK 3.31.0 and Anthropic SDK 1.15.0 sync/async/streaming against fictional loopback providers | Text chat contracts only; see [provider scope](providers.md). Live API-key account checks remain pending. |
 | Python callable integration | Clean installed-wheel round trip | Caller chooses the provider; async/structured flows require explicit mask/restore boundaries. |
 | Ordinary ChatGPT app/browser or other providers | Local clipboard/stdin workflows | Explicit copied text only; no automatic interception or attachment protection. |
 

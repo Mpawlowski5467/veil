@@ -2,6 +2,11 @@
 
 Veil has a Responses gateway, a managed Codex CLI launcher, and configuration for local Codex desktop tasks. The ordinary ChatGPT chat interface uses a separate [explicit text/clipboard workflow](chat-workflow.md).
 
+The unreleased checkout also serves **text-only Chat Completions** in
+`--api openai --auth api-key` mode. It shares the existing gateway and mappings;
+Codex continues using Responses. See [provider setup](providers.md) for API-client
+examples and explicit feature refusals.
+
 | Interface | Implemented and verified |
 | --- | --- |
 | Codex CLI | Managed launcher; local fixtures and a live round trip using ChatGPT login passed. |

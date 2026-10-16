@@ -18,7 +18,17 @@ Clipboard mode uses macOS's `pbpaste`/`pbcopy`, Windows PowerShell, or Linux `wl
 
 ## Files and pipelines
 
-Without `--clipboard`, the commands read stdin and write stdout, preserving trailing newlines:
+The unreleased [PDF text importer](pdf-text.md) also accepts
+`veil mask --session chatgpt-notes --pdf document.pdf`. It outputs masked plain
+text and preserves the source PDF. For scanned pages or images, use the
+unreleased [local OCR workflow](ocr.md):
+`veil mask --session chatgpt-notes --ocr scan.pdf`. Review recognized text and the
+masked output before sharing. The original PDF/image does not become safe to attach.
+The unreleased [voice importer](voice.md) accepts `--audio recording.m4a` or
+`--record 15` after explicit local model setup. Correct speech-recognition errors
+in the desktop preview and check masked text before sending it to a chat.
+
+Without `--clipboard`, `--pdf`, `--ocr`, `--audio`, or `--record`, the commands read stdin and write stdout, preserving trailing newlines:
 
 ```bash
 veil mask --session chatgpt-notes < prompt.txt > masked-prompt.txt

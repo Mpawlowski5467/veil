@@ -2,6 +2,113 @@
 
 ## Unreleased
 
+### 1.0.0rc1 — feature freeze and local macOS candidate
+
+- Freeze the existing desktop, startup, name recognition, PDF, OCR, local voice,
+  and OpenAI/Anthropic scope. Only fixes, packaging, documentation, and release
+  validation are accepted until the 1.0 decision.
+- Add an Apple Silicon standalone app build carrying Python, Tk, optional
+  processing libraries, licenses, and a dependency/build manifest. Fixed helper
+  entry points keep background and document workers independent of a system
+  Python or checkout. Models remain explicit downloads/selections.
+- Add relocated-app checks with fictional data, clean installation and
+  reinstall evidence, and a drag-to-Applications disk-image recipe. The local
+  candidate is ad-hoc signed; public signing/notarization and human release
+  gates remain open. See [candidate evidence](docs/release-candidate.md).
+
+### Desktop presentation and stability
+
+- Simplify the desktop layout with rounded cards, quieter navigation, a shared
+  import menu, separate input/result panels, native menus, and fixed message
+  space. Add brief page transitions, smoother logo progress, and a Reduce motion
+  option for the current window. Preserve each page's scroll position.
+- Keep routine status reads from disabling controls or discarding clicks, skip
+  unchanged redraws, and prevent stale reads from resetting active actions or
+  recording indicators. Update scroll limits after nested layouts settle and
+  cancel motion/layout callbacks on close. Editing preview source clears stale
+  masked output. Native macOS regression checks cover these behaviors.
+
+### OpenAI and Anthropic provider controls — 1.0 scope
+
+- Desktop Settings adds explicit OpenAI API-key, Codex ChatGPT sign-in, and
+  Anthropic provider modes with Apply & restart and a local client URL. It uses
+  existing lifecycle controls, preserves client configuration, and requires login
+  startup to be disabled before changing modes. Saved Anthropic mode survives
+  restart even when Codex setup exists.
+- OpenAI API-key mode adds text-only `/v1/chat/completions`, with JSON/SSE
+  restoration, masked history replay, refusal text, local secret review and
+  verification, private-header filtering, bounded reply parsing, and forced
+  storage off. Unsupported tools/media/structured output/unknown fields are
+  refused. Existing Responses and Anthropic Messages adapters remain available.
+  Official SDK contract checks use fictional loopback providers; live API-key
+  validation remains pending. See [provider setup](docs/providers.md).
+
+### Local voice input — 1.0 scope
+
+- Optional `[voice]` adds **Import audio…**, **Record voice…**, **Stop & transcribe**,
+  and **Discard** to the desktop preview, plus CLI `mask --audio FILE` and
+  `mask --record SECONDS`. One-time Settings or `veil voice setup` downloads a
+  pinned, hash-checked English tiny.en model. Transcription then runs offline
+  in a disposable CPU worker. Audio files remain unchanged; microphone capture
+  stays in memory and stops on discard, window closure, or the five-minute cap.
+  File/duration/text/time limits and interrupted capture refuse partial results.
+  Editable review and reminders address recognition errors; existing masking
+  and saved-session reply restoration apply to the transcript. This does not
+  redact audio or intercept live voice chats. Real microphone journeys and
+  independent quality evaluation remain release work.
+
+### Local scanned PDF and image OCR — 1.0 scope
+
+- Optional `[ocr]` adds **Scan PDF / image…** in the desktop preview and
+  `veil mask --session LABEL --ocr FILE`. English OCR runs locally through Apple
+  Vision on macOS or an installed Tesseract engine on Linux/Windows. Every PDF
+  page is rendered; PNG, JPEG, TIFF, WebP, and BMP images are supported, including
+  orientation metadata and multipage TIFFs. Disposable workers enforce file,
+  page, pixel, text, and time limits. Review reminders and unread-page counts
+  remain visible. Sources are unchanged; output is masked plain text with the
+  existing saved-session restoration workflow. No visual redaction or automatic
+  gateway attachment processing is added. Native macOS engine checks pass;
+  Windows OCR and independent quality evaluation remain open.
+
+### Local PDF text import — 1.0 scope
+
+- Optional `[pdf]` adds local selectable-text extraction through **Import PDF…**
+  in the desktop preview and `veil mask --session LABEL --pdf FILE`. CLI output
+  uses the existing configured rules and persistent mappings for reply restoration.
+  Extraction runs in a disposable process with a timeout and input/page/text
+  limits. Encrypted, malformed, and textless files are refused; pages without text
+  are reported. Sources are unchanged. Output is plain text, with no OCR or PDF
+  redaction; direct gateway attachments do not invoke the importer.
+
+### Desktop controls, startup, and local names — 1.0 scope
+
+- `veil desktop` opens a native control window for gateway start/stop/restart,
+  diagnostics, opt-in login startup, private registration, local model selection,
+  and an in-memory masking preview. The optional `[tray]` extra adds `veil tray`
+  for menu-bar/system-tray controls. Neither opening nor closing controls changes
+  client routing. Native macOS preview was exercised with fictional text;
+  accessibility, distribution, and other native desktop journeys remain open.
+- Desktop controls now use the project logo, an animated logo loader during
+  actions, a light layout with teal accents, and separate Overview, Preview, and
+  Settings views. Smaller windows wrap and scroll; a fictional preview example,
+  state-aware buttons, inline errors, and keyboard focus indicators aid testing.
+  Transparent logo artwork, a native text wordmark, and a separate high-resolution
+  rounded Dock icon replace the clipped logo and small opaque icon crop.
+  The menu-bar icon now shares the ribbon artwork and adapts to macOS appearance
+  while preserving its high-resolution backing; other system trays use the teal icon.
+- `veil startup enable/disable/status` manages receipt-checked user launchd or
+  systemd services. A supervisor recovers crashed gateways, backs off after
+  failures, and honors explicit stops across supervisor restarts and logins.
+  Temporary native launchd startup/stop/unload and real worker crash recovery
+  passed locally. Native Linux manager and actual login/reboot checks remain open;
+  Windows background/startup management is still unsupported.
+- Optional `[names]` and `veil names enable --model PATH` load a trusted local
+  spaCy NER pipeline for person, organization, and location recognition. Model
+  loading is shared across conversations, inference is serialized, exact Unicode
+  spans restore, and configured failures refuse processing. Base installs do not
+  import spaCy. No model is bundled or downloaded automatically; independent
+  language/quality/performance measurements remain required before broad claims.
+
 ### Beta guide
 
 - The tester pack now separates a short first test from optional review/recovery exercises, includes complete Windows commands, and provides a shorter feedback worksheet and invitation. Local checks print readable results and stop guidance after failure. Sharing instructions exclude the used workspace and private data. The revised guide still installs the published 0.6.0b2 wheel; published release assets are unchanged.

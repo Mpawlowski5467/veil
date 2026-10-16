@@ -1,6 +1,8 @@
 # Beta and 1.0 release checklist
 
-The 0.6.0b2 checkout is a beta candidate under evaluation. It is not Veil 1.0.
+The checkout is frozen as **1.0.0rc1**, a local release candidate, not stable 1.0.
+See the [RC evidence and open gates](release-candidate.md) and
+[standalone Mac installation/build guide](macos-app.md).
 All three target platforms — macOS, Linux, and native Windows — require evidence.
 Windows background service management is explicitly outside the current scope.
 
@@ -103,6 +105,14 @@ never rename a tag to silently replace an artifact. A registry publish workflow
 is not enabled by this preparation.
 
 ## Required human gates before 1.0
+
+- [ ] Desktop/menu-bar packaging, accessibility, scaling, keyboard controls, and
+  native install/remove journeys completed for every advertised desktop.
+- [ ] User login/reboot, crash recovery, explicit stop/resume, and registration
+  removal checked with native launchd/systemd managers. Keep Windows lifecycle
+  excluded until implemented and validated.
+- [ ] Select supported local NER models/languages, review licensing and delivery,
+  and publish independent name recall/false-positive and latency/memory results.
 
 - [ ] New-user beta journeys completed on macOS, Linux, and native Windows.
 - [ ] Live OpenAI API-key mode and advertised client/platform combinations tested.

@@ -13,6 +13,7 @@ Example:
 from .detectors import (
     Detector,
     LiteralPlaceholderDetector,
+    LocalNameDetector,
     ManualDetector,
     RegexDetector,
 )
@@ -29,11 +30,12 @@ from .types import (
 )
 from .vault import MemoryVault, SQLiteVault, Vault
 
-__version__ = "0.6.0b2"
+__version__ = "1.0.0rc1"
 
 __all__ = [
     "Detector",
     "LiteralPlaceholderDetector",
+    "LocalNameDetector",
     "ManualDetector",
     "MaskResult",
     "MaskedEntity",

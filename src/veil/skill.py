@@ -14,6 +14,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from .gateway import SettingsError
+from .runtime import bundled, command
 
 _RECEIPT = ".veil-skill.json"
 _FILES = {"SKILL.md", "runtime.md"}
@@ -31,7 +32,7 @@ def skill_directory(client: str, skills_dir: Path | None = None) -> Path:
 
 
 def _bundle() -> dict[str, bytes]:
-    argv = [sys.executable, "-I", "-m", "veil"]
+    argv = command("cli") if bundled() else [sys.executable, "-I", "-m", "veil"]
     runtime = (
         "# Installed Veil runtime\n\n"
         "Use this CLI argument array (JSON) with the host's shell quoting:\n\n"

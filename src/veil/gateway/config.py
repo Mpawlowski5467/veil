@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import _windows
+from ..detectors.base import Detector
 from ..detectors.regex import RegexDetector
 from ..placeholders import validate_entity_type
 
@@ -44,6 +45,7 @@ class Settings:
         allow_mcp_tools: MCP tools that may receive real values.
         secret_review: Hold requests with uncertain secret candidates for local
             human review. Off by default; never calls a remote classifier.
+        local_names_model: Optional absolute path to a local spaCy NER pipeline.
     """
 
     entities: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
@@ -53,6 +55,7 @@ class Settings:
     note: bool = True
     allow_mcp_tools: tuple[str, ...] = ()
     secret_review: bool = False
+    local_names_model: str | None = None
 
 
 _KEYS = {
@@ -64,6 +67,7 @@ _KEYS = {
     "note",
     "allow_mcp_tools",
     "secret_review",
+    "local_names_model",
 }
 
 
@@ -149,6 +153,11 @@ def parse_settings(text: str, path: Path) -> Settings:
     if not 1 <= retention <= 3650:
         raise fail("retention_days", "must be from 1 to 3650")
     tools = raw.get("allow_mcp_tools", [])
+    model = raw.get("local_names_model")
+    if model is not None and (
+        not isinstance(model, str) or not model or not Path(model).is_absolute()
+    ):
+        raise fail("local_names_model", "must be null or an absolute local model path")
     if not isinstance(tools, list) or not all(
         isinstance(t, str) and t.startswith("mcp__") for t in tools
     ):
@@ -163,7 +172,20 @@ def parse_settings(text: str, path: Path) -> Settings:
         note=note,
         allow_mcp_tools=tuple(tools),
         secret_review=review,
+        local_names_model=model,
     )
+
+
+def name_detector(settings: Settings) -> list[Detector]:
+    """Load optional local recognition, failing closed when it is configured."""
+    if settings.local_names_model is None:
+        return []
+    from ..detectors.names import LocalNameDetector
+
+    try:
+        return [LocalNameDetector(Path(settings.local_names_model))]
+    except ValueError as error:
+        raise SettingsError(str(error)) from None
 
 
 def _mapping(raw: dict[str, Any], key: str, fail: Any) -> dict[str, Any]:

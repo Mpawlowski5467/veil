@@ -6,7 +6,8 @@ must stay separate from public issue attachments and source control.
 ## Upgrade
 
 1. Finish work, exit all Veil-launched clients, and stop a background gateway
-   with `veil stop`. A foreground gateway stops with Ctrl-C.
+   with `veil stop`. If moving/removing an environment with the unreleased login
+   service, run `veil startup disable` first. A foreground gateway stops with Ctrl-C.
 2. With all writers stopped, back up the **whole** selected data folder and the
    Codex configuration/setup receipt/backups. Preserve private permissions or
    Windows ACLs. Include SQLite sidecars if present; do not copy only a database
@@ -53,6 +54,12 @@ The 0.6 beta configuration can contain `secret_review`, which releases before
 0.6.0b1 do not accept. Restore the old configuration from the private backup as well as
 the old runtime; do not expect new commands or detection rules after rollback.
 Mapping compatibility does not make an older detector equivalent to the beta.
+
+The unreleased `local_names_model` setting is also rejected by older releases,
+including 0.6.0b2, even when null. Restore the previous configuration (or remove
+that key from a private backup) before rolling back. Disable login startup from
+its original environment before removing that environment; re-enable it from
+the intended replacement only after its checks pass.
 
 Stop every writer first. Restore the complete private backup into its original
 folder, reinstall the previous wheel, reinstall the matching skill, and relaunch.

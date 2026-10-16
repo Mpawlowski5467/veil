@@ -10,7 +10,7 @@ Veil runs on your computer. It replaces detected values with placeholders such a
 `[EMAIL_1]`, then restores the originals in the model's response. Use it with
 Claude Code, Codex, or your own Python integration.
 
-**[0.6.0b2 · Beta](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2) · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
+**1.0.0rc1 · Unreleased candidate · Python 3.10+ · Dependency-free base library · [MIT](LICENSE)**
 
 [Try the beta](beta/README.md) · [Python quickstart](#use-veil-in-python) · [What gets masked](#what-veil-detects) · [Limits](#understand-the-boundaries) · [Guides](#guides)
 
@@ -18,9 +18,21 @@ Claude Code, Codex, or your own Python integration.
 > check takes about 10 minutes and needs no AI account or API key. Use the
 > fictional examples first: Veil can miss private values, and names need registration.
 
-The published release is **0.6.0b2**. This repository's `main` branch also contains
-[unreleased changes](CHANGELOG.md#unreleased); those changes are not in the
-published wheel or release ZIP.
+The published release remains **[0.6.0b2](https://github.com/Mpawlowski5467/veil/releases/tag/v0.6.0b2)**.
+This checkout is feature-frozen as **1.0.0rc1**: fixes, packaging, and validation
+continue, while new features wait until after 1.0. The [candidate changes](CHANGELOG.md#unreleased)
+are not in the published beta wheel or release ZIP.
+
+The candidate includes [desktop/menu-bar controls](docs/desktop.md), opt-in
+[login startup and recovery](docs/background-gateway.md#automatic-login-startup-unreleased),
+[local name recognition](docs/local-names.md), [PDF text import](docs/pdf-text.md),
+[scanned PDF/image OCR](docs/ocr.md), [local voice input](docs/voice.md), and
+[OpenAI/Anthropic provider controls](docs/providers.md).
+
+For the standalone Apple Silicon Mac app, follow the [build and installation guide](docs/macos-app.md).
+Python, Tk, OCR, and voice libraries are bundled; voice and name models require
+separate setup. The local candidate is ad-hoc signed and **not Apple-notarized**;
+there is no public RC download yet. See the [test results and remaining release checks](docs/release-candidate.md).
 
 ## Try Veil
 
@@ -70,11 +82,16 @@ Commands below assume Veil is installed and available in your terminal. The
 
 | You use | Start here | Scope |
 | --- | --- | --- |
+| Native desktop / menu bar (RC) | [Desktop controls](docs/desktop.md) · [Standalone Mac app](docs/macos-app.md) | Local gateway controls, settings, and a masking preview. Client routing remains explicit. |
 | Claude Code | `veil claude` · [Guide](docs/claude-code.md) | Gateway for the newly launched terminal session. |
 | Codex CLI | `veil codex` · [Guide](docs/openai-integration.md) | Experimental gateway; ChatGPT sign-in by default, with optional API-key mode. |
 | Codex desktop | [Setup and recovery](docs/openai-integration.md#codex-desktop-setup-and-recovery) | Experimental; restart Codex and open a fresh local task after setup. |
 | Python or another AI provider | [Quickstart below](#use-veil-in-python) | You control which text is masked before sending and restored afterward. |
 | Ordinary ChatGPT or browser chats | [File and clipboard workflow](docs/chat-workflow.md) | Explicitly mask copied text; no automatic interception. |
+| Local PDF text (unreleased) | [PDF import](docs/pdf-text.md) | Import selectable text into the desktop preview or mask it with a saved CLI session. |
+| Scanned PDFs and images (unreleased) | [Local OCR](docs/ocr.md) | Recognize English text locally, review it, and mask it in the preview or CLI. |
+| Voice notes (unreleased) | [Local voice](docs/voice.md) | Import audio or record the microphone, transcribe English locally, then review and mask the text. |
+| OpenAI / Anthropic API clients (unreleased additions) | [Provider setup](docs/providers.md) | Desktop provider modes, OpenAI text Chat Completions/Responses, and Anthropic Messages. |
 
 ## Start with the Veil skill
 
@@ -222,17 +239,26 @@ Use fictional examples in [beta feedback](https://github.com/Mpawlowski5467/veil
 | Topic | Guide |
 | --- | --- |
 | Getting started | [Beta test](beta/README.md) · [Five-minute demo](docs/first-five-minutes.md) · [Local preview](docs/local-preview.md) |
+| Desktop candidate | [Desktop/menu bar](docs/desktop.md) · [Mac app](docs/macos-app.md) · [Startup and recovery](docs/background-gateway.md#automatic-login-startup-unreleased) |
 | Integrations | [Claude Code](docs/claude-code.md) · [Codex](docs/openai-integration.md) · [Assistant skill](docs/assistant-skills.md) |
+| Local imports (RC) | [PDF text](docs/pdf-text.md) · [OCR](docs/ocr.md) · [Voice](docs/voice.md) |
 | Everyday use | [Files and clipboard](docs/chat-workflow.md) · [Verification](docs/verification.md) · [Upgrade and recovery](docs/upgrading.md) |
-| Configuration | [Private values](docs/entities.md) · [Settings and storage](docs/configuration.md) · [Secret review](docs/secret-review.md) |
+| Configuration | [Private values](docs/entities.md) · [Local names](docs/local-names.md) · [Providers](docs/providers.md) · [Settings and storage](docs/configuration.md) · [Secret review](docs/secret-review.md) |
 | Evidence and limits | [Compatibility](docs/compatibility.md) · [Detection baseline](docs/detection-results.md) · [Workflow evaluation](docs/leak-evaluation.md) · [Threat model](docs/threat-model.md) |
 
-## Beta status
+## Release candidate status
 
-Veil is ready for external beta testing. The road to 1.0 still includes new-user
-journeys across macOS, Linux, and Windows, live API-key validation, long-session
-and desktop UI checks, and independent security review. See the
-[release checklist](docs/release-checklist.md) and [roadmap](ROADMAP.md#10-release-gate).
+Local checks on Apple Silicon macOS 26.5.1 passed **8,006 non-live tests** and
+**47 native desktop/menu-bar checks**, plus standalone clean install/reinstall,
+PDF/OCR, offline voice-file processing, and upgrade/rollback checks.
+**Six real launchd checks** cover gateway startup, crash recovery, duplicate
+prevention, explicit stop/resume, and removal with mappings preserved.
+
+Real microphone capture and logout/reboot/login are still pending. Stable 1.0
+also requires Apple signing/notarization, live provider/client validation,
+accessibility and longer desktop journeys, new-user testing across advertised
+platforms, and independent security review. See the [RC evidence](docs/release-candidate.md),
+[release checklist](docs/release-checklist.md), and [roadmap](ROADMAP.md#10-release-gate).
 
 Veil was tested with Claude Code 2.1.283. This is the full request-census baseline;
 [compatibility notes](docs/compatibility.md) record additional client checks.

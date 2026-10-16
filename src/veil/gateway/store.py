@@ -20,7 +20,8 @@ from ..placeholders import placeholder_type
 from ..secret_review import REVIEW_TYPES
 from ..shield import Shield
 from ..vault.sqlite import SQLiteVault
-from .config import Settings
+from .chat import ChatRequestMasker
+from .config import Settings, name_detector
 from .ledger import canonical, seen_digest
 from .openai_request import ResponsesRequestMasker
 from .request import DEFAULT_NOTE, RequestMasker
@@ -199,11 +200,14 @@ class SQLiteLedger:
 def literal_types(settings: Settings, identity: Mapping[str, str]) -> set[str]:
     """The types whose placeholder-shaped text is masked as literal text."""
     detector = RegexDetector(settings.patterns)
+    from ..detectors.names import NAME_TYPES
+
     return {
         *detector.entity_types,
         *REVIEW_TYPES,
         *settings.entities,
         *identity.values(),
+        *(NAME_TYPES if settings.local_names_model else set()),
     }
 
 
@@ -227,6 +231,7 @@ def shield_factory(
     conversation always masks the same text the same way.
     """
     types = literal_types(settings, identity)
+    names = name_detector(settings)
 
     def make(session_id: str) -> Shield:
         vault = SQLiteVault(vault_path, session=session_id)
@@ -235,7 +240,7 @@ def shield_factory(
         used = {placeholder_type(p) for p, _ in vault.items()}
         literal = LiteralPlaceholderDetector(types | {t for t in used if t})
         shield = Shield(
-            detectors=[literal, RegexDetector(settings.patterns)],
+            detectors=[literal, RegexDetector(settings.patterns), *names],
             vault=vault,
             redact_warnings=True,
         )
@@ -286,7 +291,20 @@ def open_sessions(
             registered=registered,
             secret_review=settings.secret_review,
         )
-        return Session(shield, session_ledger, masker)
+        return Session(
+            shield,
+            session_ledger,
+            masker,
+            chat_masker=ChatRequestMasker(
+                shield,
+                session_ledger,
+                note=note,
+                registered=registered,
+                secret_review=settings.secret_review,
+            )
+            if api == "openai"
+            else None,
+        )
 
     make_shield = shield_factory(settings, vault_path, identity)
     return Sessions(make_session=make_session)

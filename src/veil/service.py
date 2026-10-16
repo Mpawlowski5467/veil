@@ -45,6 +45,7 @@ _STATE = "service.json"
 _LEASE = "service-runtime.lock"
 _COMMAND = "service-command.lock"
 _STOP = "service-stop.json"
+_DESIRED = "service-desired.json"
 _TIMEOUT = 10.0
 _ERRORS = {
     "port_in_use": "Gateway port already in use; no existing process was stopped.",
@@ -280,7 +281,9 @@ def _options(
         "auth": "chatgpt",
         "cwd": str(Path.cwd()),
     }
-    if api != "anthropic":
+    if api != "anthropic" and (
+        api is not None or previous is None or previous["api"] != "anthropic"
+    ):
         target = config_path(config)
         receipt = read_receipt(target)
         if config is not None or (receipt and Path(receipt["data_dir"]) == directory):
@@ -343,7 +346,9 @@ def _options(
         raise SettingsError("--auth chatgpt requires --api openai")
     if not Path(result["cwd"]).is_dir():
         raise SettingsError("the saved working folder is missing; select --cwd PATH")
-    load_settings(directory / "config.json")
+    from .gateway.config import name_detector
+
+    name_detector(load_settings(directory / "config.json"))
     _secret(directory)
     return result
 
@@ -405,22 +410,11 @@ def _start_locked(directory: Path, options: dict[str, Any]) -> bool:
             "error": None,
         }
         _write(directory / _STATE, state)
-        package = str(Path(__file__).resolve().parent.parent)
-        code = (
-            f"import sys; sys.path.insert(0, {package!r}); "
-            "from veil.service import daemon_main; sys.exit(daemon_main())"
-        )
+        from .runtime import bundled, command
+
         try:
             process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-I",
-                    "-c",
-                    code,
-                    str(directory),
-                    instance,
-                    str(lease),
-                ],
+                command("gateway", str(directory), instance, str(lease)),
                 cwd=options["cwd"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -436,7 +430,10 @@ def _start_locked(directory: Path, options: dict[str, Any]) -> bool:
         # adopted by the OS when the CLI exits; no Popen object is abandoned.
         threading.Thread(target=process.wait, daemon=True).start()
         try:
-            deadline = time.monotonic() + _TIMEOUT
+            # A newly relocated macOS bundle can incur first-launch validation
+            # before its helper reaches Python. Keep that wait bounded while
+            # allowing more time than an already installed interpreter needs.
+            deadline = time.monotonic() + (30.0 if bundled() else _TIMEOUT)
             while process.poll() is None and time.monotonic() < deadline:
                 current = _state(directory)
                 if current and current["instance"] == instance:
@@ -495,6 +492,7 @@ def run_service(
     try:
         with _lock(directory / _COMMAND):
             if operation == "stop":
+                _write(directory / _DESIRED, {"running": False})
                 _stop_locked(directory, remove=remove)
                 print(
                     "Veil background gateway stopped."
@@ -504,6 +502,7 @@ def run_service(
             options = _options(
                 directory, _state(directory), config, port, api, auth, cwd
             )
+            _write(directory / _DESIRED, {"running": True})
             if operation == "restart":
                 _stop_locked(directory)
             started = _start_locked(directory, options)

@@ -4,6 +4,13 @@ Run these commands from the repository root with Python 3.10 or newer and `uv`.
 
 ## Setup and local checks
 
+Provider contracts never need an account or key. After normal setup, install the
+SDK test versions with `uv pip install openai==3.31.0 anthropic==1.15.0`, then run
+`VEIL_PROVIDER_SDKS=1 uv run --no-sync pytest tests/test_provider_sdks.py tests/test_chat_gateway.py`.
+They send fictional credentials and text only to loopback fake providers. The
+dedicated CI job repeats these contracts on macOS/Linux/Windows, Python 3.10/3.14;
+the job definition is not evidence of a completed hosted run.
+
 ```bash
 uv sync --locked
 uv run pytest -m "not live"
@@ -17,6 +24,47 @@ The test command excludes live provider tests. It covers the README and Python
 guide examples, masking and restoration, streaming, overlaps, gateway requests
 against local fixtures, and randomized inputs. It makes no model calls.
 Dependency installation may download packages.
+
+Unreleased desktop, tray, and local name recognition development:
+
+```bash
+uv sync --locked --extra tray --extra names --extra pdf --extra ocr --extra voice
+uv run --extra tray --extra names --extra pdf --extra ocr --extra voice pytest tests/test_local_names.py tests/test_desktop.py tests/test_startup.py tests/test_pdf_text.py tests/test_ocr.py tests/test_voice.py tests/test_microphone.py
+uv run --extra tray --extra names veil desktop
+```
+
+On a graphical desktop, run the native event-loop checks explicitly:
+
+```bash
+VEIL_NATIVE_UI=1 uv run --extra desktop pytest tests/test_desktop_ui.py
+```
+
+These open Tk windows briefly and use disposable data folders. They cover the
+logo loader, background action completion/close, errors, and view focus behavior;
+they do not enable login startup or change client routing.
+PDF fixtures are fictional documents generated locally by the optional parser.
+They exercise extraction, refusal boundaries, and saved-session restoration
+without a provider call. Native PDF picker tests use controlled local selections.
+For real local OCR checks, install the [OCR dependencies and engine](ocr.md), then
+run `VEIL_NATIVE_OCR=1 uv run --extra ocr pytest tests/test_ocr.py`. These generate
+fictional images, scanned PDFs, and multipage TIFFs and verify recognition,
+masking, unchanged originals, and restoration. No provider or model download is
+used during recognition. Linux native CI installs Tesseract and English data;
+Windows runs parser and adapter checks without claiming native OCR validation.
+Voice unit tests use fictional audio, fake model assets, and simulated capture
+devices; no microphone is opened. For a real local model check, explicitly run
+`veil --data-dir /tmp/veil-voice-test voice setup`, then
+`VEIL_NATIVE_VOICE=1 VEIL_VOICE_TEST_DATA=/tmp/veil-voice-test uv run --extra voice pytest tests/test_voice.py`.
+This synthesizes a fictional file using macOS `say` or Linux `espeak-ng`, then
+transcribes it offline. The setup step downloads public model files. Native UI
+voice tests simulate microphones and cover stop/discard/close races; real device
+permissions remain a separate manual journey.
+
+The optional real-spaCy test trains a tiny fictional pipeline locally and makes
+no model download or provider call. It checks integration, not detection quality.
+Startup tests use temporary registrations and stub OS manager calls; the real
+supervisor test binds loopback ports and cleans up its worker. Native OS manager
+and desktop GUI checks are separate from these controller/descriptor tests.
 
 Live tests are skipped by default unless their opt-in environment variables are
 set. Use `-m "not live"` for routine development, even if your shell has live-test

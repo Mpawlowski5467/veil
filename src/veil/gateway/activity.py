@@ -48,7 +48,11 @@ def probe_prompt(token: str) -> str:
 def _user_text(request: Any, api: str) -> str:
     if not isinstance(request, dict):
         return ""
-    messages = request.get("input" if api == "openai" else "messages")
+    messages = (
+        request.get("input", request.get("messages"))
+        if api == "openai"
+        else request.get("messages")
+    )
     if api == "openai" and isinstance(messages, str):
         return messages
     if not isinstance(messages, list) or not messages:

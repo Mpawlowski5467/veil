@@ -9,8 +9,9 @@ import stat
 import sys
 import tempfile
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .gateway.config import SettingsError, parse_settings, prepare_data_dir
 from .placeholders import validate_entity_type
@@ -126,7 +127,8 @@ def _write(path: Path, text: str, original: str | None) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def _edit(data_dir: Path, operation: str, entity_type: str, value: str) -> bool:
+def edit_config(data_dir: Path, change: Callable[[dict[str, Any]], bool]) -> bool:
+    """Apply one validated private settings edit under the shared edit lock."""
     prepare_data_dir(data_dir)
     path = data_dir / "config.json"
     lock = data_dir / ".veil-entities.lock"
@@ -141,6 +143,20 @@ def _edit(data_dir: Path, operation: str, entity_type: str, value: str) -> bool:
         os.close(fd)
         original = _read(path)
         raw = json.loads(original) if original is not None else {}
+        if not change(raw):
+            return False
+        text = json.dumps(raw, indent=2, ensure_ascii=True) + "\n"
+        if len(text.encode("utf-8")) > _MAX_CONFIG:
+            raise SettingsError("the updated config.json would exceed 4 MiB")
+        parse_settings(text, path)
+        _write(path, text, original)
+        return True
+    finally:
+        lock.unlink()
+
+
+def _edit(data_dir: Path, operation: str, entity_type: str, value: str) -> bool:
+    def change(raw: dict[str, Any]) -> bool:
         entities = raw.setdefault("entities", {})
         values = entities.get(entity_type, [])
         if operation == "add":
@@ -163,14 +179,9 @@ def _edit(data_dir: Path, operation: str, entity_type: str, value: str) -> bool:
                 entities[entity_type] = remaining
             else:
                 del entities[entity_type]
-        text = json.dumps(raw, indent=2, ensure_ascii=True) + "\n"
-        if len(text.encode("utf-8")) > _MAX_CONFIG:
-            raise SettingsError("the updated config.json would exceed 4 MiB")
-        parse_settings(text, path)
-        _write(path, text, original)
         return True
-    finally:
-        lock.unlink()
+
+    return edit_config(data_dir, change)
 
 
 def run_entities(

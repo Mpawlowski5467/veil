@@ -33,6 +33,7 @@ from ..secret_review import REVIEW_PATH, ReviewError, ReviewQueue
 from ..shield import Shield
 from . import compat
 from .activity import ACTIVITY_PATH, VERIFY_PATH, Activity, Observation, ObservedLedger
+from .chat import ChatRequestMasker, ChatRestorer, ChatStreamRestorer
 from .config import APP
 from .hooks import PROOF_PATH, STATUS_PATH, proof
 from .ledger import Ledger, MemoryLedger
@@ -60,7 +61,8 @@ _MESSAGES = "/v1/messages"
 _COUNT_TOKENS = "/v1/messages/count_tokens"
 _ROUTES = {("POST", _MESSAGES), ("POST", _COUNT_TOKENS)}
 # What the experimental OpenAI adapter serves (Responses, for Codex).
-_OPENAI_ROUTES = {("POST", "/v1/responses"), ("GET", "/v1/models")}
+_CHAT = "/v1/chat/completions"
+_OPENAI_ROUTES = {("POST", "/v1/responses"), ("POST", _CHAT), ("GET", "/v1/models")}
 _HELLO = "/api/hello"
 # Headers only a browser sends: a page can't leave them out. (Node's fetch
 # sends Sec-Fetch-Mode alone, so that one is let in.)
@@ -69,6 +71,7 @@ _BROWSER_HEADERS = frozenset(
 )
 # The largest request body read (a long conversation with images is a few MB).
 _MAX_BODY = 256 * 1024 * 1024
+_MAX_CHAT_REPLY = 16 * 1024 * 1024
 
 # Claude Code (2.1.283) treats an error with this code as final for the
 # request: it doesn't send it again, on another model or without a feature.
@@ -114,6 +117,7 @@ class Session:
     masker: RequestMasker
     lock: threading.RLock = field(default_factory=threading.RLock)
     users: int = 0  # requests using it now; kept by `Sessions`
+    chat_masker: ChatRequestMasker | None = None
 
     def close(self) -> None:
         """Close the vault and ledger, if they hold open files."""
@@ -160,7 +164,14 @@ class Sessions:
                 shield = shield_for(session_id)
                 ledger = MemoryLedger()
                 masker = ResponsesRequestMasker if api == "openai" else RequestMasker
-                return Session(shield, ledger, masker(shield, ledger))
+                return Session(
+                    shield,
+                    ledger,
+                    masker(shield, ledger),
+                    chat_masker=ChatRequestMasker(shield, ledger)
+                    if api == "openai"
+                    else None,
+                )
 
             self._make_session = in_memory
         self._max_open = max_open
@@ -455,6 +466,13 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     return
                 if gateway.api == "openai":
                     self._check_openai_auth()
+                    if path == _CHAT and gateway.openai_auth != "api-key":
+                        raise _RefusedError(
+                            400,
+                            "invalid_request_error",
+                            "Chat Completions requires --api openai --auth api-key; "
+                            "nothing was sent",
+                        )
                     if self.command == "POST" and path == "/v1/responses/compact":
                         # Compaction returns opaque state we cannot safely make
                         # or inspect locally. Refuse before reading the history;
@@ -736,21 +754,26 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         raise _RefusedError(
                             500, "api_error", "the session uses the wrong API adapter"
                         )
+                    masker = session.chat_masker if path == _CHAT else session.masker
+                    if masker is None:
+                        raise _RefusedError(
+                            500, "api_error", "the session has no chat adapter"
+                        )
                     with session.lock:
                         decisions = gateway.reviews.decisions(session_id, body) or {}
                         for value, kind in gateway.reviews.confirmed(
                             session_id
                         ).items():
-                            session.masker.confirm_secret(value, kind)
+                            masker.confirm_secret(value, kind)
                         masked = (
-                            session.masker.mask(request, client_version=self._client)
+                            masker.mask(request, client_version=self._client)
                             if claude
-                            else session.masker.mask(request)
+                            else masker.mask(request)
                         )
-                        if session.masker.secret_review:
+                        if masker.secret_review:
                             findings = tuple(
                                 finding
-                                for finding in session.masker.review_findings()
+                                for finding in masker.review_findings()
                                 if decisions.get(finding.value) != "IGNORE"
                             )
                             if findings:
@@ -903,7 +926,14 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     502, "api_error", "the API reply is not JSON or SSE"
                 )
             try:
-                data = response.read()
+                if restore and urlsplit(self.path).path == _CHAT:
+                    data = response.read(_MAX_CHAT_REPLY + 1)
+                    if len(data) > _MAX_CHAT_REPLY:
+                        raise _RefusedError(
+                            502, "api_error", "the chat reply exceeds the limit"
+                        )
+                else:
+                    data = response.read()
             except (OSError, http.client.HTTPException):
                 raise _RefusedError(
                     502, "api_error", "the API connection was lost", retry=True
@@ -922,7 +952,11 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                     try:
                         with session.lock:
                             restored = (
-                                ResponsesRestorer(
+                                ChatRestorer(
+                                    session.shield, self._ledger(session)
+                                ).response(message)
+                                if urlsplit(self.path).path == _CHAT
+                                else ResponsesRestorer(
                                     session.shield,
                                     self._ledger(session),
                                     guard_tools=gateway.guard_tools,
@@ -948,7 +982,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
                         raise _RefusedError(500, "api_error", text) from None
                     data = json.dumps(restored).encode()
                     completed = isinstance(message, dict) and (
-                        message.get("status") == "completed"
+                        message.get("object") == "chat.completion"
+                        if urlsplit(self.path).path == _CHAT
+                        else message.get("status") == "completed"
                         if gateway.api == "openai"
                         else message.get("type") == "message"
                         and message.get("stop_reason")
@@ -972,7 +1008,9 @@ def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
             restorer: ResponseRestorer | None = None
             if session is not None:
                 restorer = (
-                    ResponsesStreamRestorer(
+                    ChatStreamRestorer(session.shield, self._ledger(session))
+                    if urlsplit(self.path).path == _CHAT
+                    else ResponsesStreamRestorer(
                         session.shield,
                         self._ledger(session),
                         guard_tools=gateway.guard_tools,

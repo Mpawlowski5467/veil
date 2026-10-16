@@ -5,6 +5,7 @@ OpenAI adapter serves Responses for manually configured API-key clients such as
 Codex. Supported request text is masked and replies are restored locally.
 """
 
+from .chat import ChatRequestMasker, ChatRestorer, ChatStreamRestorer
 from .config import (
     Settings,
     SettingsError,
@@ -34,6 +35,9 @@ __all__ = [
     "SECRET_HEADER",
     "SESSION_HEADER",
     "WITHHELD_LINE",
+    "ChatRequestMasker",
+    "ChatRestorer",
+    "ChatStreamRestorer",
     "Gateway",
     "Ledger",
     "MemoryLedger",

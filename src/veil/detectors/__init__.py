@@ -3,11 +3,13 @@
 from .base import Detector
 from .literal import LiteralPlaceholderDetector
 from .manual import ManualDetector
+from .names import LocalNameDetector
 from .regex import RegexDetector
 
 __all__ = [
     "Detector",
     "LiteralPlaceholderDetector",
+    "LocalNameDetector",
     "ManualDetector",
     "RegexDetector",
 ]
