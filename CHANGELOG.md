@@ -113,6 +113,10 @@
 
 - The tester pack now separates a short first test from optional review/recovery exercises, includes complete Windows commands, and provides a shorter feedback worksheet and invitation. Local checks print readable results and stop guidance after failure. Sharing instructions exclude the used workspace and private data. The revised guide still installs the published 0.6.0b2 wheel; published release assets are unchanged.
 
+### Trailer
+
+- The README opens with a 54-second trailer (looping GIF, plus a 1080p MP4) covering the round trip, coding secrets, client workflows, verification, the 1.0.0rc1 features, test evidence, and limits. `docs/demo/trailer.py` renders it from code, with fictional data, masking produced by Veil at render time, and simulated model replies.
+
 ### Fixed
 
 - Credential fields in explicitly framed form-urlencoded HTTP text stop at the next parameter, preserving neighboring fields and exact restoration. Explicit base64 credential payload fields and namespaced auth/session cookies gain bounded detection rules; arbitrary encodings, cookie names, and code-looking defaults remain outside those rules. The unchanged challenge set now masks 21/36 private occurrences automatically, with no inexact mask spans or harmless characters masked.
