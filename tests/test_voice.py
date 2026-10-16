@@ -17,7 +17,7 @@ import pytest
 
 from veil import cli, voice, voice_model
 from veil.desktop import DesktopController
-from veil.gateway.config import SettingsError
+from veil.gateway.config import SettingsError, prepare_data_dir
 
 
 @pytest.fixture
@@ -368,8 +368,7 @@ def test_voice_masking_uses_registrations_and_saved_restoration(
     monkeypatch.setattr(voice_model, "require_voice", lambda: None)
     monkeypatch.setattr(voice_model, "validate_model", lambda _: tmp_path)
     monkeypatch.setattr("veil.microphone.record_audio", lambda _: b"fictional audio")
-    data = tmp_path / "data"
-    data.mkdir(mode=0o700)
+    data = prepare_data_dir(tmp_path / "data")
     (data / "config.json").write_text(
         json.dumps({"identity": False, "entities": {"PERSON": ["Jane Example"]}})
     )

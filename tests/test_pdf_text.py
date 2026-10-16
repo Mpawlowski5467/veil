@@ -9,7 +9,7 @@ import pytest
 
 from veil import cli
 from veil.desktop import DesktopController
-from veil.gateway.config import SettingsError
+from veil.gateway.config import SettingsError, prepare_data_dir
 from veil.pdf_text import MAX_BYTES, MAX_TEXT, extract_pdf
 
 
@@ -174,8 +174,7 @@ def test_pdf_masking_uses_config_and_persistent_restoration(
     tmp_path, make_pdf, monkeypatch, capsys
 ):
     path = make_pdf(["José Example", "Contact jane@example.com"])
-    data = tmp_path / "data"
-    data.mkdir(mode=0o700)
+    data = prepare_data_dir(tmp_path / "data")
     (data / "config.json").write_text(
         json.dumps({"identity": False, "entities": {"PERSON": ["José Example"]}})
     )
