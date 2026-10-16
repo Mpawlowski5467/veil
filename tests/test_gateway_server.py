@@ -3,6 +3,7 @@
 import http.client
 import http.server
 import json
+import socket
 import threading
 import time
 
@@ -518,6 +519,17 @@ def test_errors_print_nothing(api, capfd):
         call(gw, body=REQUEST)
     captured = capfd.readouterr()
     assert EMAIL not in captured.err + captured.out
+
+
+def test_starting_never_waits_on_a_reverse_dns_lookup(monkeypatch):
+    # HTTPServer looks up 127.0.0.1's name by default. On some Macs that waits
+    # about 35 s for mDNS, longer than a background start allows.
+    def lookup(name=""):
+        raise AssertionError(f"reverse DNS lookup of {name}")
+
+    monkeypatch.setattr(socket, "getfqdn", lookup)
+    with Gateway(Sessions(make_shield)) as gw:
+        assert gw.url == f"http://127.0.0.1:{gw.port}"
 
 
 def test_a_masker_error_is_refused_without_details(api, gateway):

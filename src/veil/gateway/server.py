@@ -18,6 +18,7 @@ import json
 import math
 import re
 import secrets
+import socketserver
 import sqlite3
 import threading
 import time
@@ -387,6 +388,16 @@ class Gateway:
 
 
 class _QuietServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:
+        """Bind without HTTPServer's reverse DNS lookup of 127.0.0.1.
+
+        The lookup only names the server for CGI, and on some Macs it waits
+        about 35 s for mDNS, longer than background startup allows.
+        """
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
+
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Print nothing: a traceback could quote a request's content."""
 
