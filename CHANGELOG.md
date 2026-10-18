@@ -119,6 +119,7 @@
 
 ### Fixed
 
+- The gateway and review page no longer look up a host name for 127.0.0.1 when they start. With Homebrew Python on macOS, that lookup could wait about 35 seconds for mDNS, longer than background startup allows, so `veil start` timed out.
 - Credential fields in explicitly framed form-urlencoded HTTP text stop at the next parameter, preserving neighboring fields and exact restoration. Explicit base64 credential payload fields and namespaced auth/session cookies gain bounded detection rules; arbitrary encodings, cookie names, and code-looking defaults remain outside those rules. The unchanged challenge set now masks 21/36 private occurrences automatically, with no inexact mask spans or harmless characters masked.
 - Explicitly labelled pieces of a split credential now trigger local review. In a simple first `curl` command, a fully masked quoted `-H`/`--header` value no longer triggers a redundant review of the public URL after it; partial values and ambiguous shell syntax retain conservative review. On the unchanged challenge set, review exposures fall from 12 to 10 (10 to 8 with explicit registrations), while six holds and two harmless holds remain.
 - `veil status` and `veil doctor` no longer infer an API-key mode or probe a stale gateway table when the saved Codex configuration does not select Veil. They report the routing problem directly; local doctor checks still run.

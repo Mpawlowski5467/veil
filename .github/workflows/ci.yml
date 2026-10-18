@@ -74,7 +74,7 @@ jobs:
           VEIL_NATIVE_OCR: "1"
       - name: Install fictional speech synthesizer on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y espeak-ng
+        run: sudo apt-get install -y flite
       - name: Set up pinned public speech model and test offline transcription
         if: runner.os != 'Windows'
         run: |

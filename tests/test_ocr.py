@@ -12,7 +12,7 @@ import pytest
 
 from veil import cli, ocr
 from veil.desktop import DesktopController
-from veil.gateway.config import SettingsError
+from veil.gateway.config import SettingsError, prepare_data_dir
 
 
 @pytest.fixture
@@ -299,8 +299,7 @@ def test_ocr_uses_registered_values_and_persistent_restoration(
         "extract_ocr",
         lambda _: ocr.OCRText("Jane Example at jane@example.com", 1, 0),
     )
-    data = tmp_path / "data"
-    data.mkdir(mode=0o700)
+    data = prepare_data_dir(tmp_path / "data")
     (data / "config.json").write_text(
         json.dumps({"identity": False, "entities": {"PERSON": ["Jane Example"]}})
     )
