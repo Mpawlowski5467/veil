@@ -14,6 +14,13 @@ Claude Code, Codex, or your own Python integration.
 
 [Try the beta](beta/README.md) · [Python quickstart](#use-veil-in-python) · [What gets masked](#what-veil-detects) · [Limits](#understand-the-boundaries) · [Guides](#guides)
 
+<p align="center">
+  <a href="docs/assets/veil-trailer.mp4">
+    <img src="docs/assets/veil-trailer.gif" width="800" alt="Veil trailer. A prompt's name, email address, and phone number become placeholders such as [PERSON_1] before the request is sent, and the originals return in the reply. Coding secrets are masked the same way. Then Claude Code, Codex CLI, Python, and chat workflows, conversation verification, the 1.0 release candidate's desktop, voice, OCR, PDF, name recognition, and provider features, and the project's test evidence and limits.">
+  </a>
+</p>
+<p align="center"><sub><b>54-second trailer</b> · <a href="docs/assets/veil-trailer.mp4">1080p MP4</a> · Fictional data and real Veil 1.0.0rc1 masking; model replies are simulated.</sub></p>
+
 > **New here? Start with the [beta tester guide](beta/README.md).** The first
 > check takes about 10 minutes and needs no AI account or API key. Use the
 > fictional examples first: Veil can miss private values, and names need registration.

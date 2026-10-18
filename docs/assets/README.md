@@ -1,5 +1,31 @@
 # Veil assets
 
+## Trailer
+
+- [veil-trailer.gif](veil-trailer.gif): the looping 54-second trailer at the top of the README (960 × 540, 15 fps).
+- [veil-trailer.mp4](veil-trailer.mp4): the same trailer as 1080p H.264 video for sharing.
+- [Renderer](../demo/trailer.py), which draws every frame from code.
+
+The trailer covers the round trip, coding secrets, the Claude Code and Codex
+launchers, verification, the 1.0.0rc1 candidate features, test evidence, and
+limits. Its masked and restored text is produced by this checkout's Veil when
+the trailer renders, using fictional data; rendering stops if Veil's output no
+longer matches what a scene shows. Model replies are simulated, nothing is sent
+over the network, and a caption on every frame says so. The desktop window is a
+drawing of the masking preview page, not a screenshot. Icons are drawn shapes,
+and the ribbon comes from [`veil-mark.png`](../../src/veil/assets/veil-mark.png).
+
+From a source checkout with **ffmpeg** on PATH, run:
+
+```sh
+uv run --with "pillow>=10,<13" python docs/demo/trailer.py
+```
+
+Add `--still 7.5 30 --out <folder>` to write single frames for review instead.
+The renderer uses Avenir Next and Menlo on macOS, or DejaVu fonts elsewhere; it
+does not bundle fonts or add dependencies to Veil. Update the 1.0 scene and the
+test count when the release changes.
+
 ## Demo
 
 - [veil-demo.gif](veil-demo.gif): a captioned, looping 36-second README demo.
