@@ -55,7 +55,7 @@ Voice unit tests use fictional audio, fake model assets, and simulated capture
 devices; no microphone is opened. For a real local model check, explicitly run
 `veil --data-dir /tmp/veil-voice-test voice setup`, then
 `VEIL_NATIVE_VOICE=1 VEIL_VOICE_TEST_DATA=/tmp/veil-voice-test uv run --extra voice pytest tests/test_voice.py`.
-This synthesizes a fictional file using macOS `say` or Linux `espeak-ng`, then
+This synthesizes a fictional file using macOS `say` or Linux `flite`, then
 transcribes it offline. The setup step downloads public model files. Native UI
 voice tests simulate microphones and cover stop/discard/close races; real device
 permissions remain a separate manual journey.

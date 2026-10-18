@@ -636,6 +636,16 @@ def test_other_account_cannot_bootstrap_or_read():
             worker.join()
 
 
+def test_review_server_never_waits_on_a_reverse_dns_lookup(monkeypatch):
+    def lookup(name=""):
+        raise AssertionError(f"reverse DNS lookup of {name}")
+
+    monkeypatch.setattr(socket, "getfqdn", lookup)
+    with ReviewServer(lambda choice: {"reviews": []}) as server:
+        assert server.server_address[0] == "127.0.0.1"
+        assert server.server_port == server.server_address[1]
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux tcp tables")
 def test_same_account_on_this_kernel():
     with ReviewServer(lambda choice: {"reviews": []}) as server:

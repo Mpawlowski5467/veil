@@ -4,12 +4,13 @@ import io
 import json
 import os
 import stat
+import subprocess
 import warnings
 
 import pytest
 
-from veil import cli, entities_cli
-from veil.gateway import load_settings, open_sessions
+from veil import _windows, cli, entities_cli
+from veil.gateway import load_settings, open_sessions, prepare_data_dir
 
 PRIVATE = "Ada Quill"
 
@@ -25,7 +26,9 @@ def invoke(directory, monkeypatch, *args, value=PRIVATE):
 
 
 def write_config(directory, raw):
-    directory.mkdir(mode=0o700, exist_ok=True)
+    # Create the folder as Veil does. On Windows, Python 3.13+ gives
+    # mkdir(mode=0o700) an OWNER RIGHTS entry that the privacy check refuses.
+    prepare_data_dir(directory)
     path = directory / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     return path
@@ -56,8 +59,12 @@ def test_add_list_remove_preserve_settings_without_printing_values(
         **original,
         "entities": {**original["entities"], "PERSON": [PRIVATE]},
     }
-    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "nt":
+        _windows.check_private(directory)
+        _windows.check_private(path)
+    else:
+        assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     output = capsys.readouterr()
     assert "Restart" in output.out
     assert PRIVATE not in output.out + output.err
@@ -220,7 +227,7 @@ def test_invalid_type_does_not_echo_user_input(directory, monkeypatch, capsys, k
     ],
 )
 def test_invalid_existing_config_is_preserved(directory, monkeypatch, capsys, raw):
-    directory.mkdir(mode=0o700)
+    prepare_data_dir(directory)
     path = directory / "config.json"
     path.write_text(raw)
     assert invoke(directory, monkeypatch, "add", "PERSON", "--stdin") == 2
@@ -231,7 +238,7 @@ def test_invalid_existing_config_is_preserved(directory, monkeypatch, capsys, ra
 
 @pytest.mark.parametrize("link", ["symlink", "dangling", "hardlink"])
 def test_config_links_are_refused(directory, tmp_path, monkeypatch, capsys, link):
-    directory.mkdir(mode=0o700)
+    prepare_data_dir(directory)
     target = tmp_path / "other.json"
     if link != "dangling":
         target.write_text("{}")
@@ -251,11 +258,20 @@ def test_config_links_are_refused(directory, tmp_path, monkeypatch, capsys, link
 def test_shared_or_symlinked_data_directory_is_refused(
     directory, tmp_path, monkeypatch
 ):
-    directory.mkdir(mode=0o755)
+    prepare_data_dir(directory)
+    if os.name == "nt":
+        # Windows ignores mode bits; grant Everyone read access instead.
+        subprocess.run(
+            ["icacls", str(directory), "/grant", "*S-1-1-0:(R)"],
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+    else:
+        directory.chmod(0o755)
     assert invoke(directory, monkeypatch, "add", "PERSON", "--stdin") == 2
     directory.rmdir()
-    target = tmp_path / "private"
-    target.mkdir(mode=0o700)
+    target = prepare_data_dir(tmp_path / "private")
     directory.symlink_to(target)
     assert invoke(directory, monkeypatch, "list") == 2
     assert not list(target.iterdir())

@@ -6,12 +6,12 @@ import json
 import pytest
 
 from veil import cli, text_cli
+from veil.gateway import prepare_data_dir
 
 
 @pytest.fixture
 def data_dir(tmp_path):
-    directory = tmp_path / "veil"
-    directory.mkdir(mode=0o700)
+    directory = prepare_data_dir(tmp_path / "veil")
     (directory / "config.json").write_text(
         json.dumps({"identity": False, "entities": {"PERSON": ["Jan Nowak"]}})
     )

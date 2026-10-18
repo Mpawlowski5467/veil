@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import socket
+import socketserver
 import sys
 import time
 import webbrowser
@@ -137,6 +138,12 @@ class ReviewServer(HTTPServer):
         # The launch code sits in the fragment, never the HTTP path, and the
         # URL stays printable after the page has used the code.
         self.url = f"http://127.0.0.1:{self.server_port}/#{self.launch}"
+
+    def server_bind(self) -> None:
+        """Bind without the reverse DNS lookup that can stall on some Macs."""
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Keep input and callback exceptions out of terminal logs."""
